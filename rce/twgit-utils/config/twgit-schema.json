@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://git.twitter.com/focus/rce",
+  "title": "twgit config schema",
+  "type": "object",
+  "definitions": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hostnameString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])[.])*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9])$"
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "exclusiveMinimum": 0
+    },
+    "repoOrRole": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z][-A-Za-z0-9_]$"
+    },
+    "viewEnum": {
+      "type": "string",
+      "enum": ["tags", "$user", "all"]
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "$ref": "#/definitions/hostnameString"
+        },
+        "readonlyhost": {
+          "$ref": "#/definitions/hostnameString"
+        },
+        "repo": {
+          "$ref": "#/definitions/nonEmptyString"
+        },
+        "scheme": {
+          "$ref": "#/definitions/nonEmptyString"
+        }
+      },
+      "required": ["repo"]
+    },
+    "hasher": {
+      "type": "object",
+      "properties":{
+        "load": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "partitioncount": {
+          "$ref": "#/definitions/positiveInteger"
+        },
+        "replicationfactor": {
+          "$ref": "#/definitions/positiveInteger"
+        }
+      },
+      "required": ["load", "partitioncount", "replicationfactor"]
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "://"
+        },
+        "repo": {
+          "$ref": "#/definitions/repoOrRole"
+        },
+        "role": {
+          "$ref": "#/definitions/repoOrRole"
+        },
+        "nodes": {
+          "type": "array",
+          "minLength": 1,
+          "items": {
+            "$ref": "#/definitions/hostnameString"
+          }
+        },
+        "views": {
+          "type": "array",
+          "minLength": 1,
+          "items": {
+            "$ref": "#/definitions/viewEnum"
+          }
+        },
+        "defaultview": {
+          "$ref": "#/definitions/viewEnum"
+        }
+      }
+    }
+  },
+  "properties":{
+    "twgit": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "enum": [1]
+        },
+        "hasher": {
+          "$ref": "#/definitions/hasher"
+        },
+        "defaults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/defaults"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/profile"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

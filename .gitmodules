@@ -1,0 +1,14 @@
+[submodule "redismodule-rs"]
+	path = 3rdparty/redismodule-rs
+	url = https://github.com/bierbaum/redismodule-rs
+	branch = wjb
+[submodule "git"]
+	path = git
+	url = https://github.com/bierbaum/git
+	branch = wjb
+[submodule "grpc-rs"]
+	path = 3rdparty/grpc-rs
+	url = https://github.com/tikv/grpc-rs.git
+[submodule "rust-rocksdb"]
+	path = 3rdparty/rust-rocksdb
+	url = https://github.com/rust-rocksdb/rust-rocksdb.git

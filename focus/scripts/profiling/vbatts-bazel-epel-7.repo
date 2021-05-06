@@ -1,0 +1,10 @@
+[copr:copr.fedorainfracloud.org:vbatts:bazel]
+name=Copr repo for bazel owned by vbatts
+baseurl=https://download.copr.fedorainfracloud.org/results/vbatts/bazel/epel-7-$basearch/
+type=rpm-md
+skip_if_unavailable=True
+gpgcheck=1
+gpgkey=https://download.copr.fedorainfracloud.org/results/vbatts/bazel/pubkey.gpg
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1

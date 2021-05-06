@@ -1,0 +1,28 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pygit2 = "*"
+loguru = "*"
+attrs = "*"
+repo_tools = {editable = true, path = "."}
+arrow = "*"
+
+[dev-packages]
+ipython = "*"
+mypy = "*"
+setuptools = "*"
+setuptools-scm = "*"
+wheel = "*"
+debugpy = "*"
+isort = {extras = ["pipfile_deprecated_finder"], version = "*"}
+yapf = "*"
+toml = "*"
+types-attrs = "*"
+pytest = "*"
+ipykernel = "*"
+
+[requires]
+python_version = "3.9"

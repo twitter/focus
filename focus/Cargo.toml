@@ -1,0 +1,7 @@
+
+[workspace]
+members = [
+        "commands",
+        "internals",
+        "repo_server_redis_module",
+]

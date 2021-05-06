@@ -1,0 +1,243 @@
+#!/bin/bash
+
+if [ $# -eq 0 ]; then
+    set -- -h
+fi
+
+PATH="$(git --exec-path):$PATH"
+# shellcheck disable=SC1091
+. git-sh-setup
+
+die() { echo "$@" >&2; exit 1; }
+
+GIT_CMD_NAME='restore-archived'
+PROGNAME="git-${GIT_CMD_NAME}"
+USAGE="Usage: ${PROGNAME} [list|branch|help|-h]"
+
+set -euo pipefail
+declare -r SAFE_IFS=$'\n\t'
+IFS=$SAFE_IFS
+
+print_long_help() {
+  cat <<EOS
+${USAGE}
+
+git ${GIT_CMD_NAME} list
+
+  List all branches in the archive repository
+
+  HINT: pipe this into grep
+
+  Example:
+
+    $ git ${GIT_CMD_NAME} list|grep '^foo/.*forgot.*dre'
+    foo/JIRA378-forgot-about-dre
+
+
+git ${GIT_CMD_NAME} branch [<local-branch-name>] <archived-branch-name>
+
+  Restore an archived branch to the local repo. By default, create a branch with the
+  same name locally. This will not be a remote tracking branch, as the archive
+  repository is read-only. To restore the branch to a different name, give the
+  <local-branch-name> argument.
+
+  Example:
+
+    $ git branch
+    * master
+
+    $ git ${GIT_CMD_NAME} branch foo/JIRA378-forgot-about-dre
+      * [new branch]      foo/JIRA378-forgot-about-dre -> foo/JIRA378-forgot-about-dre
+
+    $ git branch
+    * master
+      foo/JIRA378-forgot-about-dre
+
+    $ git ${GIT_CMD_NAME} branch mm/slim-shady foo/JIRA378-forgot-about-dre
+      * [new branch]      foo/JIRA378-forgot-about-dre -> mm/slim-shady
+
+    $ git branch
+    * master
+      foo/JIRA378-forgot-about-dre
+      mm/slim-shady
+
+git ${GIT_CMD_NAME} help
+
+  You're reading it.
+
+EOS
+}
+
+pick_a_pager() {
+  local pager="${GIT_PAGER:-}"
+
+  if [[ -z "${pager}" ]]; then
+    pager="$(git config core.pager)" || true
+  fi
+
+  if [[ -z "${pager}" ]]; then
+    pager="${PAGER:-less}"
+  fi
+
+  "${pager}"
+}
+
+
+OPTS_SPEC="\
+git restore-archived list [-o] [-a]
+git restore-archived branch [-o] [-a] [<local-branch-name>] <archived-branch-name>
+git restore-archived help
+--
+h,help                    show the help
+o,origin-url=URL          origin url (default remote.origin.url)
+a,archive-url=URL         archive url (default is origin + '-archive')
+d,debug                   show debug output
+sanity-check              sanity check the origin URL (the default)
+"
+eval "$(echo "${OPTS_SPEC}" | git rev-parse --parseopt -- "$@" || echo exit $?)"
+
+ORIGIN_URL=
+ARCHIVE_URL=
+SANITY_CHECK="YesPlease"
+DEBUG=
+
+SANITY_CHECK_REGEX='^https://([a-z0-9]+@)?(ro|k)?git\.twitter\.biz/(birdcage|science|source)$'
+
+while [ $# -gt 0 ]; do
+  opt="$1"
+  shift
+  case "$opt" in
+    -o) ORIGIN_URL="$1"; shift ;;
+    -a) ARCHIVE_URL="$1"; shift ;;
+    --sanity-check) ;;
+    --no-sanity-check) SANITY_CHECK="NERP" ;;
+    -d) DEBUG=1 ;;
+    --) break ;;
+    *) die "Unexpected option $opt" ;;
+  esac
+done
+
+SUBCMD="$1"
+shift
+
+case "${SUBCMD}" in
+ list|branch) ;;
+
+ help)
+    print_long_help|pick_a_pager
+    exit 1
+  ;;
+  *) die "Unknown command ${SUBCMD}" ;;
+esac
+
+if [[ "${ORIGIN_URL:-}x" == 'x' ]]; then
+  ORIGIN_URL=$(git config remote.origin.url) ||
+    die 'remote origin url not set, cannot continue'
+fi
+
+if [[ "${SANITY_CHECK}" == "YesPlease" ]]; then
+  if ! echo "${ORIGIN_URL}" | grep -E -q -e "${SANITY_CHECK_REGEX}"; then
+    die "invalid origin url: '${ORIGIN_URL}' for this command"
+  fi
+fi
+
+if [[ -z "${ARCHIVE_URL}" ]]; then
+  case "${ORIGIN_URL}" in
+    *.git) ARCHIVE_URL="${ORIGIN_URL%%.git}-archive.git" ;;
+    *) ARCHIVE_URL="${ARCHIVE_URL:-${ORIGIN_URL}-archive}" ;;
+  esac
+fi
+
+debug() {
+  if [[ -n "$DEBUG" ]]; then
+    echo "$@" >&2
+  fi
+}
+
+ensure_clean() {
+	if ! git diff-index HEAD --exit-code --quiet 2>&1; then
+		die "Working tree has modifications.  Cannot add."
+	fi
+	if ! git diff-index --cached HEAD --exit-code --quiet 2>&1; then
+		die "Index has modifications.  Cannot add."
+	fi
+}
+
+rev_exists() {
+	if git rev-parse "$1" >/dev/null 2>&1; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+print_push_message() {
+  local archived_branch=${1:?}
+  local local_branch=${2:?}
+
+  cat <<EOS
+
+Restored archived branch ${archived_branch} to local branch ${local_branch}
+
+You can now check out the restored branch by running:
+
+  $ git checkout ${local_branch}
+
+If you want to restore the branch to the origin, you can do
+
+  $ git push origin ${local_branch}
+
+
+IMPORTANT INFORMATION:
+
+  If you don't add any new commits to ${local_branch} before
+  pushing it to the origin, it will get archived again on the next run of the
+  archive job (this is because the 'age' of the branch is determined by the
+  commit that the branch points to, which is the only way to write a job of
+  this type in git).
+
+EOS
+}
+
+cmd_branch() {
+  if [[ $# -lt 1 ]]; then
+    die "You must provide at least the name of the archived branch to restore"
+  fi
+
+  if [[ $# -eq 1 ]]; then
+    # normalize the argument given
+    archived_branch="${1##refs/heads/}"
+    local_branch="${archived_branch}"
+  elif [[ $# -eq 2 ]]; then
+    archived_branch="${2##refs/heads/}"
+    local_branch="${1##refs/heads/}"
+  else
+    die "too many arguments. seek help."
+  fi
+
+  if rev_exists "${local_branch}"; then
+    die "branch with name ${local_branch} already exists in this repo"
+  fi
+
+  debug "archived_branch: ${archived_branch}%"
+  debug "local_branch: ${local_branch}%"
+
+  refspec="refs/heads/${archived_branch}:refs/heads/${local_branch}"
+
+  args="$(git rev-parse --sq-quote "${ARCHIVE_URL}" "${refspec}")"
+
+  eval "git fetch $args"
+  local rval=$?
+
+  if [ $rval -eq 0 ]; then
+    print_push_message "${archived_branch}" "${local_branch}"
+  else
+    exit $rval
+  fi
+}
+
+cmd_list() {
+  git ls-remote --heads "${ARCHIVE_URL}" | cut -f 2 | sed -e 's,^refs/heads/,,'
+}
+
+"cmd_${SUBCMD}" "$@"

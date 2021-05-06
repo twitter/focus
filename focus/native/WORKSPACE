@@ -1,0 +1,108 @@
+workspace(name = "focus")
+
+all_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])"""
+
+# TODO: Bring back tcmalloc later as an http_archive...
+# local_repository(
+#     name = "tcmalloc",
+#     path = "third_party/tcmalloc",
+# )
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+load("//tools/workspace:default.bzl", "add_default_repositories")
+
+git_repository(
+    name = "rules_foreign_cc",
+    commit = "d54c78ab86b40770ee19f0949db9d74a831ab9f0",
+    remote = "https://github.com/bazelbuild/rules_foreign_cc",
+)
+
+http_archive(
+    name = "libfuse",
+    sha256 = "ebe0b99526a0164aae729a7b16cc9434fb5a564f30c76b23066a36c6cb098bdf",
+    urls = [ "https://github.com/libfuse/libfuse/archive/fuse-3.10.1.zip" ],
+    build_file_content = all_content
+)
+
+# Google Test
+http_archive(
+    name = "com_google_googletest",
+    sha256 = "d21ba93d7f193a9a0ab80b96e8890d520b25704a6fac976fe9da81fffb3392e3",
+    strip_prefix = "googletest-8b6d3f9c4a774bef3081195d422993323b6bb2e0",
+    urls = ["https://github.com/google/googletest/archive/8b6d3f9c4a774bef3081195d422993323b6bb2e0.zip"],
+)
+
+# Google Gflags
+http_archive(
+    name = "com_github_gflags_gflags",
+    sha256 = "19713a36c9f32b33df59d1c79b4958434cb005b5b47dc5400a7a4b078111d9b5",
+    strip_prefix = "gflags-2.2.2",
+    urls = [
+        "https://github.com/gflags/gflags/archive/v2.2.2.zip",
+    ],
+)
+
+# Google Glog
+http_archive(
+    name = "com_github_google_glog",
+    build_file_content = "\n".join([
+        "load(\"//:bazel/glog.bzl\", \"glog_library\")",
+        "glog_library(with_gflags=1)",
+    ]),
+    sha256 = "9b4867ab66c33c41e2672b5de7e3133d38411cdb75eeb0d2b72c88bb10375c71",
+    strip_prefix = "glog-ba8a9f6952d04d1403b97df24e6836227751454e",
+    urls = [
+        "https://mirror.bazel.build/github.com/google/glog/archive/ba8a9f6952d04d1403b97df24e6836227751454e.zip",
+        "https://github.com/google/glog/archive/ba8a9f6952d04d1403b97df24e6836227751454e.zip",
+    ],
+)
+
+#
+# Abseil
+#
+http_archive(
+    name = "com_google_absl",
+    sha256 = "c456717814edbba06b60d5239cff3cdc6755ad4863305a9acd80730a3e865c29",
+    strip_prefix = "abseil-cpp-4b2fbb4adba905eede6c61b4494acfdb660a3bb7",
+    urls = ["https://github.com/abseil/abseil-cpp/archive/4b2fbb4adba905eede6c61b4494acfdb660a3bb7.zip"],
+)
+
+#
+# gRPC
+#
+new_git_repository(
+    name = "com_github_grpc_grpc",
+    tag = "v1.35.0",
+    remote = "https://github.com/grpc/grpc",
+)
+
+#
+# Foreign CC
+#
+load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
+
+rules_foreign_cc_dependencies([
+    "//:built_cmake_toolchain",
+    "//:built_ninja_toolchain_osx",
+    "//:built_ninja_toolchain_linux",
+])
+
+#
+# Skylib
+#
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "97e70364e9249702246c0e9444bccdc4b847bed1eb03c5a3ece4f83dfe6abc44",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.0.2/bazel-skylib-1.0.2.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.0.2/bazel-skylib-1.0.2.tar.gz",
+    ],
+)
+
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+
+bazel_skylib_workspace()
+
+add_default_repositories()

@@ -1,0 +1,60 @@
+---
+twgit:
+  version: 1
+  repos:
+    - name: source
+      defaults:
+        host: "git.twitter.biz"
+        readonlyhost: "rogit.twitter.biz"
+        scheme: https
+      profiles:
+        - role: main
+          backend: "{{.Scheme}}://{{.Host}}/{{.Repo}}/{{.Role}}"  # <<-- s/https/{{.Scheme}}/
+        - role: dev
+          backend: "{{.Scheme}}://{{.Host}}/{{.Repo}}-{{.Node}}.git/{{.View}}"
+          nodes:
+            - dev00
+            - dev01
+            - dev02
+            - dev03
+          views:
+            - "~user"
+        - role: archive
+          backend: "{{.Scheme}}://{{.Host}}/{{.Repo}}-{{.Node}}/{{.View}}{{.Options}}"
+          nodes:
+            - "archive00"
+            - "archive01"
+          defaultview: "~user"
+          views:
+            - "_tags"
+            - "~user"
+            - "_all"
+    - name: focus
+      defaults:
+        host: localhost
+        scheme: http
+      profiles:
+        - role: main
+          backend: "{{.Scheme}}://{{.Host}}/git/{{.Repo}}.git/{{.View}}"
+          views:
+            - "_tags"
+            - "_all"
+            - "~user"
+          defaultview: "~user"
+
+  hasher:
+    # this seems to be a big enough prime. altering this value
+    # did not seem to have a significant effect on the distribution
+    partitioncount: 9973
+
+    # this replication factor was chosen after hashing
+    # all users in source against 14 backends with 9973 as the
+    # partition count.
+    #
+    # min: 209, max: 253, mean: 224.642857, variance: 184.372449, stdev: 13.578382
+    #
+    replicationfactor: 34
+
+    # I'm not really sure what this does, it's the default in the examples given
+    # for the hashing library we're using so i'm assuming it's a sane value
+    load: 1.25
