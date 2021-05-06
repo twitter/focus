@@ -1,0 +1,19 @@
+VERS="1.16.4"
+
+if [[ -d "$HOME/opt/git-2.31.1/bin" ]]; then
+  PATH_add "$HOME/opt/git-2.31.1/bin"
+fi
+
+GOPROXY="https://goproxy.io,direct"
+export GOPROXY
+
+PATH_add "$(pwd -P)/dist"
+
+#reorderpath_name="reorderpath.$(uname -s).$(uname -m)"
+#if type -fp "$reorderpath_name" >/dev/null; then
+#  PATH="$("$reorderpath_name")"
+#fi
+
+use nvm v12.18.2
+
+# vim:ft=bash:ts=2:sw=2:et

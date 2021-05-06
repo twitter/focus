@@ -46,6 +46,8 @@ type (
 	// an error and nil if it doesn't.
 	KeyValueVisitor func(f func(k, v string) error) error
 
+	KeyValueWrapper func(visitor KeyValueVisitor, f func (k, v string) (kk, vv string)) KeyValueVisitor
+
 	LogConfig interface {
 		IsDebug() bool
 		IsTrace() bool

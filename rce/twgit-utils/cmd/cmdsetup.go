@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"git.twitter.biz/focus/rce/twgit-utils/internal/common"
 	"git.twitter.biz/focus/rce/twgit-utils/internal/config"
@@ -67,6 +68,19 @@ func (c *cmdSetup) Env() (osenv []string) {
 func (c *cmdSetup) EnvVisitor() common.KeyValueVisitor {
 	return common.NewEnvVisitor(c.env)
 }
+
+// this is O(n) but whatever
+func (c *cmdSetup) LookupEnv(key string) (v string, ok bool) {
+	for _, kv := range c.env {
+		if i := strings.Index(kv, "="); i >= 0 {
+			if k := kv[0:i]; k == key {
+				return kv[i+1:], true
+			}
+		}
+	}
+	return "", false
+}
+
 
 func (c *cmdSetup) LogSetupHook() CommandHookFn {
 	return func(cc *cobra.Command, args []string) {

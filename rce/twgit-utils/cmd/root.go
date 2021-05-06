@@ -36,6 +36,7 @@ func RootCmd(setup *cmdSetup) *cobra.Command {
 		UrlCmd(setup),
 		RemoteCmd(setup),
 		CoverCmd(setup),
+		HookCmd(setup),
 	}
 
 	rootCmd.AddCommand(cmds...)
