@@ -5,19 +5,5 @@ fi
 
 export DOCKER_BUILDKIT=1
 
-VERS="1.16.4"
-
-export GOPATH="$HOME/go/$VERS"
-export GOROOT="$HOME/go/roots/$VERS"
-export GOBIN="$HOME/go/bin"
-
-PATH_add "$HOME/go/bin"
-PATH_add "$GOPATH/bin"
-PATH_add "$GOROOT/bin"
-
-if [[ "$UID" -ne 0 ]]; then
-  mkdir -p "$GOPATH"
-fi
-
 
 # vim:ft=bash:ts=2:sw=2:et

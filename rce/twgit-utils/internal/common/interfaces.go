@@ -53,6 +53,10 @@ type (
 		IsTrace() bool
 		Output() io.Writer
 	}
+
+	UserError interface {
+		UserError() string
+	}
 )
 
 func (u UpdateStatus) String() string { return string(u) }

@@ -19,7 +19,7 @@ func NewFixture(t *testing.T) *Fixture {
 
 const nonZeroSHA1 = "0123456789012345678901234567890123456789"
 
-func TestOnwerMatches(t *testing.T) {
+func TestOwnerMatches(t *testing.T) {
 	f := NewFixture(t)
 	defer f.Close()
 
@@ -148,4 +148,30 @@ func TestLoadUpdateHookArgsFromEnv(t *testing.T) {
 		"TWGIT_TAG_CREATE_OR_UPDATE_FORBIDDEN", "true",
 	), uha)
 	f.Error(err)
+}
+
+func TestLoadUpdateHookArgsFromGit(t *testing.T) {
+	f := NewFixture(t)
+	defer f.Close()
+
+	uha := new(UpdateHookArgs)
+	uha.RemoteUser = "jlennon"
+
+	err := LoadUpdateConfigFromGit(common.NewPairsVisitor(
+		"twgit.updateHook.checkOwnerMatches", "1",
+		"twgit.updateHook.tagCreateOrUpdateForbidden", "true",
+	), uha)
+	f.NoError(err)
+
+	f.Equal(
+		&UpdateHookArgs{
+			RefName:                    "",
+			OldOid:                     "",
+			NewOid:                     "",
+			RemoteUser:                 "jlennon",
+			CheckOwnerMatches:          true,
+			TagCreateOrUpdateForbidden: true,
+		},
+		uha,
+	)
 }

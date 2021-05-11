@@ -5,14 +5,22 @@ if [[ -d "$HOME/opt/git-2.31.1/bin" ]]; then
 fi
 
 GOPROXY="https://goproxy.io,direct"
-export GOPROXY
+GOPATH="$HOME/go/$VERS"
+GOROOT="$HOME/go/roots/$VERS"
+GOBIN="$HOME/go/bin"
+
+PATH_add "$HOME/go/bin"
+PATH_add "$GOPATH/bin"
+PATH_add "$GOROOT/bin"
+
+if [[ "$UID" -ne 0 ]]; then
+  mkdir -p "$GOPATH"
+fi
+
+
+export GOPROXY GOPATH GOROOT GOBIN
 
 PATH_add "$(pwd -P)/dist"
-
-#reorderpath_name="reorderpath.$(uname -s).$(uname -m)"
-#if type -fp "$reorderpath_name" >/dev/null; then
-#  PATH="$("$reorderpath_name")"
-#fi
 
 use nvm v12.18.2
 

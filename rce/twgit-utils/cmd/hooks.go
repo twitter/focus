@@ -9,7 +9,6 @@ import (
 	"git.twitter.biz/focus/rce/twgit-utils/internal/resolver"
 	"git.twitter.biz/focus/rce/twgit-utils/internal/unwinder"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -88,22 +87,17 @@ to stderr, which git will then show to the user.
 `,
 		Args: cobra.ExactArgs(3),
 		RunE: func(cc *cobra.Command, args []string) error {
-			var ruser string
-			var ok bool
-			if ruser, ok = setup.LookupEnv("REMOTE_USER"); !ok {
-				return errors.Errorf("expected REMOTE_USER to be set but it was not")
-			}
+			return unwinder.Run(func(u *unwinder.U) {
+				uha := &update.UpdateHookArgs{
+					RefName: args[0],
+					OldOid:  args[1],
+					NewOid:  args[2],
+				}
 
-			uha := &update.UpdateHookArgs{
-				RefName:    args[0],
-				OldOid:     args[1],
-				NewOid:     args[2],
-				RemoteUser: ruser,
-			}
-
-			update.LoadUpdateHookArgsFromEnv(common.NewEnvVisitor(os.Environ()), uha)
-
-			return update.Run(uha)
+				u.Check(update.LoadUpdateConfigFromGit(setup.Repo().Config().Local().Visit, uha))
+				u.Check(update.LoadUpdateHookArgsFromEnv(common.NewEnvVisitor(os.Environ()), uha))
+				u.Check(update.Run(uha))
+			})
 		},
 	}
 }

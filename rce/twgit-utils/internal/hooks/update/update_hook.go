@@ -31,6 +31,11 @@ type (
 	}
 )
 
+var _ common.UserError = (*NotYourRefError)(nil)
+var _ common.UserError = (*TagCreateOrUpdateForbiddenError)(nil)
+var _ error = (*NotYourRefError)(nil)
+var _ error = (*TagCreateOrUpdateForbiddenError)(nil)
+
 const ZeroSHA1 = "0000000000000000000000000000000000000000"
 const UpdateHookGitConfigPrefix = "twgit.updatehook."
 
@@ -39,6 +44,7 @@ var vv *validator.Validate = validation.NewValidator()
 func validate(uha *UpdateHookArgs) (err error) {
 	return vv.Struct(uha)
 }
+
 
 func LoadUpdateHookArgsFromEnv(envVisitor common.KeyValueVisitor, uha *UpdateHookArgs) (err error) {
 	err = envVisitor(func(k, v string) (ierr error) {
@@ -91,14 +97,18 @@ func (e *NotYourRefError) Error() string {
 	)
 }
 
-var _ error = (*NotYourRefError)(nil)
+func (e *NotYourRefError) UserError() string {
+	return "[twgit-update-hook] " + e.Error()
+}
 
 func (e *TagCreateOrUpdateForbiddenError) Error() string {
 	return fmt.Sprintf(
 		"Tags are not stored in this repo, rejecting %#v", e.RefName)
 }
 
-var _ error = (*TagCreateOrUpdateForbiddenError)(nil)
+func (e *TagCreateOrUpdateForbiddenError) UserError() string {
+	return "[twgit-update-hook] " + e.Error()
+}
 
 func (a *UpdateHookArgs) Stripped() string {
 	if strings.HasPrefix(a.RefName, "refs/heads/") {
