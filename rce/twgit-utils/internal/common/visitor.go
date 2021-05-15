@@ -69,3 +69,20 @@ func NewPairsVisitor(xs ...string) KeyValueVisitor {
 		return nil
 	}
 }
+
+// NewWrapper takes a KeyValueVisitor and a function that will be called with each pair.
+// IF the function returns 'false' for 'ok' the pair will be skipped. The returned visitor
+// will call the function it is given with 'kk' and 'vv' values returned from the function.
+// This is basically (k, v) => Option[(kk, vv)], and if Option is None then the pair is skipped.
+func NewWrapper(visitor KeyValueVisitor, flatMapper func(k, v string) (kk, vv string, ok bool)) KeyValueVisitor {
+	return func (inner func(k, v string) error ) error {
+		return visitor(func (k, v string) error {
+			kk, vv, ok := flatMapper(k, v)
+			if !ok {
+				return nil
+			}
+
+			return inner(kk, vv)
+		})
+	}
+}

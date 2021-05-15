@@ -1,0 +1,9 @@
+# shellcheck disable=SC1091
+if [[ -f /opt/rh/llvm-toolset-9.0/enable ]]; then
+  source /opt/rh/llvm-toolset-9.0/enable
+fi
+
+export DOCKER_BUILDKIT=1
+
+
+# vim:ft=bash:ts=2:sw=2:et

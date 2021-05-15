@@ -1,0 +1,50 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.177.0/containers/debian
+{
+	"name": "Debian",
+	"dockerComposeFile": ["docker-compose.yaml"],
+	"service": "twgitutils",
+	"workspaceFolder": "/workspace",
+
+
+	// Set *default* container specific settings.json values on container create.
+	"settings": {
+		"terminal.integrated.defaultProfile.linux#": "/bin/bash"
+	},
+
+	// Add the IDs of extensions you want installed when the container is created.
+	"extensions": [
+		"be5invis.toml",
+		"donjayamanne.python-extension-pack",
+		"formulahendry.terminal",
+		"franklx.vscode-desert256",
+		"golang.go",
+		"jasonnutter.search-node-modules",
+		"madmous.makefile-command-runner",
+		"magicstack.MagicPython",
+		"mikestead.dotenv",
+		"ms-python.python",
+		"ms-python.vscode-pylance",
+		"ms-toolsai.jupyter",
+		"ms-vscode.cpptools",
+		"redhat.vscode-yaml",
+		"Rubymaniac.vscode-direnv",
+		"rust-lang.rust",
+		"slyphon.slyphon-desertesque",
+		"vadimcn.vscode-lldb",
+		"VisualStudioExptTeam.vscodeintellicode",
+		"windmilleng.vscode-go-autotest",
+	],
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Uncomment to use the Docker CLI from inside the container. See https://aka.ms/vscode-remote/samples/docker-from-docker.
+	// "mounts": [ "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind" ],
+
+	// Uncomment when using a ptrace-based debugger like C++, Go, and Rust
+	// "runArgs": [ "--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined" ],
+
+	// Comment out connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+	"remoteUser": "vscode"
+}

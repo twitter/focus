@@ -31,13 +31,13 @@ type (
 func (wc *WrappedCommand) SetArgs(args ...string)  { wc.Command.SetArgs(args) }
 func (wc *WrappedCommand) ParseFlags(fl ...string) { wc.Command.ParseFlags(fl) }
 
+func NewFixtureNoRepo(t *testing.T) *Fixture {
+	return &Fixture{testutils.NewFixture(t)}
+}
+
 func NewFixture(t *testing.T) *Fixture {
-	f := &Fixture{
-		Fixture: testutils.NewFixture(t),
-	}
-
+	f := NewFixtureNoRepo(t)
 	f.SetupGitTestRepos()
-
 	return f
 }
 
