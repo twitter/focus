@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package treesnap;
+
+enum HashAlgorithm {
+  SHA1 = 0;
+  SHA256 = 1;
+}
+
+message Hash {
+  HashAlgorithm algorithm = 1;
+  bytes data = 2;
+}
+
+message Content {
+  message Metadata {
+    message Permissions {
+      bool is_writable = 1;
+      bool is_executable = 2;
+      bool is_readable = 3;
+
+      uint32 unix_permissions = 4;
+    }
+
+    uint64 created_time = 1; // Milliseconds  // TODO: Are these right?
+    uint64 last_modified_time = 2; // Milliseconds  // TODO: Are these right?
+    uint64 last_change_time = 3; // Milliseconds
+    Permissions permissions = 4;
+  }
+
+  message Tree {
+  }
+
+  message Blob {
+    Hash content_hash = 1;
+    bool content_is_inline = 2;
+    bytes content = 3;
+  }
+
+  message Commit {
+  }
+
+  message Tag {
+  }
+
+  message Any {
+  }
+
+  Hash object_id = 1;
+  Metadata metadata = 2;
+  oneof underlying {
+    Tree tree = 3;
+    Blob blob = 4;
+    Commit commit = 5;
+    Tag tag = 6;
+    Any any = 7; // Really needed?
+  }
+}
+
+message Operation {
+  message Push {
+    Content content = 1;
+  }
+
+  message Pop {
+  }
+}
+
+message OperationStream {
+  repeated Operation operations = 1;
+}

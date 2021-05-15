@@ -2,8 +2,9 @@ pub mod testing {
     use crate::error::AppError;
     use anyhow::Result;
     use git2::{IndexAddOption, Oid, Repository, RepositoryInitOptions};
-    use log::info;
+    use log::{debug, info, warn};
 
+    use env_logger::Env;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -33,8 +34,10 @@ pub mod testing {
             let result = TempRepo { dir, opts, bare };
 
             if let Some(primary) = alternate_of {
-                let new_repo = result.repo().expect("Failed to open new alternate repo");
-                let primary_repo = primary.repo().expect("Failed to open primary repo");
+                let new_repo = result
+                    .underlying()
+                    .expect("Failed to open new alternate repo");
+                let primary_repo = primary.underlying().expect("Failed to open primary repo");
                 info!(
                     "Setting up {:?} as an alternate of {:?}",
                     &new_repo.path(),
@@ -45,11 +48,33 @@ pub mod testing {
             result
         }
 
+        pub fn new_with_stuff() -> Result<(Self, Oid), AppError> {
+            let temp_repo = TempRepo::new(false, None, None);
+            let underlying = temp_repo.underlying()?;
+            let mut oid: Oid;
+            let repo = temp_repo.underlying()?;
+            {
+                let filename = PathBuf::from("a/foo.txt");
+                temp_repo.create_file(&filename, b"hi\n")?;
+                assert_eq!(repo.status_file(&filename)?, git2::Status::WT_NEW);
+                temp_repo.commit_everything("blah", &[&filename], "refs/heads/main")?;
+                assert_eq!(repo.status_file(&filename)?, git2::Status::CURRENT);
+            }
+            {
+                let filename = PathBuf::from("b/bar.txt");
+                temp_repo.create_file(&filename, b"hi again\n")?;
+                assert_eq!(repo.status_file(&filename)?, git2::Status::WT_NEW);
+                oid = temp_repo.commit_everything("blah", &[&filename], "refs/heads/main")?;
+                assert_eq!(repo.status_file(&filename)?, git2::Status::CURRENT);
+            }
+            Ok((temp_repo, oid))
+        }
+
         pub fn path(&self) -> PathBuf {
             self.dir.path().to_owned()
         }
 
-        pub fn repo(&self) -> Result<Repository, AppError> {
+        pub fn underlying(&self) -> Result<Repository, AppError> {
             Ok(Repository::init_opts(self.dir.path(), &self.opts)?)
         }
 
@@ -83,15 +108,26 @@ pub mod testing {
         pub fn commit_everything(
             &self,
             message: &str,
+            paths: &[&PathBuf],
             ref_to_update: &str,
         ) -> Result<Oid, AppError> {
             assert_eq!(ref_to_update.is_empty(), false);
 
-            let repo = self.repo()?;
+            let repo = self.underlying()?;
             let mut index = repo.index()?;
-            index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
-            let tree_id = index.write_tree()?;
+
+            let prev_dir = std::env::current_dir()?;
+            std::env::set_current_dir(repo.workdir()?);
+            for &path in paths {
+                // let mut path_buf = repo.workdir()?.to_path_buf();
+                // path_buf.push(path);
+                debug!("Adding {:?}", &path);
+                index.add_path(&path);
+            }
+            std::env::set_current_dir(prev_dir)?;
+            assert_eq!(index.len(), paths.len());
             index.write()?;
+            let tree_id = index.write_tree()?;
             let tree = repo.find_tree(tree_id)?;
             let sig = repo.signature()?;
 
@@ -108,19 +144,18 @@ pub mod testing {
                 }
             }
 
+            let commit_oid = repo.commit(None, &sig, &sig, message, &tree, &[])?;
+            repo.reference(ref_to_update, commit_oid, false, "Created ref");
+
             // TODO: Revisit this. The parent commit list must be able to be taken as a sliced reference more easily.
-            Ok(repo.commit(Some(ref_to_update), &sig, &sig, message, &tree, &[])?)
+            Ok(commit_oid)
         }
     }
 
     #[test]
     fn test_testrepo() -> Result<(), AppError> {
         let temp_repo = TempRepo::new(false, None, None);
-        let repo = temp_repo.repo().unwrap();
-        // let mut file = temp_repo.path();
-        // let filename = PathBuf::from("a.txt;");
-        // file.push(&filename);
-        // fs::write(&file, "Hello\n")?;
+        let repo = temp_repo.underlying().unwrap();
         let filename = PathBuf::from("a.txt");
         temp_repo.create_file(&filename, b"Why, hello!\n")?;
         assert_eq!(repo.status_file(&filename).unwrap(), git2::Status::WT_NEW);
@@ -146,38 +181,41 @@ pub mod testing {
         let tree = repo.find_tree(tree_oid)?;
 
         let signature = repo.signature()?;
-        // repo.commit_signed("A simple commit", signature, None);
         let parents: &[&git2::Commit] = &[]; // First commit.
 
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            "Simple commit",
-            &tree,
-            parents,
-        )
-        .unwrap();
+        let commit_oid = repo
+            .commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                "Simple commit",
+                &tree,
+                parents,
+            )
+            .unwrap();
+
+        repo.reference("refs/heads/main", commit_oid, true, "Create ref")?;
 
         Ok(())
     }
 
     #[test]
     fn test_commit_everything() -> Result<(), AppError> {
+        env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
         let temp_repo = TempRepo::new(false, None, None);
-        let repo = temp_repo.repo()?;
+        let repo = temp_repo.underlying()?;
         {
             let filename = PathBuf::from("foo.txt");
             temp_repo.create_file(&filename, b"hi\n")?;
             assert_eq!(repo.status_file(&filename)?, git2::Status::WT_NEW);
-            temp_repo.commit_everything("blah", "HEAD")?;
+            temp_repo.commit_everything("blah", &[&filename], "refs/heads/main")?;
             assert_eq!(repo.status_file(&filename)?, git2::Status::CURRENT);
         }
         {
             let filename = PathBuf::from("bar.txt");
             temp_repo.create_file(&filename, b"hi again\n")?;
             assert_eq!(repo.status_file(&filename)?, git2::Status::WT_NEW);
-            temp_repo.commit_everything("blah", "HEAD")?;
+            temp_repo.commit_everything("blah", &[&filename], "refs/heads/main")?;
             assert_eq!(repo.status_file(&filename)?, git2::Status::CURRENT);
         }
 

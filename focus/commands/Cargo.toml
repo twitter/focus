@@ -10,6 +10,7 @@ edition = "2018"
 futures = { version = "0.3.11", features = ["executor", "thread-pool"] }
 protobuf = "2.20.0"
 focus-internals = { path = "../internals" }
+focus-formats = { path = "../formats" }
 anyhow = "1.0.38"
 log = "0.4.13"
 thiserror = "1.0.23"
@@ -28,7 +29,13 @@ serde_json = "1.0.61"
 env_logger = "0.8.2"
 rocksdb = "0.16.0"
 pretty-hex = "0.2.1"    # Pretty hex dump of bytes slice in the common style.
+lazy_static = "1.4.0"
+sha2 = "0.9.5"
 
 [[bin]]
 name = "focus-repo-manager"
 path = "src/repo_manager/main.rs"
+
+[[bin]]
+name = "focus-treesnap"
+path = "src/treesnap/main.rs"
