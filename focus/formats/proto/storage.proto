@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package storage;
+
+message Hash {
+  enum Algorithm {
+    SHA1 = 0;
+    SHA256 = 1;
+  }
+
+  Algorithm algorithm = 1;
+  bytes value = 2;
+}
+
+message Content {
+  message Identifier {
+    bytes hash = 1;
+  }
+
+  Identifier identifier = 1;
+  uint32 size = 2;
+  bytes header = 3;
+  bytes body = 4;
+}
+
+// Represents a location on disk.
+message FileCoordinates {
+  string path = 1;
+  uint64 offset = 2;
+  uint64 length = 3;
+};
+
+message RetrieveContent {
+  message Request {
+    message OnDiskContent {
+      FileCoordinates header = 1;
+      FileCoordinates content = 2;
+    }
+  
+    message Options {
+      bool want_size = 1;
+      bool want_header = 2;
+      bool want_body = 3;
+      FileCoordinates file_coordinates = 4;
+    }
+
+    Content.Identifier content_identifier = 1;
+    Options options = 2;
+  }
+
+  message Response {
+    message OnDiskContent {
+      bool stored = 1;
+      // Was the underlying file extended? If so, the client should make sure it can read the rest of the file.
+      bool extended = 2;
+
+      Content.Identifier content_identifier = 3;
+      FileCoordinates header_coordinates = 4;
+      FileCoordinates content_coordinates = 5;
+    }
+
+    enum Relevance {
+      AS_REQUESTED = 0;
+      FOR_CACHE = 1;
+    }
+
+    // Where is the response? Included or on disk?
+    oneof underlying {
+      Content inline_content = 2;
+      OnDiskContent on_disk_content = 3;
+    }
+    // What is the relevance of this object? Is it the same object
+    // that was requested, or something to pre-cache?
+    Relevance relevance = 4; 
+  }
+}
+
+message StoreContent {
+  message Request {
+    Content content = 1;
+  }
+  
+  message Response {
+    bool stored = 1;
+  }
+}
+
+service StorageDelegate {
+  // RetrieveContent may return additional items to be cached
+  rpc RetrieveContent (RetrieveContent.Request) returns (stream RetrieveContent.Response);
+
+  // Size object?
+  
+  rpc StoreContent (StoreContent.Request) returns (StoreContent.Response);
+}
