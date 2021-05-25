@@ -1,3 +1,5 @@
+struct Attachment {}
+
 #[no_mangle]
 pub extern "C" fn git_storage_init(
     attachment: *mut libc::c_void, // User attachment (will be allocated)
@@ -16,6 +18,7 @@ pub extern "C" fn git_storage_init(
 pub extern "C" fn git_storage_shutdown(
     attachment: *mut libc::c_void, // User attachment (will be allocated)
 ) -> libc::c_int {
+    let attachment = unsafe { Box::<Attachment>::from_raw(attachment) };
     -1
 }
 
@@ -36,6 +39,7 @@ pub extern "C" fn git_storage_fetch_object(
     atime: *mut libc::time_t,          // Access time
     mtime: *mut libc::time_t,          // Modified time
 ) -> libc::c_int {
+    let attachment = unsafe { Box::<Attachment>::from_raw(attachment) };
     -1
 }
 
@@ -47,6 +51,7 @@ pub extern "C" fn git_storage_size_object(
     atime: *mut libc::time_t,      // Access time
     mtime: *mut libc::time_t,      // Modified time
 ) -> libc::c_int {
+    let attachment = unsafe { Box::<Attachment>::from_raw(attachment) };
     -1
 }
 
@@ -60,5 +65,9 @@ pub extern "C" fn git_storage_write_object(
     body_length: libc::size_t,     // How long the body is
     mtime: libc::time_t,           // Modified time
 ) -> libc::c_int {
+    let attachment = unsafe { Box::<Attachment>::from_raw(attachment) };
     -1
 }
+
+// TODO: Glue in terms of a trait
+// TODO: Intermediate structs (duh)
