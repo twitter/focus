@@ -12,7 +12,6 @@ use sha2::digest::DynDigest;
 use sha2::{Digest, Sha224, Sha256};
 use std::collections::HashSet;
 use std::fs::Permissions;
-// use focus_formats::proto::
 
 fn normalize_tree_entry_path(path: &str, tree_entry: &TreeEntry) -> Result<String, AppError> {
     let mut path = path.to_string();
