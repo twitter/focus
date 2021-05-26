@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use std::ffi::{OsString, CString, OsStr};
+use std::os::unix::ffi::OsStringExt;
 
-struct Attachment {
+struct Context {
     repo_path: PathBuf,
     fifo_path: PathBuf,
     args: String,
@@ -20,15 +21,13 @@ pub extern "C" fn git_storage_init(
     attachment: *mut *mut libc::c_void, // User attachment (will be allocated)
 ) -> libc::c_int {
     unsafe {
-        use std::os::unix::ffi::OsStringExt;
-
         let to_path = |bytes: *const libc::c_uchar, len: usize| -> PathBuf {
             let byte_string = Vec::from_raw_parts(bytes as *mut libc::c_uchar, len, len);
             let os_string: OsString = OsStringExt::from_vec(byte_string);
             PathBuf::from(os_string)
         };
 
-        *attachment = Box::into_raw(Box::new(Attachment{
+        *attachment = Box::into_raw(Box::new(Context {
             repo_path: to_path(repo_path, repo_path_length),
             fifo_path: to_path(fifo_path, fifo_path_length),
             args: String::from_raw_parts(args as *mut libc::c_uchar, args_length, args_length),
@@ -43,7 +42,7 @@ pub extern "C" fn git_storage_init(
 pub extern "C" fn git_storage_shutdown(
     attachment: *mut libc::c_void, // User attachment (will be allocated)
 ) -> libc::c_int {
-    let attachment = unsafe { Box::<Attachment>::from_raw(attachment as *mut Attachment) };
+    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
 
     -1
 }
@@ -64,7 +63,7 @@ pub extern "C" fn git_storage_fetch_object(
     atime: *mut libc::time_t,          // Access time
     mtime: *mut libc::time_t,          // Modified time
 ) -> libc::c_int {
-    let attachment = unsafe { Box::<Attachment>::from_raw(attachment as *mut Attachment) };
+    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
     -1
 }
 
@@ -76,7 +75,7 @@ pub extern "C" fn git_storage_size_object(
     atime: *mut libc::time_t,      // Access time
     mtime: *mut libc::time_t,      // Modified time
 ) -> libc::c_int {
-    let attachment = unsafe { Box::<Attachment>::from_raw(attachment as *mut Attachment) };
+    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
     -1
 }
 
@@ -90,7 +89,7 @@ pub extern "C" fn git_storage_write_object(
     body_length: libc::size_t,     // How long the body is
     mtime: libc::time_t,           // Modified time
 ) -> libc::c_int {
-    let attachment  = unsafe { Box::<Attachment>::from_raw(attachment as *mut Attachment) };
+    let attachment  = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
     -1
 }
 
