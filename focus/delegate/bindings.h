@@ -3,21 +3,20 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-int git_storage_init(void *attachment,
-                     const char *repo_path,
+int git_storage_init(const unsigned char *repo_path,
                      size_t repo_path_length,
-                     const char *fifo_path,
+                     const unsigned char *fifo_path,
                      size_t fifo_path_length,
-                     const char *args,
+                     const unsigned char *args,
                      size_t args_length,
-                     size_t hash_raw_bytes);
+                     size_t hash_raw_bytes,
+                     void **attachment);
 
 int git_storage_shutdown(void *attachment);
 
 int git_storage_fetch_object(void *attachment,
                              const unsigned char *oid,
                              const char *path,
-                             size_t path_length,
                              off_t offset,
                              size_t capacity,
                              off_t *header_offset,
