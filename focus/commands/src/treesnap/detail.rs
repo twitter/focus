@@ -1,6 +1,5 @@
 use anyhow::Result;
 use env_logger::{self, Env};
-use focus_formats::FormatsRoot;
 use log::{debug, error, info};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -45,7 +44,7 @@ fn full_contents_required_predicate(name: &str) -> bool {
 }
 
 pub fn snapshot(repo: &Path, output: &Path) -> Result<(), AppError> {
-    use focus_formats::proto::*;
+    use focus_formats::treesnap::*;
 
     let repo = git2::Repository::open(repo)?;
     let head_reference = repo.head()?;
@@ -101,9 +100,9 @@ pub fn snapshot(repo: &Path, output: &Path) -> Result<(), AppError> {
                     let mut digest = Sha256::new();
                     Digest::update(&mut digest, content);
                     let content_digest_output = digest.finalize();
-                    let content_hash = Hash {
-                        algorithm: HashAlgorithm::Sha256 as i32,
-                        data: Vec::<u8>::from(content_digest_output.as_slice()),
+                    let content_hash = ContentDigest {
+                        algorithm: content_digest::Algorithm::Sha256 as i32,
+                        value: Vec::<u8>::from(content_digest_output.as_slice()),
                     };
 
                     if full_contents_required_predicate(entry.name().unwrap()) {

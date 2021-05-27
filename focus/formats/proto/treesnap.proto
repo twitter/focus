@@ -2,14 +2,14 @@ syntax = "proto3";
 
 package treesnap;
 
-enum HashAlgorithm {
-  SHA1 = 0;
-  SHA256 = 1;
-}
+message ContentDigest {
+  enum Algorithm {
+    SHA1 = 0;
+    SHA256 = 1;
+  }
 
-message Hash {
-  HashAlgorithm algorithm = 1;
-  bytes data = 2;
+  Algorithm algorithm = 1;
+  bytes value = 2;
 }
 
 message Content {
@@ -32,7 +32,7 @@ message Content {
   }
 
   message Blob {
-    Hash content_hash = 1;
+    ContentDigest content_hash = 1;
     bool content_is_inline = 2;
     bytes content = 3;
   }
@@ -46,7 +46,7 @@ message Content {
   message Any {
   }
 
-  Hash object_id = 1;
+  ContentDigest object_id = 1;
   Metadata metadata = 2;
   oneof underlying {
     Tree tree = 3;

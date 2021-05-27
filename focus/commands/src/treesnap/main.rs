@@ -5,7 +5,6 @@ mod detail;
 
 use anyhow::Result;
 use env_logger::{self, Env};
-use focus_formats::FormatsRoot;
 use internals::error::AppError;
 use log::{debug, error, info};
 use std::path::{Path, PathBuf};

@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::ffi::{OsString, CString, OsStr};
+use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
 
 struct Context {

@@ -31,10 +31,14 @@ rocksdb = "0.16.0"
 pretty-hex = "0.2.1"    # Pretty hex dump of bytes slice in the common style.
 lazy_static = "1.4.0"
 sha2 = "0.9.5"
+prost = "0.7"
+tonic = "0.4"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio-stream = "0.1"
 
 [[bin]]
 name = "focus-repo-manager"
-path = "src/repo_manager/main.rs"
+path = "src/server/main.rs"
 
 [[bin]]
 name = "focus-treesnap"

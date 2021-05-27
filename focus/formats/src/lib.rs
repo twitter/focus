@@ -1,15 +1,7 @@
-pub struct FormatsRoot {
-    s: String,
-}
-
-pub mod proto {
+pub mod treesnap {
     tonic::include_proto!("treesnap");
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+pub mod storage {
+    tonic::include_proto!("storage");
 }

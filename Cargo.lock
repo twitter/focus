@@ -302,6 +302,7 @@ dependencies = [
  "lazy_static",
  "log",
  "pretty-hex",
+ "prost",
  "protobuf",
  "rocksdb",
  "serde",
@@ -312,7 +313,10 @@ dependencies = [
  "structopt",
  "tempfile",
  "thiserror",
+ "tokio",
+ "tokio-stream",
  "toml",
+ "tonic",
  "uuid",
 ]
 
@@ -335,27 +339,15 @@ name = "focus-formats"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bufstream",
- "crossbeam-queue",
- "crossbeam-utils",
  "dirs",
  "env_logger",
- "git2",
  "log",
  "prost",
- "protobuf",
- "rocksdb",
- "serde",
- "serde_derive",
- "signal-hook",
- "structopt",
- "tempfile",
  "thiserror",
  "tokio",
- "toml",
+ "tokio-stream",
  "tonic",
  "tonic-build",
- "uuid",
 ]
 
 [[package]]
