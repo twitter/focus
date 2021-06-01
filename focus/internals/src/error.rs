@@ -67,15 +67,3 @@ pub enum AppError {
     #[error("unable to determine work directory for repository")]
     InvalidWorkDir(),
 }
-//
-// impl From<std::option::NoneError> for AppError {
-//     fn from(e: std::option::NoneError) -> Self {
-//         AppError::None(e)
-//     }
-// }
-//
-// impl Into<String> for AppError {
-//     fn into(self) -> String {
-//         format!("{:?}", self)
-//     }
-// }
