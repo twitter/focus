@@ -100,7 +100,11 @@ impl Storage {
     }
 
     pub fn estimate_num_keys(&self) -> Result<i64, AppError> {
-        Ok(self.general.property_value("rocksdb.estimate-num-keys")??.parse::<i64>()?)
+        if let Ok(Some(val)) = self.general.property_value("rocksdb.estimate-num-keys") {
+            Ok(val.parse::<i64>()?)
+        } else {
+            return Err(AppError::None());
+        }
     }
 }
 

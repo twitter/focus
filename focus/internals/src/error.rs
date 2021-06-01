@@ -20,7 +20,7 @@ pub enum AppError {
     Io(#[from] std::io::Error),
 
     #[error("expected something")]
-    None(std::option::NoneError),
+    None(),
 
     #[error("expected the object to have a size")]
     Unsized(),
@@ -62,17 +62,20 @@ pub enum AppError {
     Var(#[from] std::env::VarError),
 
     #[error(transparent)]
-    ParseInt(#[from] ParseIntError)
-}
+    ParseInt(#[from] ParseIntError),
 
-impl From<std::option::NoneError> for AppError {
-    fn from(e: std::option::NoneError) -> Self {
-        AppError::None(e)
-    }
+    #[error("unable to determine work directory for repository")]
+    InvalidWorkDir(),
 }
-
-impl Into<String> for AppError {
-    fn into(self) -> String {
-        format!("{:?}", self)
-    }
-}
+//
+// impl From<std::option::NoneError> for AppError {
+//     fn from(e: std::option::NoneError) -> Self {
+//         AppError::None(e)
+//     }
+// }
+//
+// impl Into<String> for AppError {
+//     fn into(self) -> String {
+//         format!("{:?}", self)
+//     }
+// }

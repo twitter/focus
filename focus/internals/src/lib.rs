@@ -1,5 +1,3 @@
-#![feature(try_trait)]
-
 extern crate crossbeam_queue;
 extern crate crossbeam_utils;
 extern crate rocksdb;

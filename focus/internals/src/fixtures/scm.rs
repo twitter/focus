@@ -117,10 +117,12 @@ pub mod testing {
             let mut index = repo.index()?;
 
             let prev_dir = std::env::current_dir()?;
-            std::env::set_current_dir(repo.workdir()?);
+            if let Some(work_dir) = repo.workdir() {
+                std::env::set_current_dir(work_dir);
+            } else {
+                return Err(AppError::InvalidWorkDir())
+            }
             for &path in paths {
-                // let mut path_buf = repo.workdir()?.to_path_buf();
-                // path_buf.push(path);
                 debug!("Adding {:?}", &path);
                 index.add_path(&path);
             }

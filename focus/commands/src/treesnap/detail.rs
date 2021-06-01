@@ -14,8 +14,12 @@ use std::fs::Permissions;
 
 fn normalize_tree_entry_path(path: &str, tree_entry: &TreeEntry) -> Result<String, AppError> {
     let mut path = path.to_string();
-    path.push_str(tree_entry.name()?);
-    Ok(path)
+    if let Some(name) = tree_entry.name() {
+        path.push_str(name));
+        Ok(path)
+    } else {
+        Err(AppError::None())
+    }
 }
 
 lazy_static! {
