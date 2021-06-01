@@ -12,13 +12,10 @@ use tonic::{Request, Response, Status};
 use focus_formats::storage;
 
 #[derive(Debug)]
-pub struct Endpoint {
-
-}
+pub struct Endpoint {}
 
 #[tonic::async_trait]
 impl storage::content_storage_server::ContentStorage for Endpoint {
-
     async fn retrieve_content(
         &self,
         request: tonic::Request<storage::retrieve_content::Request>,

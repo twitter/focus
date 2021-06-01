@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub repo_root: Option<PathBuf>,
-    
+
     pub managed_repos: Option<Vec<RepoConfig>>,
 }
 

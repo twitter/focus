@@ -32,6 +32,5 @@ pub fn workspace_dir() -> PathBuf {
     match std::env::var(REPO_DIR_KEY) {
         Ok(val) => Path::new(&val).to_path_buf(),
         _ => dirs::home_dir().unwrap().join("workspace").to_path_buf(),
-        
     }
 }

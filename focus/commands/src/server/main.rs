@@ -17,11 +17,7 @@ mod endpoint;
 #[derive(StructOpt, Debug)]
 enum Subcommand {
     Run {
-        #[structopt(
-            long,
-            default_value = "repo",
-            parse(from_os_str),
-        )]
+        #[structopt(long, default_value = "repo", parse(from_os_str))]
         repo_path: PathBuf,
     },
 }
@@ -38,9 +34,7 @@ fn main() -> Result<(), AppError> {
 
     let opt = RepoManagerOpts::from_args();
     match opt.cmd {
-        Subcommand::Run { repo_path } => {
-            Ok(())
-        } ,
+        Subcommand::Run { repo_path } => Ok(()),
         _ => {
             error!("unsupported command");
             Err(AppError::InvalidArgs())

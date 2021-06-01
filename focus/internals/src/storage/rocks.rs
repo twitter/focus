@@ -1,10 +1,10 @@
 use anyhow::Result;
 use log::info;
 use protobuf::CodedOutputStream;
-use rocksdb::{DB, Options, IteratorMode, Direction};
+use rocksdb::{Direction, IteratorMode, Options, DB};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::collections::HashMap;
 
 use crate::error::AppError;
 

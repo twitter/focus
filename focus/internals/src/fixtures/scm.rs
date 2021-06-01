@@ -120,7 +120,7 @@ pub mod testing {
             if let Some(work_dir) = repo.workdir() {
                 std::env::set_current_dir(work_dir);
             } else {
-                return Err(AppError::InvalidWorkDir())
+                return Err(AppError::InvalidWorkDir());
             }
             for &path in paths {
                 debug!("Adding {:?}", &path);

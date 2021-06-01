@@ -205,8 +205,7 @@ impl<'a> ManagedRepo {
                                 let hdr = format!("{} {}\0", obj.kind().str(), obj.len());
                                 let mut val = Vec::<u8>::from(hdr.as_bytes());
                                 val.extend(obj.data());
-                                if let Err(e) = storage_clone.put_bytes(&key.as_bytes(), &val[..])
-                                {
+                                if let Err(e) = storage_clone.put_bytes(&key.as_bytes(), &val[..]) {
                                     error!(
                                         "Thread {} failed to store object {}: {}",
                                         &thread_num, &oid, &e
@@ -367,7 +366,6 @@ impl Repos {
                     } else {
                         info!("{:?} not enabled", &entry.path());
                     }
-
                 }
             }
         };

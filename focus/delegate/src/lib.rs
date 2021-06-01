@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
+use std::path::PathBuf;
 
 struct Context {
     repo_path: PathBuf,
@@ -89,7 +89,7 @@ pub extern "C" fn git_storage_write_object(
     body_length: libc::size_t,     // How long the body is
     mtime: libc::time_t,           // Modified time
 ) -> libc::c_int {
-    let attachment  = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
+    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
     -1
 }
 
