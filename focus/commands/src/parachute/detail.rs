@@ -17,6 +17,7 @@ pub(crate) struct Repo {
 }
 
 impl Repo {
+    #[allow(dead_code)]
     fn new(path: &Path) -> Result<Self, AppError> {
         Repository::open(path)
             .map(|repo| Self { repo })
@@ -24,10 +25,12 @@ impl Repo {
     }
 }
 
+#[allow(dead_code)]
 pub fn server(_repo: &Path, _data: &Path) -> Result<(), AppError> {
     todo!("impl")
 }
 
+#[allow(dead_code)]
 pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>, AppError> {
     let mut results = HashMap::<String, Repo>::new();
 

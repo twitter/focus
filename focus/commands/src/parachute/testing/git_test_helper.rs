@@ -3,9 +3,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
+#[allow(dead_code)]
 pub struct GitTestHelper {}
 
 impl GitTestHelper {
+    #[allow(dead_code)]
     pub fn fixture_repo(containing_dir: &Path) -> Result<PathBuf, AppError> {
         let mut repo_path = containing_dir.to_path_buf();
         std::env::set_current_dir(containing_dir)?;
