@@ -2,6 +2,7 @@ use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 
+#[allow(dead_code)]
 struct Context {
     repo_path: PathBuf,
     fifo_path: PathBuf,
@@ -9,6 +10,7 @@ struct Context {
     hash_raw_bytes: usize,
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
 pub extern "C" fn git_storage_init(
     repo_path: *const libc::c_uchar,
@@ -38,6 +40,7 @@ pub extern "C" fn git_storage_init(
     0
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
 pub extern "C" fn git_storage_shutdown(
     attachment: *mut libc::c_void, // User attachment (will be allocated)
@@ -47,6 +50,7 @@ pub extern "C" fn git_storage_shutdown(
     -1
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
 pub extern "C" fn git_storage_fetch_object(
     attachment: *mut libc::c_void,     // User attachment
@@ -67,6 +71,7 @@ pub extern "C" fn git_storage_fetch_object(
     -1
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
 pub extern "C" fn git_storage_size_object(
     attachment: *mut libc::c_void, // User attachment
@@ -79,6 +84,7 @@ pub extern "C" fn git_storage_size_object(
     -1
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
 pub extern "C" fn git_storage_write_object(
     attachment: *mut libc::c_void, // User attachment

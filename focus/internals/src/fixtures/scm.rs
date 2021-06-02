@@ -153,8 +153,15 @@ pub mod testing {
         }
     }
 
+    #[allow(dead_code)]
+    fn init_env_logger() {
+        use env_logger::{Builder, Env};
+        Builder::from_env(Env::default().default_filter_or("debug")).init();
+    }
+
     #[test]
     fn test_testrepo() -> Result<(), AppError> {
+        init_env_logger();
         let temp_repo = TempRepo::new(false, None, None);
         let repo = temp_repo.underlying().unwrap();
         let filename = PathBuf::from("a.txt");
@@ -202,7 +209,7 @@ pub mod testing {
 
     #[test]
     fn test_commit_everything() -> Result<(), AppError> {
-        env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+        init_env_logger();
         let temp_repo = TempRepo::new(false, None, None);
         let repo = temp_repo.underlying()?;
         {
