@@ -34,20 +34,28 @@ pub fn server(_repo: &Path, _data: &Path) -> Result<(), AppError> {
 pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>, AppError> {
     let mut results = HashMap::<String, Repo>::new();
 
-    for entry in walkdir::WalkDir::new(root) {
+    for entry in walkdir::WalkDir::new(root).max_depth(1) {
         match entry {
-            Ok(entry) => match Repo::new(entry.path()) {
-                Ok(repo) => {
-                    let name = String::from(
-                        entry
-                            .file_name()
-                            .to_str()
-                            .expect("Repo name contains non-UTF-8 characters"),
-                    );
-                    results.insert(name, repo);
-                }
-                Err(e) => {
-                    error!("Ignoring repository {:?} ({:?})", entry.path(), e);
+            Ok(entry) =>
+                {
+                    let path = entry.path();
+                    if !path.is_dir() || path.eq(root) {
+                        continue;
+                    }
+
+                    match Repo::new(entry.path()) {
+                        Ok(repo) => {
+                            let name = String::from(
+                                entry
+                                    .file_name()
+                                    .to_str()
+                                    .expect("Repo name contains non-UTF-8 characters"),
+                            );
+                            results.insert(name, repo);
+                        }
+                        Err(e) => {
+                            error!("Ignoring path {:?} ({:?})", entry.path(), e);
+                        }
                 }
             },
             Err(e) => {
