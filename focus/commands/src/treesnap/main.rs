@@ -6,8 +6,7 @@ mod detail;
 use anyhow::Result;
 use env_logger::{self, Env};
 use internals::error::AppError;
-use log::{debug, error, info};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -48,9 +47,5 @@ fn main() -> Result<(), AppError> {
             to_snapshot,
             output,
         } => return detail::difference(from_snapshot, to_snapshot, output),
-        _ => {
-            error!("unsupported command");
-            Err(AppError::InvalidArgs())
-        }
     }
 }

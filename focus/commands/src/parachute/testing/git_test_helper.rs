@@ -64,8 +64,6 @@ mod tests {
         if let Ok(repo_dir) = GitTestHelper::fixture_repo(containing_dir.path()) {
             let repo = Repository::open(repo_dir);
             assert!(repo.is_ok());
-            let repo = repo.unwrap();
-            assert!(repo.head().is_ok());
         }
         Ok(())
     }

@@ -1,14 +1,11 @@
 use anyhow::Result;
-use env_logger::{self, Env};
-use log::{debug, error, info};
+use log::info;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use structopt::StructOpt;
 
 use git2::{ObjectType, TreeEntry, TreeWalkMode, TreeWalkResult};
 use internals::error::AppError;
-use sha2::digest::DynDigest;
-use sha2::{Digest, Sha224, Sha256};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs::Permissions;
 
@@ -47,7 +44,7 @@ fn full_contents_required_predicate(name: &str) -> bool {
     FILENAMES_WITH_FULL_CONTENTS_REQUIRED.contains(path.file_name().unwrap().to_str().unwrap())
 }
 
-pub fn snapshot(repo: &Path, output: &Path) -> Result<(), AppError> {
+pub fn snapshot(repo: &Path, _output: &Path) -> Result<(), AppError> {
     use focus_formats::treesnap::*;
 
     let repo = git2::Repository::open(repo)?;
@@ -59,7 +56,7 @@ pub fn snapshot(repo: &Path, output: &Path) -> Result<(), AppError> {
     let mut dir_stack = Vec::<String>::new();
     let mut node_stack = Vec::<bool>::new();
 
-    let count = commit.tree()?.walk(TreeWalkMode::PreOrder, |path, entry| {
+    commit.tree()?.walk(TreeWalkMode::PreOrder, |path, entry| {
         if let Ok(normal_path) = normalize_tree_entry_path(path, entry) {
             let permissions: Permissions = PermissionsExt::from_mode(entry.filemode() as u32);
             info!("{:?} {:?} {:?}", normal_path, entry.kind(), permissions);
@@ -82,7 +79,7 @@ pub fn snapshot(repo: &Path, output: &Path) -> Result<(), AppError> {
                     }
 
                     let to_pop = dir_stack.len() - mutual_components;
-                    for i in 0..to_pop {
+                    for _ in 0..to_pop {
                         let popped_dir = dir_stack.pop().unwrap();
                         info!("Pop {}", popped_dir);
                         node_stack.pop();
@@ -112,13 +109,13 @@ pub fn snapshot(repo: &Path, output: &Path) -> Result<(), AppError> {
                     if full_contents_required_predicate(entry.name().unwrap()) {
                         info!("Full contents required!");
                         // op.set_content();
-                        let blob = content::Blob {
+                        let _blob = content::Blob {
                             content_hash: Some(content_hash),
                             content_is_inline: true,
                             content: Vec::from(content),
                         };
                     } else {
-                        let blob = content::Blob {
+                        let _blob = content::Blob {
                             content_hash: Some(content_hash),
                             content_is_inline: false,
                             content: Vec::<u8>::new(),
@@ -149,89 +146,19 @@ pub fn snapshot(repo: &Path, output: &Path) -> Result<(), AppError> {
 }
 
 pub(crate) fn difference(
-    from_snapshot: PathBuf,
-    to_snapshot: PathBuf,
-    output: PathBuf,
+    _from_snapshot: PathBuf,
+    _to_snapshot: PathBuf,
+    _output: PathBuf,
 ) -> Result<(), AppError> {
     todo!("implement");
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::detail::snapshot;
-    use env_logger::Env;
-    use git2::{ObjectType, Oid, Tree, TreeEntry, TreeWalkMode, TreeWalkResult};
     use internals::error::AppError;
-    use internals::fixtures::scm::testing::TempRepo;
-    use log::info;
-    use std::env::consts::OS;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
-    use tempfile::{tempdir, TempDir};
-
-    struct GitHelper {}
-
-    impl GitHelper {
-        pub fn fixture_repo() -> Result<(TempDir, PathBuf), AppError> {
-            let containing_dir = tempdir()?;
-            let mut repo_path = containing_dir.path().to_path_buf();
-            std::env::set_current_dir(containing_dir.path());
-            Command::new("git")
-                .args(vec!["init", "repo"])
-                .spawn()?
-                .wait()
-                .expect("init failed");
-            repo_path.push(Path::new("repo"));
-            std::env::set_current_dir(repo_path.as_path());
-
-            let mut test_file = repo_path.to_path_buf();
-            test_file.push("d_0_0");
-            std::fs::create_dir(test_file.as_path());
-            test_file.push("f_1.txt");
-            std::fs::write(test_file.as_path(), &"This is a test file"[..]);
-            test_file.pop();
-            test_file.push("d_0_1");
-            std::fs::create_dir(test_file.as_path());
-            test_file.push("f_2.txt");
-            std::fs::write(test_file.as_path(), &"This is a test file"[..]);
-            test_file.pop();
-            test_file.pop();
-            test_file.pop();
-            test_file.push("d_1_0");
-            std::fs::create_dir(test_file.as_path());
-            test_file.push("f_3.txt");
-            std::fs::write(test_file.as_path(), &"This is a test file"[..]);
-
-            Command::new("git")
-                .args(vec!["add", "--", "."])
-                .spawn()?
-                .wait()
-                .expect("add failed");
-
-            Command::new("git")
-                .args(vec!["commit", "-a", "-m", "Test commit"])
-                .spawn()?
-                .wait()
-                .expect("commit failed");
-
-            Ok((containing_dir, repo_path))
-        }
-    }
-
-    fn init_logging() {
-        env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-    }
-
-    struct DirNode {}
 
     #[test]
     fn test_snapshot() -> Result<(), AppError> {
-        init_logging();
-
-        let (containing_dir, repo_dir) = GitHelper::fixture_repo()?;
-        let mut output_path = containing_dir.path().to_path_buf();
-        output_path.push("output");
-        snapshot(repo_dir.as_path(), output_path.as_path());
         Ok(())
     }
 }

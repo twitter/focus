@@ -1,9 +1,7 @@
 use anyhow::Result;
 use env_logger::{self, Env};
-use internals::{error::AppError, repo::Repos};
-use log::{debug, error, info};
-use serde::__private::ser;
-use std::{path::PathBuf, sync::Arc};
+use internals::error::AppError;
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 // Servers are per-repo
@@ -34,10 +32,6 @@ fn main() -> Result<(), AppError> {
 
     let opt = RepoManagerOpts::from_args();
     match opt.cmd {
-        Subcommand::Run { repo_path } => Ok(()),
-        _ => {
-            error!("unsupported command");
-            Err(AppError::InvalidArgs())
-        }
+        Subcommand::Run { repo_path: _ } => Ok(()),
     }
 }
