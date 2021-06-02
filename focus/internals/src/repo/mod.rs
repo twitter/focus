@@ -1,5 +1,4 @@
-use crate::storage::{self, rocks::Storage};
-use crate::util::*;
+use crate::storage::rocks::Storage;
 use crate::{config, constants::git::*};
 use crate::{
     config::{fs, structures},
@@ -7,21 +6,14 @@ use crate::{
 };
 use anyhow::Result;
 use git2::Repository;
-use log::{debug, error, info, warn};
+use log::{error, info};
 use std::collections::HashMap;
+use std::sync::{atomic::Ordering, Arc, Mutex};
 use std::{
-    fs::File,
-    io::BufReader,
     path::{Path, PathBuf},
-    process,
-    process::exit,
     sync::atomic::AtomicBool,
     thread::JoinHandle,
-    time::{Duration, Instant},
-};
-use std::{
-    process::Command,
-    sync::{atomic::Ordering, Arc, Mutex},
+    time::Duration,
 };
 
 #[derive(Debug)]
@@ -164,17 +156,15 @@ impl<'a> ManagedRepo {
 
     // Import will bring all objects from Git's storage into the RocksDB storage.
     pub fn import(&self) -> Result<(), AppError> {
-        use std::io::BufRead;
-
-        const sleep_duration: Duration = Duration::from_millis(5);
-        const progress_interval: Duration = Duration::from_secs(15);
-        const import_concurrency: usize = 64;
+        const SLEEP_DURATION: Duration = Duration::from_millis(5);
+        const PROGRESS_INTERVAL: Duration = Duration::from_secs(15);
+        const IMPORT_CONCURRENCY: usize = 64;
 
         let work_dir = self.work_dir().unwrap().unwrap();
         info!("Importing repo {}", work_dir);
 
         let work_queue = Arc::new(crossbeam_queue::ArrayQueue::<git2::Oid>::new(
-            import_concurrency * 10000,
+            IMPORT_CONCURRENCY * 10000,
         ));
         let mut handles = Vec::<JoinHandle<()>>::new();
 
@@ -185,7 +175,7 @@ impl<'a> ManagedRepo {
         let populating = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let repo = self.underlying().unwrap();
 
-        for thread_num in 0..import_concurrency {
+        for thread_num in 0..IMPORT_CONCURRENCY {
             let thread_num = thread_num.clone();
             let work_queue_clone = work_queue.clone();
             let populating_clone = populating.clone();
@@ -223,7 +213,7 @@ impl<'a> ManagedRepo {
                     } else {
                         if populating_clone.load(Ordering::Relaxed) {
                             stall_count_clone.fetch_add(1, Ordering::Relaxed);
-                            std::thread::sleep(sleep_duration);
+                            std::thread::sleep(SLEEP_DURATION);
                         } else {
                             break;
                         }
@@ -242,7 +232,7 @@ impl<'a> ManagedRepo {
 
             std::thread::spawn(move || {
                 while running_clone.load(Ordering::Relaxed) {
-                    std::thread::sleep(progress_interval);
+                    std::thread::sleep(PROGRESS_INTERVAL);
                     info!(
                         "Imported {} objects ({} stalls)",
                         write_count_clone.load(Ordering::Relaxed),
@@ -253,19 +243,24 @@ impl<'a> ManagedRepo {
             })
         };
 
-        repo.odb().unwrap().foreach(|oid| {
-            work_queue.push(oid.clone()).expect("push failed");
-            true
-        });
+        repo.odb()
+            .unwrap()
+            .foreach(|oid| {
+                work_queue.push(oid.clone()).expect("push failed");
+                true
+            })
+            .unwrap();
 
         // Tell workers that if the queue is empty, it's over.
         populating.store(false, std::sync::atomic::Ordering::SeqCst);
 
         for handle in handles {
-            handle.join();
+            handle.join().expect("Joining worker thread failed");
         }
         running.store(false, Ordering::Relaxed);
-        progress_handle.join();
+        progress_handle
+            .join()
+            .expect("Joining progress thread failed");
         info!("Finished importing repo {}", &work_dir);
 
         Ok(())

@@ -6,15 +6,18 @@ use std::time::Duration;
 
 use log::debug;
 
+#[allow(dead_code)]
 enum InvocationKind {
     Timed,
     Direct,
 }
 
+#[allow(dead_code)]
 trait PeriodicInvocationTarget: Send + Sync {
     fn run(&self, invocation_kind: InvocationKind);
 }
 
+#[allow(dead_code)]
 struct Periodic {
     interval: Duration,
     target: Arc<dyn PeriodicInvocationTarget>,
@@ -24,6 +27,7 @@ struct Periodic {
 }
 
 impl Periodic {
+    #[allow(dead_code)]
     pub fn new(
         interval: Duration,
         target: Arc<dyn PeriodicInvocationTarget>,
@@ -48,7 +52,7 @@ impl Periodic {
                         debug!("Timed invocation");
                         cloned_target.run(InvocationKind::Timed);
                     }
-                    Err(e) => panic!(e),
+                    Err(_) => panic!("Timed out"),
                 }
             }
             stopped_clone.store(true, Ordering::SeqCst);
@@ -66,15 +70,18 @@ impl Periodic {
         )
     }
 
+    #[allow(dead_code)]
     pub fn invoke(&self) {
         self.invoke_tx.send(true).unwrap();
     }
 
+    #[allow(dead_code)]
     pub fn cancel(&self) {
         let _yolo = self.invoke_tx.send(false);
         self.stop_tx.send(()).unwrap();
     }
 
+    #[allow(dead_code)]
     pub fn stopped(&self) -> bool {
         self.stopped.load(Ordering::SeqCst)
     }

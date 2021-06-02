@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 static APP_ID: &str = "biz.twitter.focus";

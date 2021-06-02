@@ -1,10 +1,9 @@
 pub mod testing {
     use crate::error::AppError;
     use anyhow::Result;
-    use git2::{IndexAddOption, Oid, Repository, RepositoryInitOptions};
-    use log::{debug, info, warn};
+    use git2::{Oid, Repository, RepositoryInitOptions};
+    use log::{debug, info};
 
-    use env_logger::Env;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -50,8 +49,8 @@ pub mod testing {
 
         pub fn new_with_stuff() -> Result<(Self, Oid), AppError> {
             let temp_repo = TempRepo::new(false, None, None);
-            let underlying = temp_repo.underlying()?;
-            let mut oid: Oid;
+            let _underlying = temp_repo.underlying()?;
+            let oid: Oid;
             let repo = temp_repo.underlying()?;
             {
                 let filename = PathBuf::from("a/foo.txt");
@@ -118,13 +117,13 @@ pub mod testing {
 
             let prev_dir = std::env::current_dir()?;
             if let Some(work_dir) = repo.workdir() {
-                std::env::set_current_dir(work_dir);
+                std::env::set_current_dir(work_dir).unwrap();
             } else {
                 return Err(AppError::InvalidWorkDir());
             }
             for &path in paths {
                 debug!("Adding {:?}", &path);
-                index.add_path(&path);
+                index.add_path(&path)?;
             }
             std::env::set_current_dir(prev_dir)?;
             assert_eq!(index.len(), paths.len());
@@ -147,7 +146,7 @@ pub mod testing {
             }
 
             let commit_oid = repo.commit(None, &sig, &sig, message, &tree, &[])?;
-            repo.reference(ref_to_update, commit_oid, false, "Created ref");
+            repo.reference(ref_to_update, commit_oid, false, "Created ref")?;
 
             // TODO: Revisit this. The parent commit list must be able to be taken as a sliced reference more easily.
             Ok(commit_oid)

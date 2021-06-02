@@ -7,8 +7,8 @@ extern crate lazy_static;
 use anyhow::Result;
 use env_logger::{self, Env};
 use internals::error::AppError;
-use log::{debug, error, info};
-use std::path::{Path, PathBuf};
+use log::error;
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -42,9 +42,7 @@ fn main() -> Result<(), AppError> {
 
     let opt = ParachuteOpts::from_args();
     match opt.cmd {
-        Subcommand::Server { root, data } => {
-            return detail::server(root.as_path(), data.as_path())
-        }
+        Subcommand::Server { root, data } => return detail::server(root.as_path(), data.as_path()),
         _ => {
             error!("unsupported command");
             Err(AppError::InvalidArgs())

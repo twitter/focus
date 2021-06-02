@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::info;
 use protobuf::CodedOutputStream;
-use rocksdb::{Direction, IteratorMode, Options, DB};
+use rocksdb::{Options, DB};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -21,7 +21,7 @@ impl Storage {
         opts.increase_parallelism(4);
         opts.set_max_open_files(100);
         info!("Opening database from '{}'", &path.display());
-        let mut db = DB::open(&opts, &path)
+        let db = DB::open(&opts, &path)
             .expect(format!("Failed to open DB from '{}'", &path.display()).as_str());
         info!("Database is ready");
         Ok(Storage {
@@ -47,7 +47,7 @@ impl Storage {
     /// Read bytes associated with `key`.
     pub fn get_by_prefix(&self, key: &[u8]) -> Result<HashMap<Vec<u8>, Vec<u8>>, AppError> {
         let mut results = HashMap::<Vec<u8>, Vec<u8>>::new();
-        let mut iter = self.general.prefix_iterator(key);
+        let iter = self.general.prefix_iterator(key);
         for (sub_key, value) in iter {
             let suffix = &sub_key[key.len()..];
             results.insert(Vec::from(suffix), Vec::from(value));

@@ -1,38 +1,30 @@
-use std::collections::{HashSet, HashMap};
-use std::fs::Permissions;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::path::Path;
 
 use anyhow::Result;
-use env_logger::{self, Env};
-use git2::{ObjectType, TreeEntry, TreeWalkMode, TreeWalkResult, Repository};
-use log::{debug, error, info};
-use sha2::{Digest, Sha224, Sha256};
-use sha2::digest::DynDigest;
-use structopt::StructOpt;
+use git2::Repository;
 use internals::error::AppError;
-use std::ffi::{OsStr, OsString};
-use focus_formats::parachute::*;
+use log::error;
+use std::ffi::OsString;
 
 lazy_static! {
     static ref BARE_REPO_EXTENSION: OsString = OsString::from("git");
 }
 
+#[allow(dead_code)]
 pub(crate) struct Repo {
     repo: Repository,
 }
 
 impl Repo {
     fn new(path: &Path) -> Result<Self, AppError> {
-        Repository::open(path).map(|repo| {
-            Self{
-                repo
-            }
-        }).map_err(|err| err.into())
+        Repository::open(path)
+            .map(|repo| Self { repo })
+            .map_err(|err| err.into())
     }
 }
 
-pub fn server(repo: &Path, data: &Path) -> Result<(), AppError> {
+pub fn server(_repo: &Path, _data: &Path) -> Result<(), AppError> {
     todo!("impl")
 }
 
@@ -41,19 +33,24 @@ pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>, AppError>
 
     for entry in walkdir::WalkDir::new(root) {
         match entry {
-            Ok(entry) => {
-                match Repo::new(entry.path()) {
-                    Ok(repo) => {
-                        let name = String::from(entry.file_name().to_str().expect("Repo name contains non-UTF-8 characters"));
-                        results.insert(name, repo);
-                    },
-                    Err(e) => {
-                        error!("Ignoring repository {:?} ({:?})", entry.path(), e);
-                    }
+            Ok(entry) => match Repo::new(entry.path()) {
+                Ok(repo) => {
+                    let name = String::from(
+                        entry
+                            .file_name()
+                            .to_str()
+                            .expect("Repo name contains non-UTF-8 characters"),
+                    );
+                    results.insert(name, repo);
+                }
+                Err(e) => {
+                    error!("Ignoring repository {:?} ({:?})", entry.path(), e);
                 }
             },
             Err(e) => {
-                return Err(AppError::Io(e.into_io_error().expect("Converting error failed")))
+                return Err(AppError::Io(
+                    e.into_io_error().expect("Converting error failed"),
+                ))
             }
         }
     }
@@ -63,24 +60,14 @@ pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>, AppError>
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
-
-    use env_logger::Env;
-    use git2::{ObjectType, Oid, Tree, TreeEntry, TreeWalkMode, TreeWalkResult};
-    use log::info;
-    use tempfile::{tempdir, TempDir};
-
-    use internals::error::AppError;
-    use internals::fixtures::scm::testing::TempRepo;
-
     use crate::testing::git_test_helper::GitTestHelper;
+    use env_logger::Env;
+    use internals::error::AppError;
+    use tempfile::tempdir;
 
     fn init_logging() {
         env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     }
-
-    struct DirNode {}
 
     #[test]
     fn test_find_repos() -> Result<(), AppError> {
@@ -91,11 +78,10 @@ mod tests {
         let repo_b = GitTestHelper::fixture_repo(containing_dir.path())?;
         let repo_b_name = repo_b.to_str().unwrap();
 
-        let repos= super::find_repos(containing_dir.path())?;
+        let repos = super::find_repos(containing_dir.path())?;
         assert_eq!(repos.len(), 2);
         assert!(repos.contains_key(repo_a_name));
         assert!(repos.contains_key(repo_b_name));
-
 
         Ok(())
     }

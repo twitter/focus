@@ -1,14 +1,11 @@
 use crate::error::AppError;
-use anyhow::{Error, Result};
+use anyhow::Result;
 use crossbeam_utils::sync::ShardedLock;
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, Once};
-use std::thread::{spawn, JoinHandle};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use std::{borrow::Borrow, cell::RefCell, sync::Arc};
 
 pub struct TtlCache<K, V>
 where
