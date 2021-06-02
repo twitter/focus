@@ -84,13 +84,19 @@ mod tests {
     fn test_find_repos() -> Result<(), AppError> {
         init_logging();
         let containing_dir = tempdir()?;
+
+        let repos = super::find_repos(containing_dir.path())?;
+        assert!(repos.is_empty());
+
         let repo_a = GitTestHelper::fixture_repo(containing_dir.path())?;
-        let repo_a_name = repo_a.to_str().unwrap();
+        let repo_a_name = repo_a.file_name().unwrap().to_str().unwrap();
+
         let repo_b = GitTestHelper::fixture_repo(containing_dir.path())?;
-        let repo_b_name = repo_b.to_str().unwrap();
+        let repo_b_name = repo_b.file_name().unwrap().to_str().unwrap();
 
         let repos = super::find_repos(containing_dir.path())?;
         assert_eq!(repos.len(), 2);
+
         assert!(repos.contains_key(repo_a_name));
         assert!(repos.contains_key(repo_b_name));
 
