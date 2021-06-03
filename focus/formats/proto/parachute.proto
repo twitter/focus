@@ -17,7 +17,7 @@ message Coordinate {
 message Repo {
     message Identifier {
         // This is to represent a UUID
-        bytes id = 1;
+        bytes identifier = 1;
     }
 
     Identifier identifier = 1;
@@ -47,9 +47,8 @@ message QueryReposAction {
 
 message Sandbox {
     message Identifier {
-        bytes id = 1;
+        bytes identifier = 1;
     }
-
 
     Identifier based_on_sandbox = 1; // Identifier of the sandbox, if any, that this sandbox should be based on.
     ContentDigest merge_base = 2;
@@ -102,7 +101,6 @@ service Build {
 
     rpc IsolateWorkspace (IsolateWorkspaceAction.Request) returns (IsolateWorkspaceAction.Response);
 }
-
 
 message ChangeList {
     message File {

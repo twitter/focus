@@ -1,7 +1,7 @@
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::Result;
 use git2::Repository;
 use internals::error::AppError;
 use log::error;
@@ -18,7 +18,7 @@ pub(crate) struct Repo {
 
 impl Repo {
     #[allow(dead_code)]
-    fn new(path: &Path) -> Result<Self, AppError> {
+    fn new(path: &Path) -> Result<Self> {
         Repository::open(path)
             .map(|repo| Self { repo })
             .map_err(|err| err.into())
@@ -31,36 +31,28 @@ pub fn server(_repo: &Path, _data: &Path) -> Result<(), AppError> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>, AppError> {
+pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>> {
     let mut results = HashMap::<String, Repo>::new();
 
     for entry in walkdir::WalkDir::new(root).max_depth(1) {
-        match entry {
-            Ok(entry) => {
-                let path = entry.path();
-                if !path.is_dir() || path.eq(root) {
-                    continue;
-                }
+        let entry = entry.context("enumerating directory entry")?;
+        let path = entry.path();
+        if !path.is_dir() || path.eq(root) {
+            continue;
+        }
 
-                match Repo::new(entry.path()) {
-                    Ok(repo) => {
-                        let name = String::from(
-                            entry
-                                .file_name()
-                                .to_str()
-                                .expect("Repo name contains non-UTF-8 characters"),
-                        );
-                        results.insert(name, repo);
-                    }
-                    Err(e) => {
-                        error!("Ignoring path {:?} ({:?})", entry.path(), e);
-                    }
-                }
+        match Repo::new(entry.path()) {
+            Ok(repo) => {
+                let name = String::from(
+                    entry
+                        .file_name()
+                        .to_str()
+                        .expect("Repo name contains non-UTF-8 characters"),
+                );
+                results.insert(name, repo);
             }
             Err(e) => {
-                return Err(AppError::Io(
-                    e.into_io_error().expect("Converting error failed"),
-                ))
+                error!("Ignoring path {:?} ({:?})", entry.path(), e);
             }
         }
     }
@@ -70,9 +62,9 @@ pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>, AppError>
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::git_test_helper::GitTestHelper;
+    use anyhow::Result;
+    use crate::testing::scratch_git_repo::ScratchGitRepo;
     use env_logger::Env;
-    use internals::error::AppError;
     use tempfile::tempdir;
 
     fn init_logging() {
@@ -80,7 +72,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_repos() -> Result<(), AppError> {
+    fn test_find_repos() -> Result<()> {
         init_logging();
         let containing_dir = tempdir()?;
         let path = containing_dir.path();
@@ -88,11 +80,11 @@ mod tests {
         let repos = super::find_repos(&path)?;
         assert!(repos.is_empty());
 
-        let repo_a = GitTestHelper::fixture_repo(&path)?;
-        let repo_a_name = repo_a.file_name().unwrap().to_str().unwrap();
+        let repo_a = ScratchGitRepo::new_fixture(&path)?;
+        let repo_a_name = repo_a.path().file_name().unwrap().to_str().unwrap();
 
-        let repo_b = GitTestHelper::fixture_repo(&path)?;
-        let repo_b_name = repo_b.file_name().unwrap().to_str().unwrap();
+        let repo_b = ScratchGitRepo::new_fixture(&path)?;
+        let repo_b_name = repo_b.path().file_name().unwrap().to_str().unwrap();
 
         let repos = super::find_repos(&path)?;
         assert_eq!(repos.len(), 2);

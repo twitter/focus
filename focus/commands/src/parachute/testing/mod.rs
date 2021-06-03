@@ -1,1 +1,1 @@
-pub mod git_test_helper;
+pub mod scratch_git_repo;
