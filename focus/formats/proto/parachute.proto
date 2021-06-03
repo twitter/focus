@@ -50,17 +50,10 @@ message Sandbox {
         bytes id = 1;
     }
 
-    message FileModification {
-        uint64 creation_time = 1;
-        uint64 access_time = 2;
-        uint64 mode = 3;
-        string path = 4;
-        bytes contents = 5;
-    }
 
     Identifier based_on_sandbox = 1; // Identifier of the sandbox, if any, that this sandbox should be based on.
     ContentDigest merge_base = 2;
-    repeated FileModification modifications = 3;
+    ChangeList modifications = 3;
 }
 
 
@@ -108,4 +101,38 @@ service Build {
     rpc QueryTargets (QueryTargetsAction.Request) returns (QueryTargetsAction.Response);
 
     rpc IsolateWorkspace (IsolateWorkspaceAction.Request) returns (IsolateWorkspaceAction.Response);
+}
+
+
+message ChangeList {
+    message File {
+        enum Disposition {
+            NEW = 0;
+            MODIFIED = 1;
+            DELETED = 2;
+            TYPE_CHANGED = 3;
+            RENAMED = 4;
+        }
+
+        message Locator {
+            uint64 device = 1;
+            uint64 node = 2;
+        }
+
+        message Metadata {
+            uint64 size = 1;
+            uint64 creation_time = 2;
+            uint64 access_time = 3;
+            uint64 mode = 4;
+        }
+
+        Disposition disposition = 1;
+        bool staged = 2;
+        bytes filename = 3;
+        bytes old_filename = 4;
+        Metadata metadata = 5;
+        bytes contents = 6;
+    }
+
+    File files = 1;
 }

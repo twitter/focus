@@ -36,28 +36,27 @@ pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>, AppError>
 
     for entry in walkdir::WalkDir::new(root).max_depth(1) {
         match entry {
-            Ok(entry) =>
-                {
-                    let path = entry.path();
-                    if !path.is_dir() || path.eq(root) {
-                        continue;
-                    }
-
-                    match Repo::new(entry.path()) {
-                        Ok(repo) => {
-                            let name = String::from(
-                                entry
-                                    .file_name()
-                                    .to_str()
-                                    .expect("Repo name contains non-UTF-8 characters"),
-                            );
-                            results.insert(name, repo);
-                        }
-                        Err(e) => {
-                            error!("Ignoring path {:?} ({:?})", entry.path(), e);
-                        }
+            Ok(entry) => {
+                let path = entry.path();
+                if !path.is_dir() || path.eq(root) {
+                    continue;
                 }
-            },
+
+                match Repo::new(entry.path()) {
+                    Ok(repo) => {
+                        let name = String::from(
+                            entry
+                                .file_name()
+                                .to_str()
+                                .expect("Repo name contains non-UTF-8 characters"),
+                        );
+                        results.insert(name, repo);
+                    }
+                    Err(e) => {
+                        error!("Ignoring path {:?} ({:?})", entry.path(), e);
+                    }
+                }
+            }
             Err(e) => {
                 return Err(AppError::Io(
                     e.into_io_error().expect("Converting error failed"),
@@ -84,17 +83,18 @@ mod tests {
     fn test_find_repos() -> Result<(), AppError> {
         init_logging();
         let containing_dir = tempdir()?;
+        let path = containing_dir.path();
 
-        let repos = super::find_repos(containing_dir.path())?;
+        let repos = super::find_repos(&path)?;
         assert!(repos.is_empty());
 
-        let repo_a = GitTestHelper::fixture_repo(containing_dir.path())?;
+        let repo_a = GitTestHelper::fixture_repo(&path)?;
         let repo_a_name = repo_a.file_name().unwrap().to_str().unwrap();
 
-        let repo_b = GitTestHelper::fixture_repo(containing_dir.path())?;
+        let repo_b = GitTestHelper::fixture_repo(&path)?;
         let repo_b_name = repo_b.file_name().unwrap().to_str().unwrap();
 
-        let repos = super::find_repos(containing_dir.path())?;
+        let repos = super::find_repos(&path)?;
         assert_eq!(repos.len(), 2);
 
         assert!(repos.contains_key(repo_a_name));

@@ -67,7 +67,7 @@ impl<'a> ManagedRepo {
 
         let repo = ManagedRepo {
             config: config.clone(),
-            uuid: uuid,
+            uuid,
             cache_dir,
             storage: Arc::new(storage),
         };
@@ -197,7 +197,7 @@ impl<'a> ManagedRepo {
                                 val.extend(obj.data());
                                 if let Err(e) = storage_clone.put_bytes(&key.as_bytes(), &val[..]) {
                                     error!(
-                                        "Thread {} failed to store object {}: {}",
+                                        "Thread {} failed to store object {}: {:?}",
                                         &thread_num, &oid, &e
                                     );
                                     panic!("Failed to store object");
@@ -306,12 +306,12 @@ impl Repos {
                     repos.insert(uuid, Arc::new(Mutex::new(repo)));
                 }
                 Err(e) => {
-                    error!("Skipping repo {:?}: {}", repo_config, e);
+                    error!("Skipping repo {:?}: {:?}", repo_config, e);
                 }
             });
 
         Ok(Self {
-            config: config,
+            config,
             underlying: Mutex::new(repos),
         })
     }

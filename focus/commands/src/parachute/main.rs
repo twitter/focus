@@ -1,5 +1,6 @@
 mod detail;
 mod testing;
+mod working_tree_synchronizer;
 
 #[macro_use]
 extern crate lazy_static;
