@@ -30,48 +30,55 @@ message FileCoordinates {
   uint64 length = 3;
 };
 
-message RetrieveContent {
+enum ErrorStatus {
+  NO_ERROR = 0;
+  NOT_FOUND = 1;
+  IO_ERROR = 2;
+  TEMP_ERROR = 3;
+  FATAL_ERROR = 4;
+}
+
+message Error {
+  ErrorStatus status = 1;
+  string message = 2;
+}
+
+
+message WriteToFile {
   message Request {
-    message OnDiskContent {
-      FileCoordinates header = 1;
-      FileCoordinates body = 2;
-    }
-
-    message Options {
-      bool want_size = 1;
-      bool want_header = 2;
-      bool want_body = 3;
-      FileCoordinates file_coordinates = 4;
-    }
-
     Record.Identifier content_identifier = 1;
-    Options options = 2;
+    FileCoordinates header = 2;
+    FileCoordinates body = 3;
   }
 
   message Response {
-    message OnDiskContent {
-      bool stored = 1;
-      // Was the underlying file extended? If so, the client should make sure it can read the rest of the file.
-      bool extended = 2;
+    bool stored = 1;
+    bool extended = 2;
+    Record.Identifier content_identifier = 3;
+    FileCoordinates header = 4;
+    FileCoordinates body = 5;
+    Error error = 6;
+  }
+}
 
-      Record.Identifier content_identifier = 3;
-      FileCoordinates header_coordinates = 4;
-      FileCoordinates body_coordinates = 5;
-    }
+enum Wants {
+  NONE = 0;
+  HEADER = 1;
+  BODY = 2;
+  BOTH = 3;
+}
 
-    enum Relevance {
-      AS_REQUESTED = 0;
-//      FOR_CACHE = 1;
-    }
+message GetInline {
+  message Request {
+    Record.Identifier content_identifier = 1;
+    Wants wants = 2;
+  }
 
-    // Where is the response? Included or on disk?
-    oneof underlying {
-      Record inline_content = 2;
-      OnDiskContent on_disk_content = 3;
-    }
-    // What is the relevance of this object? Is it the same object
-    // that was requested, or something to pre-cache?
-    Relevance relevance = 4;
+  message Response {
+    bool found = 1;
+    uint32 size = 2;
+    bytes header = 3;
+    bytes body = 4;
   }
 }
 
@@ -82,12 +89,35 @@ message StoreContent {
 
   message Response {
     bool stored = 1;
+    Error error = 2;
   }
 }
 
 service ContentStorage {
-  // RetrieveContent may return additional items to be cached
-  rpc RetrieveContent (RetrieveContent.Request) returns (RetrieveContent.Response);
-
   rpc StoreContent (StoreContent.Request) returns (StoreContent.Response);
+  rpc WriteToFile (WriteToFile.Request) returns (WriteToFile.Response);
+  rpc GetInline (GetInline.Request) returns (GetInline.Response);
+}
+
+
+
+// object types that are written to rocksdb
+message Persisted {
+  enum ObjectType {
+    // NONE is a placeholder because enums must start with 0
+    NONE = 0;
+    COMMIT = 1;
+    TREE = 2;
+    BLOB = 3;
+    TAG = 4;
+  }
+
+  message Headers {
+    // the type of object
+    ObjectType obj_type = 1;
+    // size of the object
+    uint64 size = 2;
+    int64 atime = 3;
+    int64 mtime = 4;
+  }
 }

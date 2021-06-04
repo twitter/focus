@@ -1,3 +1,6 @@
+mod endpoint;
+mod objectstore;
+
 use anyhow::Result;
 use env_logger::{self, Env};
 use internals::error::AppError;
@@ -9,8 +12,6 @@ use structopt::StructOpt;
 //   $GIT_DIR/store/socket
 // Database is stored in $GIT_DIR/store/database
 // Eccentric BS: alternates / "shared" repos
-
-mod endpoint;
 
 #[derive(StructOpt, Debug)]
 enum Subcommand {

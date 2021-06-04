@@ -55,18 +55,12 @@ impl Storage {
         Ok(results)
     }
 
-    pub fn get_bytes(&self, key: &[u8]) -> Result<Option<Vec<u8>>, AppError> {
-        {
-            let snapshot = self.general.snapshot();
-            match snapshot.get(&key) {
-                Ok(Some(bytes)) => {
-                    return Ok(Some(bytes));
-                }
-                Ok(None) => {
-                    return Ok(None);
-                }
-                Err(err) => return Err(AppError::Db(err)),
-            }
+    pub fn get_bytes(&self, key: &[u8]) -> Result<Option<Box<[u8]>>, AppError> {
+        let snapshot = self.general.snapshot();
+        match snapshot.get(&key) {
+            Ok(Some(bytes)) => Ok(Some(bytes.into_boxed_slice())),
+            Ok(None) => Ok(None),
+            Err(err) => Err(AppError::Db(err)),
         }
     }
 
@@ -79,7 +73,7 @@ impl Storage {
         {
             match self.get_bytes(&key) {
                 Ok(Some(bytes)) => {
-                    let val = T::parse_from_bytes(bytes.as_slice())?;
+                    let val = T::parse_from_bytes(&bytes)?;
                     return Ok(Some(val));
                 }
                 Ok(None) => {
@@ -105,6 +99,90 @@ impl Storage {
         } else {
             return Err(AppError::None());
         }
+    }
+}
+
+
+
+
+const DEFAULT_NS: u8 = b'o';
+const DATA_VERSION: u8 = 1;
+const DEFAULT_SEP: u8 = b':';
+
+
+#[allow(dead_code)]
+const COMMIT_KEY_BYTE: u8 = b'c';
+#[allow(dead_code)]
+const TREE_KEY_BYTE: u8 = b't';
+#[allow(dead_code)]
+const BLOB_KEY_BYTE: u8 = b'b';
+#[allow(dead_code)]
+const TAG_KEY_BYTE: u8 = b'g';
+
+const HEADER_KEY_BYTE: u8 = b'h';
+const BODY_KEY_BYTE: u8 = b'b';
+
+#[derive(Debug)]
+pub struct Keygen {
+    // namespace byte "o" by defautt
+    ns: u8,
+    // separator character
+    sep: u8,
+    // data version
+    version: u8
+}
+
+impl Keygen {
+    pub fn key_for(&self, oid: &[u8]) -> Key {
+        Key {
+            ns: self.ns,
+            sep: self.sep,
+            version: self.version,
+            oid: Vec::from(oid)
+        }
+    }
+
+    pub fn default() -> Keygen {
+        Keygen {
+            ns: DEFAULT_NS,
+            sep: DEFAULT_SEP,
+            version: DATA_VERSION,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Key {
+    ns: u8,
+    sep: u8,
+    version: u8,
+    oid: Vec<u8>,
+}
+
+impl Key {
+    /// A key without the 'header' or 'body' component. Can be used to retrieve
+    /// all keys for a given oid
+    pub fn base(&self) -> Vec<u8> {
+        let mut v = Vec::<u8>::new();
+        v.push(self.sep);
+        v.push(self.version);
+        v.push(self.sep);
+        v.extend(&self.oid);
+        v
+    }
+
+    pub fn for_header(&self) -> Box<[u8]> {
+        let mut v = self.base();
+        v.push(self.sep);
+        v.push(HEADER_KEY_BYTE);
+        v.into_boxed_slice()
+    }
+
+    pub fn for_body(&self) -> Box<[u8]> {
+        let mut v = self.base();
+        v.push(self.sep);
+        v.push(BODY_KEY_BYTE);
+        v.into_boxed_slice()
     }
 }
 

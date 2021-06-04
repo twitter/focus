@@ -13,6 +13,12 @@ pub enum AppError {
     #[error(transparent)]
     FromUtf8Error(#[from] std::string::FromUtf8Error),
 
+    #[error(transparent)]
+    FromTryFromIntError(#[from] std::num::TryFromIntError),
+
+    #[error(transparent)]
+    AnyhowError(#[from] anyhow::Error),
+
     #[error("missing object type")]
     MissingObjectType,
 
@@ -66,4 +72,10 @@ pub enum AppError {
 
     #[error("unable to determine work directory for repository")]
     InvalidWorkDir(),
+
+    #[error("Decoding data failed")]
+    DecodeError(#[from] prost::DecodeError),
+
+    #[error("Encoding data failed")]
+    EncodeError(#[from] prost::EncodeError),
 }

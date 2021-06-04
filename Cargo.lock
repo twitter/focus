@@ -291,6 +291,7 @@ name = "focus-commands"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "crossbeam-utils",
  "dirs",
  "env_logger",
@@ -363,6 +364,7 @@ dependencies = [
  "env_logger",
  "git2",
  "log",
+ "prost",
  "protobuf",
  "rocksdb",
  "serde",

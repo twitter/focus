@@ -5,5 +5,20 @@ fi
 
 export DOCKER_BUILDKIT=1
 
+# rust_nightly_date=2021-05-18
+# rust_target=""
+
+# case "$(uname -s)" in
+#   Darwin) rust_target='x86_64-apple-darwin' ;;
+#   Linux) rust_target='x86_64-unknown-linux-gnu' ;;
+#   *)
+#     echo "couldn't determine rust target name for $(uname -s)" >&2
+#     exit 1
+#   ;;
+# esac
+
+# RUSTUP_TOOLCHAIN="nightly-${rust_nightly_date}-${rust_target}"
+# export RUSTUP_TOOLCHAIN
+
 
 # vim:ft=bash:ts=2:sw=2:et
