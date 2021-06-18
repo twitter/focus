@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::info;
+use log::{warn, info};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -8,6 +8,7 @@ use internals::error::AppError;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs::Permissions;
+use std::ffi::{OsStr, OsString};
 
 fn normalize_tree_entry_path(path: &str, tree_entry: &TreeEntry) -> Result<String, AppError> {
     let mut path = path.to_string();
@@ -20,28 +21,26 @@ fn normalize_tree_entry_path(path: &str, tree_entry: &TreeEntry) -> Result<Strin
 }
 
 lazy_static! {
-    static ref EXTENSIONS_WITH_FULL_CONTENTS_REQUIRED: HashSet<&'static str> = {
-        let mut s = HashSet::new();
-        s.insert("bzl");
-        s
-    };
-    static ref FILENAMES_WITH_FULL_CONTENTS_REQUIRED: HashSet<&'static str> = {
-        let mut s = HashSet::new();
-        s.insert("WORKSPACE");
-        s.insert("BUILD");
-        s
-    };
+    static ref BZL_EXTENSION: OsString = OsString::from("bzl");
+    static ref WORKSPACE_FILE_NAME: OsString = OsString::from("WORKSPACE");
+    static ref BUILD_FILE_NAME: OsString = OsString::from("BUILD");
 }
 
 fn full_contents_required_predicate(name: &str) -> bool {
     let path = Path::new(name);
     if let Some(extension) = path.extension() {
-        if EXTENSIONS_WITH_FULL_CONTENTS_REQUIRED.contains(extension.to_str().unwrap()) {
-            return true;
+        if extension == BZL_EXTENSION.as_os_str() {
+            return true
         }
     }
 
-    FILENAMES_WITH_FULL_CONTENTS_REQUIRED.contains(path.file_name().unwrap().to_str().unwrap())
+    if let Some(file_name) = path.file_name() {
+        if file_name == WORKSPACE_FILE_NAME.as_os_str() || file_name == BUILD_FILE_NAME.as_os_str() {
+            return true
+        }
+    }
+
+    false
 }
 
 pub fn snapshot(repo: &Path, _output: &Path) -> Result<(), AppError> {
@@ -56,10 +55,14 @@ pub fn snapshot(repo: &Path, _output: &Path) -> Result<(), AppError> {
     let mut dir_stack = Vec::<String>::new();
     let mut node_stack = Vec::<bool>::new();
 
+    let warn_of_ignored_entry = |entry: &TreeEntry| {
+        let generic_object = entry.to_object(&repo).expect("Retrieving object failed");
+        warn!("Ignoring {} {}", entry.kind().unwrap(), generic_object.id());
+    };
     commit.tree()?.walk(TreeWalkMode::PreOrder, |path, entry| {
         if let Ok(normal_path) = normalize_tree_entry_path(path, entry) {
             let permissions: Permissions = PermissionsExt::from_mode(entry.filemode() as u32);
-            info!("{:?} {:?} {:?}", normal_path, entry.kind(), permissions);
+            // info!("{:?} {:?} {:?}", normal_path, entry.kind(), permissions);
             match entry.kind() {
                 Some(ObjectType::Tree) => {
                     // TODO: Refactor. This works but it's ugly; there's probably some nice iterator we can use here.
@@ -94,8 +97,8 @@ pub fn snapshot(repo: &Path, _output: &Path) -> Result<(), AppError> {
                     info!("* Dir stack: {:?}", dir_stack);
                 }
                 Some(ObjectType::Blob) => {
-                    let generic_object = entry.to_object(&repo).expect("Fetching object failed");
-                    let blob_object = generic_object.as_blob().unwrap();
+                    let generic_object = entry.to_object(&repo).expect("Retrieving object failed");
+                    let blob_object = generic_object.as_blob().expect("Conversion to blob failed");
 
                     let content = blob_object.content();
                     let mut digest = Sha256::new();
@@ -122,11 +125,12 @@ pub fn snapshot(repo: &Path, _output: &Path) -> Result<(), AppError> {
                         };
                     }
                 }
-                Some(ObjectType::Commit) => {}
-                Some(ObjectType::Tag) => {}
-                Some(ObjectType::Any) => {
-                    panic!("Unexpected Any type");
-                }
+                Some(ObjectType::Commit) =>
+                    warn_of_ignored_entry(entry),
+                Some(ObjectType::Tag) =>
+                    warn_of_ignored_entry(entry),
+                Some(ObjectType::Any) =>
+                    warn_of_ignored_entry(entry),
                 _ => {
                     panic!("Unexpected object type")
                 }

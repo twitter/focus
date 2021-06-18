@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 mod detail;
+mod journal;
 
 use anyhow::Result;
 use env_logger::{self, Env};
