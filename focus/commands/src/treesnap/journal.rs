@@ -5,7 +5,7 @@ use walkdir::DirEntry;
 use std::ffi::{OsStr, OsString};
 use tempfile::{TempDir, NamedTempFile};
 use std::fs::{File, OpenOptions};
-// use focus_formats::journal as journal_proto;
+use std::cell::Cell;
 
 lazy_static! {
     static ref JOURNAL_INDEX_EXTENSION: OsString = OsString::from("journal_index");
@@ -14,7 +14,8 @@ lazy_static! {
 }
 
 pub(crate) struct LockFile {
-    file: File,
+    path: PathBuf,
+    file: Cell<File>,
 }
 
 impl LockFile {
@@ -22,7 +23,7 @@ impl LockFile {
     fn try_create(path: &Path) -> Result<Self> {
         match File::create(path) {
             Ok(file) => {
-                Ok(Self{file})
+                Ok(Self{path: path.to_owned(), file: Cell::new(file)})
             },
             Err(e) => {
                 bail!("Creating exclusive lockfile at path {} failed: {}", &path.display(), e)
@@ -36,7 +37,6 @@ impl Drop for LockFile {
 
     }
 }
-
 
 // Contains diagnostic error messages pertaining to a journal index or data file at the indicated path
 pub(crate) struct JournalError {
@@ -91,12 +91,11 @@ impl JournalManager {
 
     // Returns a pair of vectors, the first containing paths of the index files, the second
     // containing the journal data files.
-    pub fn locate_index_and_data_Files(&self) -> Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    pub fn locate_index_and_data_files(&self) -> Result<(Vec<PathBuf>, Vec<PathBuf>)> {
         let mut index_files = Vec::<PathBuf>::new();
         let mut data_files = Vec::<PathBuf>::new();
 
         for entry in walkdir::WalkDir::new(&self.dir).max_depth(1) {
-            // entry.file_type()
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
