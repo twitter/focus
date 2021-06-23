@@ -16,15 +16,14 @@ int git_storage_shutdown(void *attachment);
 
 int git_storage_fetch_object(void *attachment,
                              const unsigned char *oid,
-                             const char *path,
-                             off_t offset,
-                             size_t capacity,
+                             int reply_on_disk,
+                             unsigned char **memory_reply_buf,
+                             char **disk_reply_path,
+                             size_t *disk_reply_path_len,
                              off_t *header_offset,
                              size_t *header_length,
                              off_t *content_offset,
                              size_t *content_length,
-                             size_t *total_length,
-                             size_t *new_capacity,
                              time_t *atime,
                              time_t *mtime);
 
