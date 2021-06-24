@@ -49,81 +49,11 @@ struct Context {
 }
 
 impl Context {
-    pub(crate) async fn new(config: DelegateConfig) -> Result<Self> {
+    pub fn new(config: DelegateConfig) -> Result<Self> {
         let url = format!("http://");
         let client = blockingclient::BlockingClient::connect("http://[::1]:60606")?;
 
         Ok(Self { config, client })
-    }
-}
-
-pub(crate) mod client {
-    use crate::DelegateConfig;
-    use anyhow::{bail, Result};
-    use focus_formats::storage::content_storage_client::ContentStorageClient;
-    use internals::error::AppError;
-    use std::convert::TryFrom;
-    use std::env;
-    use std::path::{Path, PathBuf};
-    use tokio::net::UnixStream;
-    use tonic::transport::channel::Channel;
-    use tonic::transport::{Endpoint, Uri};
-    use tower::service_fn;
-
-    pub struct Client {
-        repo_path: PathBuf,
-        channel: Channel,
-    }
-
-    impl Client {
-        pub async fn new(config: &DelegateConfig) -> Result<Client> {
-            // maybe check that this isn't set already?
-            env::var("GSD_SOCK_PATH")
-                .err()
-                .expect("GSD_SOCK_PATH already set!");
-
-            env::set_var("GSD_SOCK_PATH", config.repo_path.as_os_str().to_owned());
-
-            let channel = Self::connect().await?;
-
-            Ok(Self {
-                repo_path: config.repo_path.to_owned(),
-                channel,
-            })
-        }
-
-        pub fn start_server(&self) -> Result<()> {
-            todo!("Impl");
-        }
-
-        // TODO: Fix the fact that we use an environment variable here so that there can actually be
-        // more than one client.
-        pub async fn connect() -> Result<Channel, AppError> {
-            Endpoint::try_from("http://[::]:50051")?
-                .connect_with_connector(service_fn(move |_: Uri| {
-                    UnixStream::connect(
-                        env::var("GSD_SOCK_PATH").expect("GSD_SOCK_PATH was not set"),
-                    )
-                }))
-                .await
-                .map_err(|e| e.into())
-        }
-
-        pub fn git_dir(&self) -> Result<PathBuf> {
-            Ok(self.repo_path.to_owned())
-        }
-
-        pub fn objects_dir(&self) -> Result<PathBuf> {
-            Ok(self.git_dir()?.join("objects"))
-        }
-
-        pub fn database_dir(&self) -> Result<PathBuf> {
-            Ok(self.objects_dir()?.join("database"))
-        }
-
-        pub fn socket_path(&self) -> Result<PathBuf> {
-            Ok(self.database_dir()?.join("SOCKET"))
-        }
     }
 }
 
