@@ -62,8 +62,8 @@ pub(crate) fn find_repos(root: &Path) -> Result<HashMap<String, Repo>> {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
     use crate::testing::scratch_git_repo::ScratchGitRepo;
+    use anyhow::Result;
     use env_logger::Env;
     use tempfile::tempdir;
 

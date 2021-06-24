@@ -102,13 +102,9 @@ impl Storage {
     }
 }
 
-
-
-
 const DEFAULT_NS: u8 = b'o';
 const DATA_VERSION: u8 = 1;
 const DEFAULT_SEP: u8 = b':';
-
 
 #[allow(dead_code)]
 const COMMIT_KEY_BYTE: u8 = b'c';
@@ -129,7 +125,7 @@ pub struct Keygen {
     // separator character
     sep: u8,
     // data version
-    version: u8
+    version: u8,
 }
 
 impl Keygen {
@@ -138,7 +134,7 @@ impl Keygen {
             ns: self.ns,
             sep: self.sep,
             version: self.version,
-            oid: Vec::from(oid)
+            oid: Vec::from(oid),
         }
     }
 

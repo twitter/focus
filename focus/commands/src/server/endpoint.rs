@@ -8,8 +8,8 @@ use tonic::transport::Server;
 
 use focus_formats::storage;
 use internals::storage::rocks::{Keygen, Storage};
-use storage::{get_inline, store_content, write_to_file, Wants};
 use storage::content_storage_server::ContentStorage;
+use storage::{get_inline, store_content, write_to_file, Wants};
 
 use crate::objectstore::ObjectStore;
 
@@ -21,21 +21,25 @@ mod unix;
 
 #[derive(Debug)]
 pub struct Endpoint {
-    storage: ObjectStore
+    storage: ObjectStore,
 }
 
 impl Endpoint {
     fn get_inline_result(
         &self,
-        req: tonic::Request<get_inline::Request>
+        req: tonic::Request<get_inline::Request>,
     ) -> Result<tonic::Response<get_inline::Response>, AppError> {
         let msg = req.get_ref();
 
         let wants = Wants::from_i32(msg.wants).context("wants enum value")?;
-        let ident = msg.content_identifier.as_ref().context("must provide content_identifier")?;
+        let ident = msg
+            .content_identifier
+            .as_ref()
+            .context("must provide content_identifier")?;
         let hash = ident.hash.as_ref().context("object hash must be non nil")?;
 
-        self.storage.get_inline(hash, wants)
+        self.storage
+            .get_inline(hash, wants)
             .map(|rep| tonic::Response::new(rep))
     }
 }
@@ -43,9 +47,8 @@ impl Endpoint {
 const GIT_DIR: &str = "GIT_DIR";
 const SOCKET_PATH: &str = "GIT_STORAGE_SOCKET_PATH";
 
-
 fn get_env(k: &str) -> Option<String> {
-    match env::var(k)  {
+    match env::var(k) {
         Ok(v) => Some(v),
         Err(e) => {
             println!("got error {} accessing {} var", e, SOCKET_PATH);
@@ -53,7 +56,6 @@ fn get_env(k: &str) -> Option<String> {
         }
     }
 }
-
 
 #[tonic::async_trait]
 impl ContentStorage for Endpoint {
@@ -76,10 +78,9 @@ impl ContentStorage for Endpoint {
         req: tonic::Request<get_inline::Request>,
     ) -> Result<tonic::Response<get_inline::Response>, tonic::Status> {
         self.get_inline_result(req)
-            .map_err(|err| tonic::Status::internal(err.to_string())) }
+            .map_err(|err| tonic::Status::internal(err.to_string()))
+    }
 }
-
-
 
 #[allow(dead_code)]
 #[tokio::main]
@@ -109,7 +110,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let keygen = Keygen::default();
 
-    let endpoint = Endpoint { storage: ObjectStore::new(storage, keygen) };
+    let endpoint = Endpoint {
+        storage: ObjectStore::new(storage, keygen),
+    };
     let svc = ContentStorageServer::new(endpoint);
 
     Server::builder()

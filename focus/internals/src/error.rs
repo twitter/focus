@@ -84,5 +84,4 @@ pub enum AppError {
 
     #[error(transparent)]
     TransportError(#[from] tonic::transport::Error),
-
 }

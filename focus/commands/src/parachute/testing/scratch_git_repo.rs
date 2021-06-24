@@ -1,10 +1,10 @@
+use crate::util::TemporaryWorkingDirectory;
+use anyhow::{bail, Context, Result};
+use git2::Repository;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
-use anyhow::{Result, Context, bail};
-use std::ffi::OsString;
-use crate::util::TemporaryWorkingDirectory;
-use git2::Repository;
 
 #[allow(dead_code)]
 pub struct ScratchGitRepo {
@@ -22,7 +22,7 @@ impl ScratchGitRepo {
     // Create a new repo by cloning another repo from the local filesystem
     pub fn new_local_clone(local_origin: &Path) -> Result<Self> {
         let uuid = uuid::Uuid::new_v4();
-        let mut target_path= local_origin.to_owned();
+        let mut target_path = local_origin.to_owned();
         target_path.set_extension(format!("clone_{}", &uuid));
         Self::create_local_cloned_repo(local_origin, target_path.as_path())?;
 
@@ -87,9 +87,11 @@ impl ScratchGitRepo {
         let mut qualified_origin = OsString::from("file://");
         qualified_origin.push(origin.as_os_str());
         Command::new("git")
-            .args(vec![&OsString::from("clone"),
-                       &qualified_origin,
-                       &OsString::from(destination.as_os_str())])
+            .args(vec![
+                &OsString::from("clone"),
+                &qualified_origin,
+                &OsString::from(destination.as_os_str()),
+            ])
             .spawn()?
             .wait()
             .expect("clone failed");
@@ -110,7 +112,9 @@ impl ScratchGitRepo {
             .spawn()
             .context("running `git add`")?
             .wait()
-            .context("`git add` failed")?.success() {
+            .context("`git add` failed")?
+            .success()
+        {
             bail!("`git add` exited abnormally");
         }
 
@@ -123,7 +127,9 @@ impl ScratchGitRepo {
             .spawn()
             .context("running `git commit`")?
             .wait()
-            .context("`git commit` failed")?.success() {
+            .context("`git commit` failed")?
+            .success()
+        {
             bail!("`git commit` exited abnormally");
         }
 
@@ -158,7 +164,6 @@ mod tests {
     fn test_git_test_helper() -> Result<(), AppError> {
         let containing_dir = tempdir()?;
         if let Ok(repo) = ScratchGitRepo::new_fixture(containing_dir.path()) {
-
             let repo = Repository::open(repo.path());
             assert!(repo.is_ok());
         }

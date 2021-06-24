@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{warn, info};
+use log::{info, warn};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -7,8 +7,8 @@ use git2::{ObjectType, TreeEntry, TreeWalkMode, TreeWalkResult};
 use internals::error::AppError;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::fs::Permissions;
 use std::ffi::{OsStr, OsString};
+use std::fs::Permissions;
 
 fn normalize_tree_entry_path(path: &str, tree_entry: &TreeEntry) -> Result<String, AppError> {
     let mut path = path.to_string();
@@ -30,13 +30,14 @@ fn full_contents_required_predicate(name: &str) -> bool {
     let path = Path::new(name);
     if let Some(extension) = path.extension() {
         if extension == BZL_EXTENSION.as_os_str() {
-            return true
+            return true;
         }
     }
 
     if let Some(file_name) = path.file_name() {
-        if file_name == WORKSPACE_FILE_NAME.as_os_str() || file_name == BUILD_FILE_NAME.as_os_str() {
-            return true
+        if file_name == WORKSPACE_FILE_NAME.as_os_str() || file_name == BUILD_FILE_NAME.as_os_str()
+        {
+            return true;
         }
     }
 
@@ -125,12 +126,9 @@ pub fn snapshot(repo: &Path, _output: &Path) -> Result<(), AppError> {
                         };
                     }
                 }
-                Some(ObjectType::Commit) =>
-                    warn_of_ignored_entry(entry),
-                Some(ObjectType::Tag) =>
-                    warn_of_ignored_entry(entry),
-                Some(ObjectType::Any) =>
-                    warn_of_ignored_entry(entry),
+                Some(ObjectType::Commit) => warn_of_ignored_entry(entry),
+                Some(ObjectType::Tag) => warn_of_ignored_entry(entry),
+                Some(ObjectType::Any) => warn_of_ignored_entry(entry),
                 _ => {
                     panic!("Unexpected object type")
                 }

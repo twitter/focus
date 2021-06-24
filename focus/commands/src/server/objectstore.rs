@@ -1,14 +1,11 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use focus_formats::storage::{
-    ContentDigest,
-    Wants,
-};
 use focus_formats::storage::get_inline;
 use focus_formats::storage::persisted;
+use focus_formats::storage::{ContentDigest, Wants};
 use internals::error::AppError;
-use internals::storage::rocks::{Storage, Keygen};
+use internals::storage::rocks::{Keygen, Storage};
 use prost::Message;
 
 #[derive(Debug)]
@@ -16,7 +13,6 @@ pub struct ObjectStore {
     storage: Arc<Storage>,
     keygen: Keygen,
 }
-
 
 // two record types: header and body
 //
@@ -53,7 +49,7 @@ fn obj_type_to_str(ot: persisted::ObjectType) -> &'static str {
         Tree => TREE_STR,
         Blob => BLOB_STR,
         Tag => TAG_STR,
-        None => panic!("BUG: None object type encountered")
+        None => panic!("BUG: None object type encountered"),
     }
 }
 
@@ -69,8 +65,7 @@ fn headers_to_git_header_bytes(hdr: persisted::Headers) -> Vec<u8> {
 }
 
 fn decode_header(buf: &[u8]) -> Result<persisted::Headers, AppError> {
-    persisted::Headers::decode(buf)
-        .map_err(|err| AppError::DecodeError(err))
+    persisted::Headers::decode(buf).map_err(|err| AppError::DecodeError(err))
 }
 
 const GET_INLINE_NOT_FOUND: get_inline::Response = get_inline::Response {
@@ -88,7 +83,10 @@ impl ObjectStore {
         }
     }
 
-    fn get_inline_header_result(&self, key: &[u8]) -> Result<Option<get_inline::Response>, AppError> {
+    fn get_inline_header_result(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<get_inline::Response>, AppError> {
         match self.storage.get_bytes(key) {
             Ok(Some(bytes)) => {
                 let hdr = decode_header(&bytes)?;
@@ -96,10 +94,10 @@ impl ObjectStore {
                     found: true,
                     size: u32::try_from(hdr.size)?,
                     header: headers_to_git_header_bytes(hdr),
-                    body: vec![]
+                    body: vec![],
                 };
                 Ok(Some(rep))
-            },
+            }
             Ok(None) => Ok(None),
             Err(e) => Err(e),
         }
@@ -108,7 +106,7 @@ impl ObjectStore {
     fn get_inline_opt(
         &self,
         oid: &ContentDigest,
-        wants: Wants
+        wants: Wants,
     ) -> Result<Option<get_inline::Response>, AppError> {
         let key = self.keygen.key_for(&oid.value);
 
@@ -119,28 +117,24 @@ impl ObjectStore {
                     Wants::None => {
                         rep.header = vec![];
                         Some(rep)
-                    },
-                    Wants::Body => {
-                        match self.storage.get_bytes(&key.for_body())? {
-                            Some(body) => {
-                                rep.header = vec![];
-                                rep.body = body.to_vec();
-                                Some(rep)
-                            },
-                            None => None,
+                    }
+                    Wants::Body => match self.storage.get_bytes(&key.for_body())? {
+                        Some(body) => {
+                            rep.header = vec![];
+                            rep.body = body.to_vec();
+                            Some(rep)
                         }
+                        None => None,
                     },
-                    Wants::Both => {
-                        match self.storage.get_bytes(&key.for_body())? {
-                            Some(body) => {
-                                rep.body = body.to_vec();
-                                Some(rep)
-                            }
-                            None => None
+                    Wants::Both => match self.storage.get_bytes(&key.for_body())? {
+                        Some(body) => {
+                            rep.body = body.to_vec();
+                            Some(rep)
                         }
+                        None => None,
                     },
                 }
-            },
+            }
             None => None,
         };
 
@@ -150,13 +144,11 @@ impl ObjectStore {
     pub fn get_inline(
         &self,
         oid: &ContentDigest,
-        wants: Wants
+        wants: Wants,
     ) -> Result<get_inline::Response, AppError> {
-        self.get_inline_opt(oid, wants).map(|opt| {
-            match opt {
-                Some(rep) => rep,
-                None => GET_INLINE_NOT_FOUND,
-            }
+        self.get_inline_opt(oid, wants).map(|opt| match opt {
+            Some(rep) => rep,
+            None => GET_INLINE_NOT_FOUND,
         })
     }
 }
@@ -169,9 +161,5 @@ mod tests {
     fn mk_storage() -> Result<ObjectStore, Error> {
         let d = tempdir()?;
         Storage::new(d)
-
-
-
-
     }
 }

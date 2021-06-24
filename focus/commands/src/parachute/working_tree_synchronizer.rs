@@ -42,33 +42,48 @@ impl Synchronizer {
     }
 
     pub(crate) fn get_head(&self) -> Result<Vec<u8>> {
-        use std::process;
         use crate::util::TemporaryWorkingDirectory;
+        use std::process;
 
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
         let output = process::Command::new("git")
             .arg("rev-parse")
-            .arg("HEAD").output().context("running `git rev-parse`")?;
+            .arg("HEAD")
+            .output()
+            .context("running `git rev-parse`")?;
         if !output.status.success() {}
         let output_str = String::from_utf8(output.stdout).context("parsing output as UTF-8")?;
 
-        Ok(Vec::from(output_str.split_whitespace().next().expect("expected output").as_bytes()))
+        Ok(Vec::from(
+            output_str
+                .split_whitespace()
+                .next()
+                .expect("expected output")
+                .as_bytes(),
+        ))
     }
 
     pub(crate) fn get_merge_base(&self, reference: &str) -> Result<Vec<u8>> {
-        use std::process;
         use crate::util::TemporaryWorkingDirectory;
+        use std::process;
 
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
         let output = process::Command::new("git")
             .arg("show-branch")
             .arg("--merge-base")
             .arg(reference)
-            .output().context("running `git show-branch --merge-base`")?;
+            .output()
+            .context("running `git show-branch --merge-base`")?;
         if !output.status.success() {}
         let output_str = String::from_utf8(output.stdout).context("parsing output as UTF-8")?;
 
-        Ok(Vec::from(output_str.split_whitespace().next().expect("expected output").as_bytes()))
+        Ok(Vec::from(
+            output_str
+                .split_whitespace()
+                .next()
+                .expect("expected output")
+                .as_bytes(),
+        ))
     }
 
     #[allow(dead_code)]
@@ -88,9 +103,9 @@ impl Synchronizer {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::tempdir;
-    use crate::testing::scratch_git_repo::ScratchGitRepo;
     use super::*;
+    use crate::testing::scratch_git_repo::ScratchGitRepo;
+    use tempfile::tempdir;
 
     #[test]
     fn test_get_merge_base() {
@@ -100,13 +115,18 @@ mod tests {
 
         let original_sync = Synchronizer::new(&original.path()).unwrap();
         let clone_sync = Synchronizer::new(&cloned.path()).unwrap();
-        cloned.commit(
-            Path::new("quotes.txt"),
-            "The rain in Spain falls mainly on the plain.".as_bytes(),
-            "Add a quote file",
-        ).unwrap();
+        cloned
+            .commit(
+                Path::new("quotes.txt"),
+                "The rain in Spain falls mainly on the plain.".as_bytes(),
+                "Add a quote file",
+            )
+            .unwrap();
 
-        assert_eq!(clone_sync.get_merge_base("origin/main").unwrap(), original_sync.get_head().unwrap());
+        assert_eq!(
+            clone_sync.get_merge_base("origin/main").unwrap(),
+            original_sync.get_head().unwrap()
+        );
     }
 }
 
