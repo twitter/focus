@@ -37,6 +37,7 @@ tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "process", "
 tokio-stream = "0.1"
 async-stream = "0.3"
 walkdir = "2.3.2"
+nix = "0.21.0"
 
 [[bin]]
 name = "focus-repo-manager"
