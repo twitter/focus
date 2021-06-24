@@ -1,7 +1,15 @@
 use anyhow::Result;
+use futures_util::FutureExt;
+use lazy_static::lazy_static;
+use std::cell::Cell;
 use std::ffi::{CStr, CString, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+lazy_static! {
+    // static ref CLIENT: Arc<Mutex<Cell<Option<client::Client>>>> = Arc::new(Mutex::new(Cell::new(None)));
+}
 
 pub struct DelegateConfig {
     repo_path: PathBuf,
@@ -22,10 +30,10 @@ impl DelegateConfig {
     ) -> Self {
         let to_os_string = |bytes: *const libc::c_uchar, len: usize| -> OsString {
             let byte_string = Vec::from_raw_parts(bytes as *mut libc::c_uchar, len, len);
-             OsString::from_vec(byte_string)
+            OsString::from_vec(byte_string)
         };
 
-        Self{
+        Self {
             repo_path: PathBuf::from(to_os_string(repo_path, repo_path_length)),
             fifo_path: PathBuf::from(to_os_string(fifo_path, fifo_path_length)),
             args: to_os_string(args, args_length),
@@ -37,58 +45,68 @@ impl DelegateConfig {
 #[allow(dead_code)]
 struct Context {
     config: DelegateConfig,
+    client: blockingclient::BlockingClient,
 }
 
 impl Context {
-    pub(crate) fn new(config: DelegateConfig) -> Self {
-        Self{
-            config
-        }
+    pub(crate) async fn new(config: DelegateConfig) -> Result<Self> {
+        let url = format!("http://");
+        let client = blockingclient::BlockingClient::connect("http://[::1]:60606")?;
+
+        Ok(Self { config, client })
     }
 }
 
 pub(crate) mod client {
-    use focus_formats::storage::content_storage_client::ContentStorageClient;
-    use anyhow::{bail, Result};
-    use std::ffi::OsString;
-    use std::path::{PathBuf, Path};
-    use std::convert::TryFrom;
     use crate::DelegateConfig;
-    use tokio::net::UnixStream;
-    use tonic::transport::{Endpoint, Uri};
-    use tonic::transport::channel::Channel;
-    use tower::service_fn;
+    use anyhow::{bail, Result};
+    use focus_formats::storage::content_storage_client::ContentStorageClient;
     use internals::error::AppError;
-    use lazy_static::*;
-    use std::cell::Cell;
-    use std::sync::Arc;
+    use std::convert::TryFrom;
     use std::env;
-
+    use std::path::{Path, PathBuf};
+    use tokio::net::UnixStream;
+    use tonic::transport::channel::Channel;
+    use tonic::transport::{Endpoint, Uri};
+    use tower::service_fn;
 
     pub struct Client {
-     repo_path: PathBuf,
+        repo_path: PathBuf,
+        channel: Channel,
     }
 
     impl Client {
-        pub fn new(config: &DelegateConfig) -> Result<Client> {
+        pub async fn new(config: &DelegateConfig) -> Result<Client> {
             // maybe check that this isn't set already?
+            env::var("GSD_SOCK_PATH")
+                .err()
+                .expect("GSD_SOCK_PATH already set!");
+
             env::set_var("GSD_SOCK_PATH", config.repo_path.as_os_str().to_owned());
 
-            Ok(Self{repo_path: config.repo_path.to_owned()})
+            let channel = Self::connect().await?;
+
+            Ok(Self {
+                repo_path: config.repo_path.to_owned(),
+                channel,
+            })
         }
 
         pub fn start_server(&self) -> Result<()> {
             todo!("Impl");
         }
 
+        // TODO: Fix the fact that we use an environment variable here so that there can actually be
+        // more than one client.
         pub async fn connect() -> Result<Channel, AppError> {
             Endpoint::try_from("http://[::]:50051")?
                 .connect_with_connector(service_fn(move |_: Uri| {
-                    UnixStream::connect(env::var("GSD_SOCK_PATH")
-                        .expect("GSD_SOCK_PATH was not set"))
+                    UnixStream::connect(
+                        env::var("GSD_SOCK_PATH").expect("GSD_SOCK_PATH was not set"),
+                    )
                 }))
                 .await
-                .map_err(|e| e.into() )
+                .map_err(|e| e.into())
         }
 
         pub fn git_dir(&self) -> Result<PathBuf> {
@@ -106,10 +124,47 @@ pub(crate) mod client {
         pub fn socket_path(&self) -> Result<PathBuf> {
             Ok(self.database_dir()?.join("SOCKET"))
         }
+    }
+}
 
-        // pub fn server_pidfile(&self) -> Result<PathBuf> {
-        //
-        // }
+pub(crate) mod blockingclient {
+    use focus_formats::{
+        parachute::content_digest,
+        storage::{content_storage_client::ContentStorageClient, get_inline, ContentDigest},
+    };
+
+    use tokio::runtime::{Builder, Runtime};
+
+    type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
+    type Result<T, E = StdError> = ::std::result::Result<T, E>;
+
+    // The order of the fields in this struct is important. They must be ordered
+    // such that when `BlockingClient` is dropped the client is dropped
+    // before the runtime. Not doing this will result in a deadlock when dropped.
+    // Rust drops struct fields in declaration order.
+    pub struct BlockingClient {
+        client: ContentStorageClient<tonic::transport::Channel>,
+        rt: Runtime,
+    }
+
+    impl BlockingClient {
+        pub fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
+        where
+            D: std::convert::TryInto<tonic::transport::Endpoint>,
+            D::Error: Into<StdError>,
+        {
+            let rt = Builder::new_multi_thread().enable_all().build().unwrap();
+            let client = rt.block_on(ContentStorageClient::connect(dst))?;
+
+            Ok(Self { rt, client })
+        }
+
+        pub fn say_hello(
+            &mut self,
+            request: impl tonic::IntoRequest<get_inline::Request>,
+        ) -> Result<tonic::Response<get_inline::Response>, tonic::Status> {
+            self.rt.block_on(self.client.get_inline(request))
+        }
     }
 }
 
@@ -136,7 +191,9 @@ pub extern "C" fn git_storage_init(
             hash_raw_bytes,
         );
 
-        *attachment = Box::into_raw(Box::new(Context::new(config))) as *mut libc::c_void;
+        let mut cx = Context::new(config);
+
+        *attachment = Box::into_raw(Box::new(cx)) as *mut libc::c_void;
     }
 
     0
