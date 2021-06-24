@@ -6,6 +6,8 @@ use std::ffi::{OsStr, OsString};
 use tempfile::{TempDir, NamedTempFile};
 use std::fs::{File, OpenOptions};
 use std::cell::Cell;
+use internals::error::AppError;
+use crate::journal::lockfile::LockFile;
 
 lazy_static! {
     static ref JOURNAL_INDEX_EXTENSION: OsString = OsString::from("journal_index");
@@ -13,29 +15,86 @@ lazy_static! {
     static ref JOURNAL_DATA_MAX_SIZE: u32 = u32::max_value(); // TODO: Fix deprecated function
 }
 
-pub(crate) struct LockFile {
-    path: PathBuf,
-    file: Cell<File>,
-}
+mod lockfile {
+    use anyhow::{bail, Result};
+    use std::path::{PathBuf, Path};
+    use std::cell::Cell;
+    use std::fs::File;
+    use log::warn;
 
-impl LockFile {
-    // Try to obtain an exclusively locked file at the given path. It must not exist.
-    fn try_create(path: &Path) -> Result<Self> {
-        match File::create(path) {
-            Ok(file) => {
-                Ok(Self{path: path.to_owned(), file: Cell::new(file)})
-            },
-            Err(e) => {
-                bail!("Creating exclusive lockfile at path {} failed: {}", &path.display(), e)
+    pub(crate) struct LockFile {
+        path: PathBuf,
+        file: Cell<Option<File>>,
+    }
+
+    impl LockFile {
+        // Try to obtain an exclusively locked file at the given path. It must not exist.
+        pub fn new(path: &Path) -> Result<Self> {
+            match File::create(path) {
+                Ok(file) => {
+                    let file = Cell::new(Some(file));
+                    Ok(Self{path: path.to_owned(), file})
+                },
+                Err(e) => {
+                    bail!("Creating exclusive lockfile at path {} failed: {}", &path.display(), e)
+                }
             }
         }
     }
-}
 
-impl Drop for LockFile {
-    fn drop(&mut self) {
-
+    impl Drop for LockFile {
+        fn drop(&mut self) {
+            self.file.replace(None);
+            if let Err(e) = std::fs::remove_file(self.path.as_path()) {
+                warn!("Failed to remove lock file '{}': {}", self.path.display(), e);
+            }
+        }
     }
+
+    #[cfg(test)]
+    mod tests{
+        use anyhow::Result;
+        use super::*;
+        use tempfile::tempdir;
+        use std::cell::Cell;
+
+        #[test]
+        fn creating_a_lock() -> Result<()> {
+            let dir = tempdir()?;
+            let path = dir.path();
+
+            assert!(LockFile::new(path).is_ok());
+
+            Ok(())
+        }
+
+        #[test]
+        fn failing_to_create_a_duplicate_lock() -> Result<()> {
+            let dir = tempdir()?;
+            let path = dir.path();
+
+            assert!(LockFile::new(path).is_ok());
+            assert!(LockFile::new(path).is_err());
+
+            Ok(())
+        }
+
+        #[test]
+        fn failing_to_create_a_lock_in_an_inextant_directory() -> Result<()> {
+            let path: Cell<Option<PathBuf>> = Cell::new(None);
+            {
+                let dir = tempdir()?;
+                path.replace(Some(dir.path().to_owned()));
+            }
+
+            let path = path.take().unwrap();
+            assert!(LockFile::new(path.as_path()).is_err());
+
+            Ok(())
+
+        }
+    }
+
 }
 
 // Contains diagnostic error messages pertaining to a journal index or data file at the indicated path
@@ -85,8 +144,12 @@ impl JournalManager {
         todo!("impl")
     }
 
-    pub fn try_lock_directory(&self) -> Result<bool> {
-        todo!("impl")
+    fn lock_file_path(&self) -> PathBuf {
+        self.dir.join("LOCK")
+    }
+
+    pub fn try_locking_directory(&self) -> Result<LockFile> {
+        LockFile::new(self.lock_file_path().as_path())
     }
 
     // Returns a pair of vectors, the first containing paths of the index files, the second
@@ -117,8 +180,6 @@ impl JournalManager {
 
         Ok((index_files, data_files))
     }
-
-    // pub fn append(entry: journal_proto::)
 
     pub fn count() {}
 }
