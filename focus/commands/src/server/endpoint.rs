@@ -12,7 +12,6 @@ use storage::{get_inline, store_content, write_to_file, Wants};
 use storage::content_storage_server::ContentStorage;
 
 use crate::objectstore::ObjectStore;
-use rocksdb::perf::PerfMetric::WritePreAndPostProcessTime;
 
 use anyhow::Context;
 use internals::error::AppError;

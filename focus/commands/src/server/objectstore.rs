@@ -17,27 +17,6 @@ pub struct ObjectStore {
     keygen: Keygen,
 }
 
-enum Query {
-    SINGLE(Vec<u8>),
-    PREFIX(Vec<u8>),
-}
-
-struct GitObjectBytes(Vec<u8>);
-
-impl GitObjectBytes {
-    fn size(&self) -> usize {
-        self.0.len()
-    }
-
-    fn header(&self) -> Option<&[u8]> {
-        todo!("implement header")
-    }
-
-    fn body(&self) -> Option<&[u8]> {
-        todo!("implement body")
-    }
-}
-
 
 // two record types: header and body
 //
@@ -94,23 +73,12 @@ fn decode_header(buf: &[u8]) -> Result<persisted::Headers, AppError> {
         .map_err(|err| AppError::DecodeError(err))
 }
 
-fn get_inline_not_found() -> get_inline::Response {
-    get_inline::Response {
-        found: false,
-        size: 0,
-        header: vec![],
-        body: vec![],
-    }
-}
-
 const GET_INLINE_NOT_FOUND: get_inline::Response = get_inline::Response {
     found: false,
     size: 0,
     header: vec![],
     body: vec![],
 };
-
-const OK_GET_INLINE_NOT_FOUND: Result<get_inline::Response, AppError> = Ok(GET_INLINE_NOT_FOUND);
 
 impl ObjectStore {
     pub fn new(storage: Storage, keygen: Keygen) -> ObjectStore {
@@ -193,3 +161,17 @@ impl ObjectStore {
     }
 }
 
+#[cfg(tests)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn mk_storage() -> Result<ObjectStore, Error> {
+        let d = tempdir()?;
+        Storage::new(d)
+
+
+
+
+    }
+}

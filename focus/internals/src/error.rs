@@ -78,4 +78,11 @@ pub enum AppError {
 
     #[error("Encoding data failed")]
     EncodeError(#[from] prost::EncodeError),
+
+    #[error(transparent)]
+    InvalidUri(#[from] http::uri::InvalidUri),
+
+    #[error(transparent)]
+    TransportError(#[from] tonic::transport::Error),
+
 }

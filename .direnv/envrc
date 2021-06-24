@@ -5,20 +5,22 @@ fi
 
 export DOCKER_BUILDKIT=1
 
-# rust_nightly_date=2021-05-18
-# rust_target=""
+VERS="1.16.4"
+GOPROXY="https://goproxy.io,direct"
+GOPATH="$HOME/go/$VERS"
+GOROOT="$HOME/go/roots/$VERS"
+GOBIN="$HOME/go/bin"
 
-# case "$(uname -s)" in
-#   Darwin) rust_target='x86_64-apple-darwin' ;;
-#   Linux) rust_target='x86_64-unknown-linux-gnu' ;;
-#   *)
-#     echo "couldn't determine rust target name for $(uname -s)" >&2
-#     exit 1
-#   ;;
-# esac
+PATH_add "$HOME/go/bin"
+PATH_add "$GOPATH/bin"
+PATH_add "$GOROOT/bin"
 
-# RUSTUP_TOOLCHAIN="nightly-${rust_nightly_date}-${rust_target}"
-# export RUSTUP_TOOLCHAIN
+if [[ "$UID" -ne 0 ]]; then
+  mkdir -p "$GOPATH"
+fi
+
+
+export GOPROXY GOPATH GOROOT GOBIN
 
 
 # vim:ft=bash:ts=2:sw=2:et

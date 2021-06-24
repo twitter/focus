@@ -1,9 +1,9 @@
 use anyhow::Result;
-use std::ffi::OsString;
+use std::ffi::{CStr, CString, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 
-pub(crate) struct DelegateConfig {
+pub struct DelegateConfig {
     repo_path: PathBuf,
     fifo_path: PathBuf,
     args: OsString,
@@ -11,7 +11,7 @@ pub(crate) struct DelegateConfig {
 }
 
 impl DelegateConfig {
-    pub(crate) fn new(
+    pub(crate) unsafe fn new(
         repo_path: *const libc::c_uchar,
         repo_path_length: libc::size_t,
         fifo_path: *const libc::c_uchar,
@@ -19,19 +19,18 @@ impl DelegateConfig {
         args: *const libc::c_uchar,
         args_length: libc::size_t,
         hash_raw_bytes: libc::size_t,
-    ) -> Result<Self> {
-        let repo_path_slice = unsafe { std::slice::from_raw_parts(repo_path, repo_path_length) };
-        let fifo_path_slice = unsafe { std::slice::from_raw_parts(fifo_path, fifo_path_length) };
-        let args_slice = unsafe { std::slice::from_raw_parts(args, args_length) };
+    ) -> Self {
+        let to_os_string = |bytes: *const libc::c_uchar, len: usize| -> OsString {
+            let byte_string = Vec::from_raw_parts(bytes as *mut libc::c_uchar, len, len);
+             OsString::from_vec(byte_string)
+        };
 
-        Ok(
-            Self{
-                repo_path: PathBuf::from(OsString::from(repo_path_slice)),
-                fifo_path: PathBuf::from(OsString::from(fifo_path_slice)),
-                args: OsString::from(args_slice),
-                hash_raw_bytes,
-            }
-        )
+        Self{
+            repo_path: PathBuf::from(to_os_string(repo_path, repo_path_length)),
+            fifo_path: PathBuf::from(to_os_string(fifo_path, fifo_path_length)),
+            args: to_os_string(args, args_length),
+            hash_raw_bytes,
+        }
     }
 }
 
@@ -41,84 +40,59 @@ struct Context {
 }
 
 impl Context {
-    pub(crate) fn new(config: DelegateConfig) -> Result<Self> {
-        Ok(Self{
+    pub(crate) fn new(config: DelegateConfig) -> Self {
+        Self{
             config
-        })
+        }
     }
 }
 
 pub(crate) mod client {
-    use storage::content_storage_client::ContentStorageClient;
-    use anyhow::Result;
-    use std::path::{PathBuf, Path};
+    use focus_formats::storage::content_storage_client::ContentStorageClient;
+    use anyhow::{bail, Result};
     use std::ffi::OsString;
+    use std::path::{PathBuf, Path};
+    use std::convert::TryFrom;
     use crate::DelegateConfig;
     use tokio::net::UnixStream;
     use tonic::transport::{Endpoint, Uri};
+    use tonic::transport::channel::Channel;
     use tower::service_fn;
+    use internals::error::AppError;
+    use lazy_static::*;
+    use std::cell::Cell;
+    use std::sync::Arc;
+    use std::env;
 
-    pub struct Client<'client> {
-     config: &'client DelegateConfig
+
+    pub struct Client {
+     repo_path: PathBuf,
     }
 
-    impl<'client> Client {
-        pub fn new(config: &'client DelegateConfig) -> Result<Client> {
-            Ok(Self{config})
-        }
+    impl Client {
+        pub fn new(config: &DelegateConfig) -> Result<Client> {
+            // maybe check that this isn't set already?
+            env::set_var("GSD_SOCK_PATH", config.repo_path.as_os_str().to_owned());
 
-        // pub fn ensure_server_started(&self) -> Result<()> {
-        //     todo!("implement me")
-        //     if let Some(metadata) = std::fs::metadata(self.socket_path()) {
-        //         // The socket exists. Try to ping it.
-        //         let connection = ContentStorageClient::new
-        //     } else {
-        //         // Stat failed.
-        //     }
-        //
-        //     Ok(())
-        // }
+            Ok(Self{repo_path: config.repo_path.to_owned()})
+        }
 
         pub fn start_server(&self) -> Result<()> {
-            todo!("Impl")
+            todo!("Impl");
         }
 
-        async pub fn connect(&self) -> Result<Endpoint> {
-            let channel = Endpoint::try_from("http://[::]:50051")?
-                .connect_with_connector(service_fn(|_: Uri| {
-                    let path = self.socket_path()?;
-
-                    // Connect to a Uds socket
-                    UnixStream::connect(path)
+        pub async fn connect() -> Result<Channel, AppError> {
+            Endpoint::try_from("http://[::]:50051")?
+                .connect_with_connector(service_fn(move |_: Uri| {
+                    UnixStream::connect(env::var("GSD_SOCK_PATH")
+                        .expect("GSD_SOCK_PATH was not set"))
                 }))
-                .await?;
-
-            //
-            // let channel = Endpoint::try_from("http://[::]:50051")?
-            //     .connect_with_connector(service_fn(|_: Uri| {
-            //         let path = "/tmp/tonic/helloworld";
-            //
-            //         // Connect to a Uds socket
-            //         UnixStream::connect(path)
-            //     }))
-            //     .await?;
-            //
-            // let mut client = GreeterClient::new(channel);
-            //
-            // let request = tonic::Request::new(HelloRequest {
-            //     name: "Tonic".into(),
-            // });
-            //
-            // let response = client.say_hello(request).await?;
-            //
-            // println!("RESPONSE={:?}", response);
-            //
-            // Ok(())
-
+                .await
+                .map_err(|e| e.into() )
         }
 
         pub fn git_dir(&self) -> Result<PathBuf> {
-            Ok(self.config.repo_path.to_owned())
+            Ok(self.repo_path.to_owned())
         }
 
         pub fn objects_dir(&self) -> Result<PathBuf> {
@@ -152,18 +126,17 @@ pub extern "C" fn git_storage_init(
     attachment: *mut *mut libc::c_void, // User attachment (will be allocated)
 ) -> libc::c_int {
     unsafe {
-        let to_path = |bytes: *const libc::c_uchar, len: usize| -> PathBuf {
-            let byte_string = Vec::from_raw_parts(bytes as *mut libc::c_uchar, len, len);
-            let os_string: OsString = OsStringExt::from_vec(byte_string);
-            PathBuf::from(os_string)
-        };
-
-        *attachment = Box::into_raw(Box::new(Context {
-            repo_path: to_path(repo_path, repo_path_length),
-            fifo_path: to_path(fifo_path, fifo_path_length),
-            args: String::from_raw_parts(args as *mut libc::c_uchar, args_length, args_length),
+        let config = DelegateConfig::new(
+            repo_path,
+            repo_path_length,
+            fifo_path,
+            fifo_path_length,
+            args,
+            args_length,
             hash_raw_bytes,
-        })) as *mut libc::c_void;
+        );
+
+        *attachment = Box::into_raw(Box::new(Context::new(config))) as *mut libc::c_void;
     }
 
     0
