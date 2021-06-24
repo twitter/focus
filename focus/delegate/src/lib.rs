@@ -1,16 +1,17 @@
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use futures_util::FutureExt;
 use lazy_static::lazy_static;
-use std::cell::Cell;
+use log::{error, info, warn};
 use std::ffi::{CStr, CString, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-
+use std::{cell::Cell, collections::HashMap, io::BufReader, path::Path, process::Command};
 lazy_static! {
     // static ref CLIENT: Arc<Mutex<Cell<Option<client::Client>>>> = Arc::new(Mutex::new(Cell::new(None)));
 }
 
+#[derive(Debug, Clone)]
 pub struct DelegateConfig {
     repo_path: PathBuf,
     fifo_path: PathBuf,
@@ -43,17 +44,20 @@ impl DelegateConfig {
 }
 
 #[allow(dead_code)]
-struct Context {
+struct DelegateContext {
     config: DelegateConfig,
     client: blockingclient::BlockingClient,
 }
 
-impl Context {
+impl DelegateContext {
     pub fn new(config: DelegateConfig) -> Result<Self> {
-        let url = format!("http://");
         let client = blockingclient::BlockingClient::connect("http://[::1]:60606")?;
 
         Ok(Self { config, client })
+    }
+
+    pub fn client(&self) -> &blockingclient::BlockingClient {
+        &self.client
     }
 }
 
@@ -98,6 +102,43 @@ pub(crate) mod blockingclient {
     }
 }
 
+fn read_git_config(repo_path: &Path) -> Result<HashMap<String, String>> {
+    use std::io::prelude::*;
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path.as_os_str())
+        .arg("config")
+        .arg("-l")
+        .output()?;
+    if output.status.success() {
+        bail!("git config failed");
+    }
+
+    let mut map = HashMap::<String, String>::new();
+    for line in output.stdout.lines() {
+        if let Ok(line) = line {
+            if let Some((key, value)) = line.split_once('=') {
+                map.insert(key.to_owned(), value.to_owned());
+            }
+        }
+    }
+
+    Ok(map)
+}
+
+const SERVER_PATH_CONFIG_KEY: &'static str = "twitter.server.path";
+
+fn start_server(config: &DelegateConfig) -> Result<()> {
+    let git_config = read_git_config(config.repo_path.as_path());
+    if let Some(value) = git_config.get(SERVER_PATH_CONFIG_KEY) {
+        // Use the value to initiate the server... Disown the process correctly, etc.
+        // FIXME(wilhelm) implement the rest here.
+    }
+
+    Ok(())
+}
+
 #[allow(unused_variables)]
 #[no_mangle]
 pub extern "C" fn git_storage_init(
@@ -121,12 +162,33 @@ pub extern "C" fn git_storage_init(
             hash_raw_bytes,
         );
 
-        let mut cx = Context::new(config);
+        let context: Cell<Option<DelegateContext>> = Cell::new(None);
 
-        *attachment = Box::into_raw(Box::new(cx)) as *mut libc::c_void;
+        // See if the server is running by trying to connect
+        if let Ok(ctx) = DelegateContext::new(config.clone()) {
+            // Server is running
+            context.replace(Some(ctx));
+        } else {
+            // Server is not running.
+            start_server(&config);
+
+            if let Ok(ctx) = DelegateContext::new(config.clone()) {
+                // Server is running
+                context.replace(Some(ctx));
+            } else {
+                // Server is not running.
+                error!(
+                    "Could not start server for repo in {}",
+                    &config.repo_path.display()
+                );
+            }
+        }
+
+        *attachment =
+            Box::into_raw(Box::new(context.take().expect("missing context"))) as *mut libc::c_void;
+
+        0
     }
-
-    0
 }
 
 #[allow(unused_variables)]
@@ -134,7 +196,8 @@ pub extern "C" fn git_storage_init(
 pub extern "C" fn git_storage_shutdown(
     attachment: *mut libc::c_void, // User attachment (will be allocated)
 ) -> libc::c_int {
-    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
+    let attachment =
+        unsafe { Box::<DelegateContext>::from_raw(attachment as *mut DelegateContext) };
 
     -1
 }
@@ -178,7 +241,8 @@ pub extern "C" fn git_storage_fetch_object(
     // Modified time
     mtime: *mut libc::time_t,
 ) -> libc::c_int {
-    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
+    let attachment =
+        unsafe { Box::<DelegateContext>::from_raw(attachment as *mut DelegateContext) };
     -1
 }
 
@@ -191,7 +255,8 @@ pub extern "C" fn git_storage_size_object(
     atime: *mut libc::time_t,      // Access time
     mtime: *mut libc::time_t,      // Modified time
 ) -> libc::c_int {
-    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
+    let attachment =
+        unsafe { Box::<DelegateContext>::from_raw(attachment as *mut DelegateContext) };
     -1
 }
 
@@ -206,7 +271,8 @@ pub extern "C" fn git_storage_write_object(
     body_length: libc::size_t,     // How long the body is
     mtime: libc::time_t,           // Modified time
 ) -> libc::c_int {
-    let attachment = unsafe { Box::<Context>::from_raw(attachment as *mut Context) };
+    let attachment =
+        unsafe { Box::<DelegateContext>::from_raw(attachment as *mut DelegateContext) };
     -1
 }
 
