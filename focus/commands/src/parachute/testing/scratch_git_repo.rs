@@ -37,16 +37,24 @@ impl ScratchGitRepo {
 
     #[allow(dead_code)]
     pub(crate) fn create_fixture_repo(containing_dir: &Path) -> Result<PathBuf> {
-        let mut repo_path = containing_dir.to_path_buf();
-        std::env::set_current_dir(containing_dir)?;
+        // std::env::set_current_dir(containing_dir)?;
         let name = format!("repo_{}", Uuid::new_v4().to_string());
         Command::new("git")
-            .args(vec!["init", &name, "-b", "main"])
-            .spawn()?
-            .wait()
-            .expect("init failed");
-        repo_path.push(Path::new(&name));
-        std::env::set_current_dir(repo_path.as_path()).unwrap();
+            .arg("init")
+            .arg(&name)
+            .current_dir(containing_dir)
+            .status()
+            .expect("git init failed");
+        let repo_path = containing_dir.join(&name);
+
+        Command::new("git")
+            .arg("switch")
+            .arg("-c")
+            .arg("main")
+            .current_dir(&repo_path)
+            .status()
+            .expect("git switch failed");
+
         let mut test_file = repo_path.to_path_buf();
         test_file.push("d_0_0");
         std::fs::create_dir(test_file.as_path()).unwrap();
@@ -66,15 +74,20 @@ impl ScratchGitRepo {
         std::fs::write(test_file.as_path(), &"This is test file 3"[..]).unwrap();
 
         Command::new("git")
-            .args(vec!["add", "--", "."])
-            .spawn()?
-            .wait()
+            .arg("add")
+            .arg("--")
+            .arg(".")
+            .current_dir(&repo_path)
+            .status()
             .expect("add failed");
 
         Command::new("git")
-            .args(vec!["commit", "-a", "-m", "Test commit"])
-            .spawn()?
-            .wait()
+            .arg("commit")
+            .arg("-a")
+            .arg("-m")
+            .arg("Test commit")
+            .current_dir(&repo_path)
+            .status()
             .expect("commit failed");
 
         Ok(repo_path)
