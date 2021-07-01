@@ -3,7 +3,7 @@ use log::warn;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-pub(crate) struct LockFile {
+pub struct LockFile {
     path: PathBuf,
     fd: i32,
 }

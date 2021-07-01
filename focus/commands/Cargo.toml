@@ -38,7 +38,6 @@ tokio-stream = "0.1"
 tower = "0.4.8"
 async-stream = "0.3"
 walkdir = "2.3.2"
-nix = "0.21.0"
 
 [[bin]]
 name = "focus-repo-manager"
