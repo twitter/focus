@@ -372,6 +372,7 @@ dependencies = [
  "crossbeam-utils",
  "dirs",
  "env_logger",
+ "focus-formats",
  "git2",
  "http",
  "log",

@@ -9,3 +9,7 @@ pub mod storage {
 pub mod treesnap {
     tonic::include_proto!("treesnap");
 }
+
+pub mod testing {
+    tonic::include_proto!("testing");
+}
