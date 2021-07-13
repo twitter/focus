@@ -130,8 +130,9 @@ fn read_git_config(repo_path: &Path) -> Result<HashMap<String, String>> {
 const SERVER_PATH_CONFIG_KEY: &'static str = "twitter.server.path";
 
 fn start_server(config: &DelegateConfig) -> Result<()> {
-    let git_config = read_git_config(config.repo_path.as_path());
+    let git_config = read_git_config(config.repo_path.as_path()).context("reading git config")?;
     if let Some(value) = git_config.get(SERVER_PATH_CONFIG_KEY) {
+        todo!("not implemented");
         // Use the value to initiate the server... Disown the process correctly, etc.
         // FIXME(wilhelm) implement the rest here.
     }
