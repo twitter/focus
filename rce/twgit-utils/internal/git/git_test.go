@@ -288,7 +288,9 @@ func TestTopLevel(t *testing.T) {
 
 	p, err := f.TestRepo.TopLevel()
 	f.NoError(err)
-	f.Equal(filepath.Join(f.Temp, "repo"), p)
+	ap, err := filepath.EvalSymlinks(filepath.Join(f.Temp, "repo"))
+	f.NoError(err)
+	f.Equal(ap, p)
 
 	p, err = f.TestOrigin.TopLevel()
 	f.Empty(p)
