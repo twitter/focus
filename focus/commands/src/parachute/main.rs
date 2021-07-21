@@ -7,7 +7,7 @@ mod working_tree_synchronizer;
 #[macro_use]
 extern crate lazy_static;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use env_logger::{self, Env};
 use focus_formats::parachute::Coordinate;
 use log::error;
@@ -31,7 +31,6 @@ impl FromStr for Coordinates {
 //     #[structopt(help = "Build coordinate")]
 //     underlying: Coordinates,
 // }
-
 
 #[derive(StructOpt, Debug)]
 enum Subcommand {
@@ -80,7 +79,7 @@ fn main() -> Result<()> {
             client::run_client(source.as_path(), target.as_path(), coordinates)?;
             // }
             Ok(())
-        },
+        }
         _ => {
             bail!("Not implemented");
         }
