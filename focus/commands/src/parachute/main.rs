@@ -9,7 +9,6 @@ extern crate lazy_static;
 
 use anyhow::{bail, Result};
 use env_logger::{self, Env};
-use focus_formats::parachute::Coordinate;
 use log::error;
 use std::{path::PathBuf, str::FromStr};
 use structopt::StructOpt;
@@ -26,12 +25,6 @@ impl FromStr for Coordinates {
     }
 }
 
-// #[derive(Debug, StructOpt)]
-// pub struct CoordinateOpt {
-//     #[structopt(help = "Build coordinate")]
-//     underlying: Coordinates,
-// }
-
 #[derive(StructOpt, Debug)]
 enum Subcommand {
     Server {
@@ -42,20 +35,20 @@ enum Subcommand {
         data: PathBuf,
     },
 
-    Client {
+    GenerateSparseProfile {
         #[structopt(long, parse(from_os_str))]
-        source: PathBuf,
+        repo: PathBuf,
 
         #[structopt(long, parse(from_os_str))]
-        target: PathBuf,
+        sparse_profile_output: PathBuf,
 
-        #[structopt(long, help = "Comma-separated list of build coordinates")]
+        #[structopt(long)]
         coordinates: Coordinates,
     },
 }
 
 #[derive(StructOpt, Debug)]
-#[structopt(about = "coordinates Focused Development Client")]
+#[structopt(about = "Project Focused Development Client")]
 struct ParachuteOpts {
     #[structopt(subcommand)]
     cmd: Subcommand,
@@ -67,17 +60,12 @@ fn main() -> Result<()> {
     let opt = ParachuteOpts::from_args();
     match opt.cmd {
         // Subcommand::Server { root, data } => return detail::server(root.as_path(), data.as_path()),
-        Subcommand::Client {
-            source,
-            target,
+        Subcommand::GenerateSparseProfile {
+            repo,
+            sparse_profile_output,
             coordinates,
         } => {
-            let coordinates = coordinates.0;
-            for coord in &coordinates {
-                log::info!("coord:{}", coord);
-            }
-            client::run_client(source.as_path(), target.as_path(), coordinates)?;
-            // }
+            client::generate_sparse_profile(repo.as_path(), sparse_profile_output.as_path(), coordinates.0)?;
             Ok(())
         }
         _ => {

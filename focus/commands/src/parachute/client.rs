@@ -8,11 +8,22 @@ use std::{
     iter::FromIterator,
     path::PathBuf,
 };
+use std::fs::File;
+use std::io::prelude::*;
 
 use crate::main;
 
-pub fn run_client(source: &Path, target: &Path, coordinates: Vec<String>) -> Result<()> {
-    let client = Client::new(source, target, coordinates.clone())?;
+const SPARSE_PROFILE_PRELUDE: &str = "/*\n \
+                                      !/*/\n \
+                                      /tools/\n \
+                                      /pants-plugins/\n \
+                                      /pants-support/\n \
+                                      /3rdparty/\n";
+
+pub fn generate_sparse_profile(repo: &Path, sparse_profile_output: &Path, coordinates: Vec<String>) -> Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let client = BazelRepo::new(repo, coordinates.clone())?;
     let mut source_paths = HashSet::<String>::new();
     for coordinate in &coordinates {
         let sources = client
@@ -21,40 +32,48 @@ pub fn run_client(source: &Path, target: &Path, coordinates: Vec<String>) -> Res
         log::info!("{}: {} source files", coordinate, &sources.len());
         source_paths.extend(sources);
     }
+
+    let repo_component_count = repo.components().count();
+
     let mut dirs = client
         .involved_directories_for_sources(source_paths.iter())
         .context("determining involved directories for sources")?;
-    for dir in &dirs {
-        log::info!("Path: {}", dir.display());
-    }
 
-    // let source_component_count = source.components().collect::<PathBuf::components>::().len();
-    let source_component_count = source.components().count();
-
-    log::info!("---shortest-common-prefix filtered paths---");
     let reduced_dirs = reduce_to_shortest_common_prefix(&dirs)
         .context("reducing paths to shortest common prefix")?;
-    for dir in reduced_dirs {
-        let mut relative_path = PathBuf::new();
-        for component in dir.components().skip(source_component_count) {
-            relative_path.push(component);
+
+    let mut f = File::create(sparse_profile_output).context("creating output file")?;
+    f.write_all(&SPARSE_PROFILE_PRELUDE.as_bytes()).context("writing sparse profile prelude")?;
+    for dir in &reduced_dirs {
+        let mut line = Vec::<u8>::new();
+        line.extend(b"/"); // Paths have a '/' prefix
+        {
+            let mut relative_path = PathBuf::new();
+            for component in dir.components().skip(repo_component_count) {
+                relative_path.push(component);
+            }
+            line.extend(relative_path.as_os_str().as_bytes());
         }
-        log::info!(" {}", relative_path.display());
+        line.extend(b"/\n"); // Paths have a '/' suffix
+        f.write_all(&line[..]).with_context(|| { format!("writing output (item={:?})", dir) })?;
+
     }
+    f.sync_data().context("syncing data")?;
+    log::info!("Reduced {} coordinate file sets to {} directories", &coordinates.len(), &reduced_dirs.len());
+
     Ok(())
 }
 
-struct Client {
+struct BazelRepo {
     source: PathBuf,
-    target: PathBuf,
     coordinates: Vec<String>,
 }
 
-impl Client {
-    pub fn new(source: &Path, target: &Path, coordinates: Vec<String>) -> Result<Self> {
+
+impl BazelRepo {
+    pub fn new(source: &Path, coordinates: Vec<String>) -> Result<Self> {
         Ok(Self {
             source: source.to_owned(),
-            target: target.to_owned(),
             coordinates: coordinates,
         })
     }
@@ -251,12 +270,11 @@ impl Client {
                 process_depset(&ids).context("processing transitive depsets")?;
             }
 
-            // log::info!("Action[{}] (target_id: {}, key{}) ", action.mnemonic, action.target_id, action.action_key);
             for path_fragment_id in path_fragment_ids {
                 let path =
                     qualify_path_fragment(path_fragment_id).context("qualifying path fragment")?;
+                // TODO: Factor out these forbidden prefixes.
                 if !path.starts_with("bazel-out/") && !path.starts_with("external/") {
-                    // log::info!("- {}", &path);
                     sources.push(path);
                 }
             }
@@ -281,11 +299,6 @@ fn reduce_to_shortest_common_prefix(paths: &BTreeSet<PathBuf>) -> Result<BTreeSe
     }
 
     Ok(results)
-}
-
-struct Coord {
-    repo: Option<String>,
-    package: String,
 }
 
 #[cfg(test)]
