@@ -37,13 +37,28 @@ enum Subcommand {
 
     GenerateSparseProfile {
         #[structopt(long, parse(from_os_str))]
-        repo: PathBuf,
+        dense_repo: PathBuf,
 
         #[structopt(long, parse(from_os_str))]
         sparse_profile_output: PathBuf,
 
         #[structopt(long)]
         coordinates: Coordinates,
+    },
+
+    CreateSparseClone {
+        #[structopt(long, parse(from_os_str))]
+        dense_repo: PathBuf,
+
+        #[structopt(long, parse(from_os_str))]
+        sparse_repo: PathBuf,
+
+        #[structopt(long)]
+        coordinates: Coordinates,
+
+
+        #[structopt(long)]
+        branch: String,
     },
 }
 
@@ -59,15 +74,25 @@ fn main() -> Result<()> {
 
     let opt = ParachuteOpts::from_args();
     match opt.cmd {
-        // Subcommand::Server { root, data } => return detail::server(root.as_path(), data.as_path()),
+        Subcommand::CreateSparseClone {
+            dense_repo,
+            sparse_repo,
+            coordinates,
+            branch,
+        } => {
+            client::create_sparse_clone(&dense_repo, &sparse_repo, &coordinates.0, &branch)?;
+            Ok(())
+        },
+
         Subcommand::GenerateSparseProfile {
-            repo,
+            dense_repo,
             sparse_profile_output,
             coordinates,
         } => {
-            client::generate_sparse_profile(repo.as_path(), sparse_profile_output.as_path(), coordinates.0)?;
+            client::generate_sparse_profile(&dense_repo, &sparse_profile_output, &coordinates.0)?;
             Ok(())
         }
+
         _ => {
             bail!("Not implemented");
         }
