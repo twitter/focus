@@ -1,4 +1,3 @@
-use crate::storage::rocks::Storage;
 use crate::{config, constants::git::*};
 use crate::{
     config::{fs, structures},
@@ -21,7 +20,6 @@ pub struct ManagedRepo {
     config: config::structures::RepoConfig,
     uuid: String,
     cache_dir: PathBuf,
-    storage: Arc<Storage>,
 }
 
 fn generate_uuid() -> String {
@@ -63,22 +61,16 @@ impl<'a> ManagedRepo {
         let cache_dir = config::fs::cache_dir().join(&uuid);
         let db_dir = cache_dir.join("db");
         std::fs::create_dir_all(&db_dir).expect("Failed to create ManagedRepo cache dir");
-        let storage = Storage::new(&db_dir)?;
 
         let repo = ManagedRepo {
             config: config.clone(),
             uuid,
             cache_dir,
-            storage: Arc::new(storage),
         };
 
         info!("Cache in {:?}", &repo.cache_dir());
 
         Ok(repo)
-    }
-
-    pub fn storage(&self) -> Arc<Storage> {
-        self.storage.clone()
     }
 
     fn repo_from_config(
@@ -182,7 +174,7 @@ impl<'a> ManagedRepo {
             let write_count_clone = write_count.clone();
             let stall_count_clone = stall_count.clone();
 
-            let storage_clone = self.storage();
+            // let storage_clone = self.storage();
             let repo_path = repo.path().to_owned();
             let handle = std::thread::spawn(move || {
                 let thread_repo = Repository::open(&repo_path).expect("Could not open repo");
@@ -195,15 +187,16 @@ impl<'a> ManagedRepo {
                                 let hdr = format!("{} {}\0", obj.kind().str(), obj.len());
                                 let mut val = Vec::<u8>::from(hdr.as_bytes());
                                 val.extend(obj.data());
-                                if let Err(e) = storage_clone.put_bytes(&key.as_bytes(), &val[..]) {
-                                    error!(
-                                        "Thread {} failed to store object {}: {:?}",
-                                        &thread_num, &oid, &e
-                                    );
-                                    panic!("Failed to store object");
-                                } else {
-                                    write_count_clone.fetch_add(1, Ordering::Relaxed);
-                                }
+                                // if let Err(e) = storage_clone.put_bytes(&key.as_bytes(), &val[..]) {
+                                //     error!(
+                                //         "Thread {} failed to store object {}: {:?}",
+                                //         &thread_num, &oid, &e
+                                //     );
+                                //     panic!("Failed to store object");
+                                // } else {
+                                //     write_count_clone.fetch_add(1, Ordering::Relaxed);
+                                // }
+                                todo!("re-implement storage")
                             }
                             Err(err) => {
                                 // TODO: Clean up the DB?

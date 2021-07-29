@@ -1,23 +1,25 @@
 pub mod parachute {
-    tonic::include_proto!("parachute");
+    include!(concat!(env!("OUT_DIR"), "/parachute.rs"));
+    // tonic::include_proto!("parachute");
 }
 
 pub mod storage {
-    tonic::include_proto!("storage");
+    include!(concat!(env!("OUT_DIR"), "/parachute.rs"));
+    // tonic::include_proto!("storage");
 }
 
 pub mod treesnap {
-    tonic::include_proto!("treesnap");
+    include!(concat!(env!("OUT_DIR"), "/treesnap.rs"));
 }
 
 pub mod testing {
-    tonic::include_proto!("testing");
+    include!(concat!(env!("OUT_DIR"), "/testing.rs"));
 }
 
 pub mod blaze_query {
-    tonic::include_proto!("blaze_query");
+    include!(concat!(env!("OUT_DIR"), "/blaze_query.rs"));
 }
 
 pub mod analysis {
-    tonic::include_proto!("analysis");
+    include!(concat!(env!("OUT_DIR"), "/analysis.rs"));
 }

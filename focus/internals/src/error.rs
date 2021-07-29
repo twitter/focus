@@ -1,7 +1,5 @@
-use std::num::ParseIntError;
-
 use thiserror::Error;
-extern crate rocksdb;
+
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error(transparent)]
@@ -55,20 +53,11 @@ pub enum AppError {
     #[error("current state other than expected")]
     IncorrectState(),
 
-    #[error(transparent)]
-    Protobuf(#[from] protobuf::ProtobufError),
-
-    #[error(transparent)]
-    Db(#[from] rocksdb::Error),
-
     #[error("not implemented")]
     NotImplemented(),
 
     #[error(transparent)]
     Var(#[from] std::env::VarError),
-
-    #[error(transparent)]
-    ParseInt(#[from] ParseIntError),
 
     #[error("unable to determine work directory for repository")]
     InvalidWorkDir(),
@@ -81,7 +70,4 @@ pub enum AppError {
 
     #[error(transparent)]
     InvalidUri(#[from] http::uri::InvalidUri),
-
-    #[error(transparent)]
-    TransportError(#[from] tonic::transport::Error),
 }

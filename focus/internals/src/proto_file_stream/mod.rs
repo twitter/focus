@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use prost::Message;
 use std::{
     fs::File,
     io::{Read, Write},
@@ -15,7 +16,10 @@ impl ProtoFileStream {
         Ok(Self { file })
     }
 
-    pub fn read<T: protobuf::Message>(&mut self) -> Result<(T, u32)> {
+    pub fn read<T>(&mut self) -> Result<(T, u32)>
+    where
+        T: Message + Default,
+    {
         let mut size_bytes: [u8; U32_BYTE_LENGTH as usize] = [0; U32_BYTE_LENGTH as usize];
 
         self.file
@@ -28,16 +32,16 @@ impl ProtoFileStream {
             .context("reading message body")?;
 
         Ok((
-            T::parse_from_bytes(message_bytes.as_slice()).context("parsing message")?,
+            T::decode(message_bytes.as_slice()).context("decode message")?,
             size + U32_BYTE_LENGTH,
         ))
     }
 
     pub fn write<T>(&mut self, t: &T) -> Result<u32>
     where
-        T: protobuf::Message,
+        T: Message + Default,
     {
-        let size = t.compute_size();
+        let size = t.encoded_len();
         let size_write_result = self
             .file
             .write(&size.to_be_bytes()[..])
@@ -53,10 +57,13 @@ impl ProtoFileStream {
             }
         }
 
-        t.write_to_writer(&mut self.file)
-            .context("writing message body")?;
+        let mut buf: Vec<u8> = Vec::with_capacity(size);
+        t.encode(&mut buf).context("encoding message to buffer")?;
+        self.file
+            .write(&buf[..])
+            .context("writing buffer to file")?;
 
-        Ok(size + U32_BYTE_LENGTH)
+        Ok(size as u32 + U32_BYTE_LENGTH)
     }
 }
 
