@@ -458,13 +458,17 @@ fn write_project_view_file(
     use std::os::unix::ffi::OsStrExt;
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
-    let mut directories = Vec::<String>::new();
+    let mut directories = BTreeSet::<PathBuf>::new();
     for coordinate in coordinates {
         let directories_for_coordinate = client
             .involved_directories_query(&coordinate, Some(2), true)
             .context("determining directories for project view")?;
-        directories.extend(directories_for_coordinate);
+        for dir in directories_for_coordinate {
+            directories.insert(PathBuf::from(dir));
+        }
     }
+    // let directories = reduce_to_shortest_common_prefix(&directories)
+    //     .context("reducing paths to shortest common prefix")?;
 
     if directories.is_empty() {
         bail!("Refusing to generate a project view with an empty set of directories.");
@@ -481,9 +485,17 @@ fn write_project_view_file(
     buffer.write_all(b"derive_targets_from_directories: true\n")?;
     buffer.write_all(b"\n")?;
     buffer.write_all(b"directories:\n")?;
+    let prefix = dense_repo.to_str().context("interpreting prefix as utf-8")?;
+    // TODO: Sort and dedup. Fix weird breaks.
+    // Are we adding too many directories? Is it because of reduction or what?
     for dir in &directories {
-        buffer.write_all(b"  ")?;
-        buffer.write_all(dir.as_bytes())?;
+        let relative_path = dir.strip_prefix(&prefix);
+        let path_bytestring = relative_path.context("truncating path")?.as_os_str().as_bytes();
+        if !path_bytestring.is_empty() {
+            buffer.write_all(b"  ")?;
+            buffer.write_all(&path_bytestring[..])?;
+            buffer.write_all(b"\n")?;
+        }
     }
     buffer.write_all(b"\n")?;
     buffer.flush()?;
