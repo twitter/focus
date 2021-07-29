@@ -461,10 +461,16 @@ fn write_project_view_file(
         .context("determining directories for project view")?;
     for dir in directories_for_coordinate {
         let dir_path = PathBuf::from(dir);
-        if let Some(dir_with_build) = client.find_closest_directory_with_build_file(dir_path.as_path(), &dense_repo).context("finding closest directory with a build file")?  {
+        if let Some(dir_with_build) = client
+            .find_closest_directory_with_build_file(dir_path.as_path(), &dense_repo)
+            .context("finding closest directory with a build file")?
+        {
             directories.insert(dir_with_build);
         } else {
-            log::warn!("Ignoring directory '{}' as it has no discernible BUILD file", &dir_path.display());
+            log::warn!(
+                "Ignoring directory '{}' as it has no discernible BUILD file",
+                &dir_path.display()
+            );
         }
     }
 
@@ -483,12 +489,17 @@ fn write_project_view_file(
     buffer.write_all(b"derive_targets_from_directories: true\n")?;
     buffer.write_all(b"\n")?;
     buffer.write_all(b"directories:\n")?;
-    let prefix = dense_repo.to_str().context("interpreting prefix as utf-8")?;
+    let prefix = dense_repo
+        .to_str()
+        .context("interpreting prefix as utf-8")?;
     // TODO: Sort and dedup. Fix weird breaks
     // Are we adding too many directories? Is it because of reduction or what?
     for dir in &directories {
         let relative_path = dir.strip_prefix(&prefix);
-        let path_bytestring = relative_path.context("truncating path")?.as_os_str().as_bytes();
+        let path_bytestring = relative_path
+            .context("truncating path")?
+            .as_os_str()
+            .as_bytes();
         if !path_bytestring.is_empty() {
             buffer.write_all(b"  ")?;
             buffer.write_all(&path_bytestring[..])?;
@@ -591,12 +602,11 @@ impl BazelRepo {
         file: &Path,
         ceiling: &Path,
     ) -> Result<Option<PathBuf>> {
-        let mut dir =
-            if file.is_dir() {
-                file
-            } else {
-                file.parent().context("getting parent directory of file")?
-            };
+        let mut dir = if file.is_dir() {
+            file
+        } else {
+            file.parent().context("getting parent directory of file")?
+        };
         loop {
             if dir == ceiling {
                 return Ok(None);
@@ -674,21 +684,23 @@ impl BazelRepo {
 
         let mut directories = Vec::<String>::new();
 
-
         let mut clauses = Vec::<String>::new();
-        let clauses: Vec<String> = coordinates.iter().map(|coordinate| {
-            // let identity_clause = if identity {
-            //     format!("{} union ", coordinate)
-            // } else {
-            //     "".to_owned()
-            // };
-            if let Some(depth) = depth {
-                // format!("{}deps({}, {})", identity_clause, coordinate, depth)
-                format!("buildfiles(deps({}, {}))", coordinate, depth)
-            } else {
-                format!("buildfiles(deps({}))", coordinate)
-            }
-        }).collect();
+        let clauses: Vec<String> = coordinates
+            .iter()
+            .map(|coordinate| {
+                // let identity_clause = if identity {
+                //     format!("{} union ", coordinate)
+                // } else {
+                //     "".to_owned()
+                // };
+                if let Some(depth) = depth {
+                    // format!("{}deps({}, {})", identity_clause, coordinate, depth)
+                    format!("buildfiles(deps({}, {}))", coordinate, depth)
+                } else {
+                    format!("buildfiles(deps({}))", coordinate)
+                }
+            })
+            .collect();
 
         let query = clauses.join(" union ");
         log::info!("Running Bazel query [{}]", &query);
