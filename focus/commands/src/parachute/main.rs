@@ -1,4 +1,4 @@
-mod client;
+mod sparse_repos;
 mod detail;
 mod testing;
 mod util;
@@ -27,14 +27,6 @@ impl FromStr for Coordinates {
 
 #[derive(StructOpt, Debug)]
 enum Subcommand {
-    Server {
-        #[structopt(long, parse(from_os_str))]
-        root: PathBuf,
-
-        #[structopt(long, parse(from_os_str))]
-        data: PathBuf,
-    },
-
     GenerateSparseProfile {
         #[structopt(long, parse(from_os_str))]
         dense_repo: PathBuf,
@@ -65,7 +57,7 @@ enum Subcommand {
 }
 
 #[derive(StructOpt, Debug)]
-#[structopt(about = "Project Focused Development Client")]
+#[structopt(about = "Focused Development Tools")]
 struct ParachuteOpts {
     #[structopt(subcommand)]
     cmd: Subcommand,
@@ -83,7 +75,7 @@ fn main() -> Result<()> {
             branch,
             coordinates,
         } => {
-            client::create_sparse_clone(&name, &dense_repo, &sparse_repo, &branch, &coordinates.0)?;
+            sparse_repos::create_sparse_clone(&name, &dense_repo, &sparse_repo, &branch, &coordinates.0)?;
             Ok(())
         }
 
@@ -92,7 +84,7 @@ fn main() -> Result<()> {
             sparse_profile_output,
             coordinates,
         } => {
-            client::generate_sparse_profile(&dense_repo, &sparse_profile_output, &coordinates.0)?;
+            sparse_repos::generate_sparse_profile(&dense_repo, &sparse_profile_output, &coordinates.0)?;
             Ok(())
         }
 
