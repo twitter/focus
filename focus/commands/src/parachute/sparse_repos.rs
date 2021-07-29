@@ -79,6 +79,34 @@ pub fn configure_dense_repo(temp_dir: &PathBuf, dense_repo: &PathBuf) -> Result<
     Ok(())
 }
 
+pub fn configure_sparse_repo(temp_dir: &PathBuf, dense_repo: &PathBuf) -> Result<()> {
+    let git_out_path = &temp_dir.join("git.stdout");
+    let git_out_file =
+        File::create(&git_out_path).context("opening stdout destination file for git command")?;
+    let git_err_path = &temp_dir.join("git.stderr");
+    let git_err_file =
+        File::create(&git_err_path).context("opening stderr destination file for git command")?;
+
+    let output = Command::new(git_binary()?)
+        .arg("config")
+        .arg("core.fsmonitor")
+        .arg("rs-git-fsmonitor")
+        .current_dir(&dense_repo)
+        .stdout(Stdio::from(git_out_file))
+        .stderr(Stdio::from(git_err_file))
+        .spawn()
+        .context("spawning git config")?
+        .wait_with_output()
+        .context("awaiting git config")?;
+    if !output.status.success() {
+        exhibit_file(&git_out_path, "git config stdout")?;
+        exhibit_file(&git_err_path, "git config stderr")?;
+        bail!("configuring dense repo failed");
+    }
+
+    Ok(())
+}
+
 // Write an object to a repo returning its identity.
 pub fn write_object(repo: &PathBuf, file: &PathBuf) -> Result<String> {
     let output = Command::new(git_binary()?)
@@ -204,9 +232,9 @@ pub fn create_sparse_clone(
                     &cloned_branch,
                     &cloned_sparse_profile_output,
                     filter_sparse,
-                )
-                .expect("failed to create an empty sparse clone");
-                log::info!("Finished creating a template clone");
+                ).expect("failed to create an empty sparse clone");
+                // configure_sparse_repo(&cloned_temp_dir_path, &cloned_sparse_repo).expect("failed to configure sparse clone");
+                // log::info!("Finished creating a template clone");
             })
     };
     clone_thread?
@@ -423,16 +451,16 @@ pub fn create_empty_sparse_clone(
     // Write an excludes file that ignores Focus-specific modifications in the sparse repo.
     let info_dir = &dense_repo.join(".git").join("info");
     std::fs::create_dir_all(info_dir);
-    let excludes_path = &info_dir.join("exclude");
+    let excludes_path = &info_dir.join("exclude.focus");
     {
         use std::fs::OpenOptions;
         let mut buffer = BufWriter::new(
             OpenOptions::new()
-                // .create(true)
-                .append(true)
+                .read(true)
                 .write(true)
+                .create(true)
                 .open(excludes_path)
-                .context("opening the info/excludes file for writing")?,
+                .context("opening the info/excludes file for writing")?
         );
         buffer.write_all(b"WORKSPACE.focus\n")?;
         buffer.write_all(b"BUILD.focus\n")?;
@@ -444,6 +472,13 @@ pub fn create_empty_sparse_clone(
     }
 
     Ok(())
+}
+
+fn allowable_project_view_directory_predicate(dense_repo: &Path,
+                                              directory: &Path) -> bool {
+    let scrooge_internal = dense_repo.join("scrooge-internal");
+    let loglens = dense_repo.join("loglens");
+    !directory.starts_with(scrooge_internal) && !directory.starts_with(loglens)
 }
 
 fn write_project_view_file(
@@ -465,7 +500,9 @@ fn write_project_view_file(
             .find_closest_directory_with_build_file(dir_path.as_path(), &dense_repo)
             .context("finding closest directory with a build file")?
         {
-            directories.insert(dir_with_build);
+            if allowable_project_view_directory_predicate(&dense_repo.as_path(), &dir_with_build) {
+                directories.insert(dir_with_build);
+            }
         } else {
             log::warn!(
                 "Ignoring directory '{}' as it has no discernible BUILD file",
@@ -688,12 +725,9 @@ impl BazelRepo {
         let clauses: Vec<String> = coordinates
             .iter()
             .map(|coordinate| {
-                // let identity_clause = if identity {
-                //     format!("{} union ", coordinate)
-                // } else {
-                //     "".to_owned()
-                // };
-                if let Some(depth) = depth {
+                if identity {
+                    coordinate.to_owned()
+                } else if let Some(depth) = depth {
                     // format!("{}deps({}, {})", identity_clause, coordinate, depth)
                     format!("buildfiles(deps({}, {}))", coordinate, depth)
                 } else {
