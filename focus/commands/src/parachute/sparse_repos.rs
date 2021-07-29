@@ -160,8 +160,6 @@ pub fn create_sparse_clone(
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_project_view_output = project_view_output.clone();
         let cloned_coordinates = computed_coordinates.to_vec().clone();
-        // let cloned_sparse_repo = sparse_repo.to_owned();
-        // let cloned_branch = branch.clone();
 
         thread::Builder::new()
             .name("ProjectViewGeneration".to_owned())
@@ -177,9 +175,6 @@ pub fn create_sparse_clone(
             })
     };
 
-    // profile_generation_thread?
-    //     .join()
-    //     .expect("sparse profile generation thread exited abnormally");
     project_view_generation_thread?
         .join()
         .expect("project view generation thread exited abnormally");
@@ -341,6 +336,7 @@ pub fn switch_branches(
     log::info!("Checking out in '{}'", &sparse_repo.display());
     let output = Command::new(git_binary()?)
         .arg("checkout")
+        .arg("--quiet")
         .arg(branch)
         .current_dir(&sparse_repo)
         .stdout(Stdio::from(git_out_file))
@@ -427,12 +423,12 @@ pub fn create_empty_sparse_clone(
     // Write an excludes file that ignores Focus-specific modifications in the sparse repo.
     let info_dir = &dense_repo.join(".git").join("info");
     std::fs::create_dir_all(info_dir);
-    let excludes_path = &info_dir.join("excludes");
+    let excludes_path = &info_dir.join("exclude");
     {
         use std::fs::OpenOptions;
         let mut buffer = BufWriter::new(
             OpenOptions::new()
-                .create(true)
+                // .create(true)
                 .append(true)
                 .write(true)
                 .open(excludes_path)
@@ -459,16 +455,18 @@ fn write_project_view_file(
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
     let mut directories = BTreeSet::<PathBuf>::new();
-    for coordinate in coordinates {
-        let directories_for_coordinate = client
-            .involved_directories_query(&coordinate, Some(2), true)
-            .context("determining directories for project view")?;
-        for dir in directories_for_coordinate {
-            directories.insert(PathBuf::from(dir));
+
+    let directories_for_coordinate = client
+        .involved_directories_query(&coordinates, Some(1), true)
+        .context("determining directories for project view")?;
+    for dir in directories_for_coordinate {
+        let dir_path = PathBuf::from(dir);
+        if let Some(dir_with_build) = client.find_closest_directory_with_build_file(dir_path.as_path(), &dense_repo).context("finding closest directory with a build file")?  {
+            directories.insert(dir_with_build);
+        } else {
+            log::warn!("Ignoring directory '{}' as it has no discernible BUILD file", &dir_path.display());
         }
     }
-    // let directories = reduce_to_shortest_common_prefix(&directories)
-    //     .context("reducing paths to shortest common prefix")?;
 
     if directories.is_empty() {
         bail!("Refusing to generate a project view with an empty set of directories.");
@@ -486,7 +484,7 @@ fn write_project_view_file(
     buffer.write_all(b"\n")?;
     buffer.write_all(b"directories:\n")?;
     let prefix = dense_repo.to_str().context("interpreting prefix as utf-8")?;
-    // TODO: Sort and dedup. Fix weird breaks.
+    // TODO: Sort and dedup. Fix weird breaks
     // Are we adding too many directories? Is it because of reduction or what?
     for dir in &directories {
         let relative_path = dir.strip_prefix(&prefix);
@@ -511,43 +509,40 @@ pub fn generate_sparse_profile(
     use std::os::unix::ffi::OsStrExt;
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
-    let mut source_paths = HashSet::<String>::new();
-    for coordinate in coordinates {
-        // Do Bazel aquery for each coordinate
-        let sources = client
-            .involved_sources_aquery(&coordinate)
-            .with_context(|| format!("determining involved sources for {}", coordinate))?;
-        log::info!(
-            "Action query: {} yielded {} source files",
-            coordinate,
-            &sources.len()
-        );
-        source_paths.extend(sources);
-    }
+    // let mut source_paths = HashSet::<String>::new();
+    // for coordinate in coordinates {
+    //     // Do Bazel aquery for each coordinate
+    //     let sources = client
+    //         .involved_sources_aquery(&coordinate)
+    //         .with_context(|| format!("determining involved sources for {}", coordinate))?;
+    //     log::info!(
+    //         "Action query: {} yielded {} source files",
+    //         coordinate,
+    //         &sources.len()
+    //     );
+    //     source_paths.extend(sources);
+    // }
 
     let repo_component_count = dense_repo.components().count();
 
-    let mut aquery_dirs = client
-        .involved_directories_for_sources(source_paths.iter())
-        .context("determining involved directories for sources")?;
+    // let mut aquery_dirs = client
+    //     .involved_directories_for_sources(source_paths.iter())
+    //     .context("determining involved directories for sources")?;
 
     let mut query_dirs = BTreeSet::<PathBuf>::new();
-    query_dirs.extend(aquery_dirs);
+    // query_dirs.extend(aquery_dirs);
 
-    for coordinate in coordinates {
-        // Do Bazel query by package for each coordinate
-        let directories_for_coordinate = client
-            .involved_directories_query(&coordinate, None, false)
-            .with_context(|| format!("determining involved directories for {}", coordinate))?;
-        log::info!(
-            "Dependency query: {} yielded {} directories",
-            coordinate,
-            &directories_for_coordinate.len()
-        );
-        for dir in directories_for_coordinate {
-            let absolute_path = dense_repo.join(dir);
-            query_dirs.insert(absolute_path);
-        }
+    let directories_for_coordinate = client
+        .involved_directories_query(&coordinates, None, false)
+        .with_context(|| format!("Determining involved directories for {:?}", &coordinates))?;
+    log::info!(
+        "Dependency query: {:?} yielded {} directories",
+        &coordinates,
+        &directories_for_coordinate.len()
+    );
+    for dir in directories_for_coordinate {
+        let absolute_path = dense_repo.join(dir);
+        query_dirs.insert(absolute_path);
     }
 
     let mut reduced_dirs = reduce_to_shortest_common_prefix(&query_dirs)
@@ -596,7 +591,12 @@ impl BazelRepo {
         file: &Path,
         ceiling: &Path,
     ) -> Result<Option<PathBuf>> {
-        let mut dir = file.parent().context("getting parent directory of file")?;
+        let mut dir =
+            if file.is_dir() {
+                file
+            } else {
+                file.parent().context("getting parent directory of file")?
+            };
         loop {
             if dir == ceiling {
                 return Ok(None);
@@ -647,7 +647,7 @@ impl BazelRepo {
     // Use bazel query to get involved packages and turn them into directories.
     pub fn involved_directories_query(
         &self,
-        coordinate: &str,
+        coordinates: &Vec<String>,
         depth: Option<usize>,
         identity: bool,
     ) -> Result<Vec<String>> {
@@ -674,22 +674,29 @@ impl BazelRepo {
 
         let mut directories = Vec::<String>::new();
 
-        let identity_clause = if identity {
-            format!("{} union ", coordinate)
-        } else {
-            "".to_owned()
-        };
 
-        let query = if let Some(depth) = depth {
-            format!("{}deps({}, {})", identity_clause, coordinate, depth)
-        } else {
-            format!("{}deps({})", identity_clause, coordinate)
-        };
+        let mut clauses = Vec::<String>::new();
+        let clauses: Vec<String> = coordinates.iter().map(|coordinate| {
+            // let identity_clause = if identity {
+            //     format!("{} union ", coordinate)
+            // } else {
+            //     "".to_owned()
+            // };
+            if let Some(depth) = depth {
+                // format!("{}deps({}, {})", identity_clause, coordinate, depth)
+                format!("buildfiles(deps({}, {}))", coordinate, depth)
+            } else {
+                format!("buildfiles(deps({}))", coordinate)
+            }
+        }).collect();
+
+        let query = clauses.join(" union ");
+        log::info!("Running Bazel query [{}]", &query);
 
         // Run Bazel query
         let output = Command::new("./bazel")
             .arg("query")
-            .arg(query)
+            .arg(&query)
             .arg("--output=package")
             .current_dir(&self.dense_repo)
             .stdout(Stdio::from(bazel_out_file))
