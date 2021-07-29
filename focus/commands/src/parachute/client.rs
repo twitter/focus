@@ -186,6 +186,9 @@ pub fn create_sparse_clone(
     clone_thread?
         .join()
         .expect("clone thread exited abnormally");
+    project_view_generation_thread?
+        .join()
+        .expect("project view generation thread exited abnormally");
 
     {
         let cloned_temp_dir_path = temp_dir_path.to_owned();
@@ -193,9 +196,11 @@ pub fn create_sparse_clone(
         let cloned_sparse_repo = sparse_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.clone();
         let cloned_branch = branch.clone();
-        log::info!("configuring the sparse copy");
+
+        log::info!("configuring visible paths");
         set_sparse_checkout(&cloned_temp_dir_path, sparse_repo, &sparse_profile_output)
             .context("setting up sparse checkout options")?;
+
         log::info!("checking out the working copy");
         switch_branches(
             &cloned_temp_dir_path,
@@ -204,6 +209,14 @@ pub fn create_sparse_clone(
             &cloned_branch,
         )
         .context("switching branches")?;
+
+        log::info!("moving the project view into place");
+        let project_view_file_name = &project_view_output
+            .file_name()
+            .context("getting the file name failed")?;
+        let project_view_destination = &cloned_sparse_repo.join(&project_view_file_name);
+        std::fs::rename(project_view_output, project_view_destination)
+            .context("copying in the project view")?;
     }
     Ok(())
 }
