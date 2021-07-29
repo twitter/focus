@@ -18,6 +18,8 @@ use crate::main;
 
 // Write out some metadata to be included in stats about the repository?
 
+// TODO: Write coordinates to a known location
+
 const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
@@ -240,7 +242,7 @@ pub fn set_sparse_checkout(
             .arg("sparse-checkout")
             .arg("init")
             .arg("--cone")
-            .arg("--no-sparse-index") // TODO: The sparse index is somehow slower. Figure it out.
+            // .arg("--no-sparse-index") // TODO: The sparse index is somehow slower. Figure it out.
             .current_dir(&sparse_repo)
             .stdout(Stdio::from(git_out_file))
             .stderr(Stdio::from(git_err_file))
@@ -382,13 +384,16 @@ pub fn create_empty_sparse_clone(
     }
 
     // Write an excludes file that ignores Focus-specific modifications in the sparse repo.
-    let excludes_path = &dense_repo.join(".git").join("info").join("excludes");
+    let info_dir = &dense_repo.join(".git").join("info");
+    std::fs::create_dir_all(info_dir);
+    let excludes_path = &info_dir.join("excludes");
     {
         use std::fs::OpenOptions;
         let mut buffer = BufWriter::new(
             OpenOptions::new()
-                .write(true)
+                .create(true)
                 .append(true)
+                .write(true)
                 .open(excludes_path)
                 .context("opening the info/excludes file for writing")?,
         );
@@ -414,9 +419,10 @@ fn write_project_view_file(
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
     let mut directories = Vec::<String>::new();
     for coordinate in coordinates {
-        let directories = client
+        let directories_for_coordinate = client
             .involved_directories_query(&coordinate, Some(2), true)
             .context("determining directories for project view")?;
+        directories.extend(directories_for_coordinate);
     }
 
     if directories.is_empty() {
