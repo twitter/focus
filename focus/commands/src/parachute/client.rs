@@ -1,6 +1,10 @@
 use anyhow::{bail, Context, Result};
 use focus_formats::analysis::{Artifact, PathFragment};
+use std::ffi::OsString;
+use std::fs::File;
+use std::io::prelude::*;
 use std::path::Path;
+use std::thread;
 use std::{
     cell::Cell,
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
@@ -8,10 +12,6 @@ use std::{
     iter::FromIterator,
     path::PathBuf,
 };
-use std::fs::File;
-use std::io::prelude::*;
-use std::thread;
-use std::ffi::OsString;
 
 use crate::main;
 
@@ -48,14 +48,21 @@ fn add_implicit_coordinates(v: &mut Vec<String>) {
     v.extend(implicit_coordinates)
 }
 
-pub fn create_sparse_clone(dense_repo: &PathBuf, sparse_repo: &PathBuf, coordinates: &Vec<String>, branch: &String) -> Result<()> {
-    let temp_dir = tempfile::Builder::new().prefix("focus-parachute-work").tempdir().context("creating a temporary directory")?;
+pub fn create_sparse_clone(
+    dense_repo: &PathBuf,
+    sparse_repo: &PathBuf,
+    coordinates: &Vec<String>,
+    branch: &String,
+) -> Result<()> {
+    let temp_dir = tempfile::Builder::new()
+        .prefix("focus-parachute-work")
+        .tempdir()
+        .context("creating a temporary directory")?;
     let temp_dir_path = temp_dir.path();
 
     let sparse_profile_output = temp_dir_path.join("sparse-checkout");
     let mut coordinates = coordinates.clone();
     add_implicit_coordinates(&mut coordinates);
-
 
     let profile_generation_thread = {
         let cloned_temp_dir_path = temp_dir_path.to_owned();
@@ -65,8 +72,12 @@ pub fn create_sparse_clone(dense_repo: &PathBuf, sparse_repo: &PathBuf, coordina
 
         thread::spawn(move || {
             log::info!("generating sparse profile");
-            generate_sparse_profile(&cloned_dense_repo, &cloned_sparse_profile_output, &cloned_coordinates)
-                .expect("failed to generate a sparse profile");
+            generate_sparse_profile(
+                &cloned_dense_repo,
+                &cloned_sparse_profile_output,
+                &cloned_coordinates,
+            )
+            .expect("failed to generate a sparse profile");
             log::info!("finished generating sparse profile");
         })
     };
@@ -79,16 +90,20 @@ pub fn create_sparse_clone(dense_repo: &PathBuf, sparse_repo: &PathBuf, coordina
 
         thread::spawn(move || {
             log::info!("creating a template clone");
-            create_empty_sparse_clone(&cloned_temp_dir_path,
-                                      &cloned_dense_repo,
-                                      &cloned_sparse_repo,
-                                      &cloned_branch)
-                .expect("failed to create an empty sparse clone");
+            create_empty_sparse_clone(
+                &cloned_temp_dir_path,
+                &cloned_dense_repo,
+                &cloned_sparse_repo,
+                &cloned_branch,
+            )
+            .expect("failed to create an empty sparse clone");
             log::info!("finished creating a template clone");
         })
     };
 
-    profile_generation_thread.join().expect("sparse profile generation thread exited abnormally");
+    profile_generation_thread
+        .join()
+        .expect("sparse profile generation thread exited abnormally");
     clone_thread.join().expect("clone thread exited abnormally");
 
     {
@@ -98,21 +113,34 @@ pub fn create_sparse_clone(dense_repo: &PathBuf, sparse_repo: &PathBuf, coordina
         let cloned_sparse_profile_output = sparse_profile_output.clone();
         let cloned_branch = branch.clone();
         log::info!("configuring the sparse copy");
-        set_sparse_checkout(&cloned_temp_dir_path, sparse_repo, &sparse_profile_output).context("setting up sparse checkout options")?;
+        set_sparse_checkout(&cloned_temp_dir_path, sparse_repo, &sparse_profile_output)
+            .context("setting up sparse checkout options")?;
         log::info!("checking out the working copy");
-        switch_branches(&cloned_temp_dir_path, &cloned_dense_repo, &cloned_sparse_repo, &cloned_branch).context("switching branches")?;
+        switch_branches(
+            &cloned_temp_dir_path,
+            &cloned_dense_repo,
+            &cloned_sparse_repo,
+            &cloned_branch,
+        )
+        .context("switching branches")?;
     }
     Ok(())
 }
 
-pub fn set_sparse_checkout(temp_dir: &PathBuf, sparse_repo: &PathBuf, sparse_profile: &PathBuf) -> Result<()> {
-    use std::process::{Command, Stdio};
+pub fn set_sparse_checkout(
+    temp_dir: &PathBuf,
+    sparse_repo: &PathBuf,
+    sparse_profile: &PathBuf,
+) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
+    use std::process::{Command, Stdio};
     {
         let git_out_path = &temp_dir.join("git-sparse-checkout-init.stdout");
-        let git_out_file = File::create(&git_out_path).context("opening stdout destination file for git command")?;
+        let git_out_file = File::create(&git_out_path)
+            .context("opening stdout destination file for git command")?;
         let git_err_path = &temp_dir.join("git-sparse-checkout-init.stderr");
-        let git_err_file = File::create(&git_err_path).context("opening stderr destination file for git command")?;
+        let git_err_file = File::create(&git_err_path)
+            .context("opening stderr destination file for git command")?;
 
         let output = Command::new(git_binary()?)
             .arg("sparse-checkout")
@@ -133,14 +161,15 @@ pub fn set_sparse_checkout(temp_dir: &PathBuf, sparse_repo: &PathBuf, sparse_pro
         }
     }
 
-    // TODO: Get cone checkouts working. Currently they complain about duplicate entries.
     {
         let git_out_path = &temp_dir.join("git-sparse-checkout-set.stdout");
-        let git_out_file = File::create(&git_out_path).context("opening stdout destination file for git command")?;
+        let git_out_file = File::create(&git_out_path)
+            .context("opening stdout destination file for git command")?;
         let git_err_path = &temp_dir.join("git-sparse-checkout-set.stderr");
-        let git_err_file = File::create(&git_err_path).context("opening stderr destination file for git command")?;
-        // exhibit_file(&sparse_profile, "spasre profile file");
-        let sparse_profile_file = File::open(&sparse_profile).context("opening sparse profile for git command")?;
+        let git_err_file = File::create(&git_err_path)
+            .context("opening stderr destination file for git command")?;
+        let sparse_profile_file =
+            File::open(&sparse_profile).context("opening sparse profile for git command")?;
 
         let output = Command::new(git_binary()?)
             .arg("sparse-checkout")
@@ -165,14 +194,21 @@ pub fn set_sparse_checkout(temp_dir: &PathBuf, sparse_repo: &PathBuf, sparse_pro
     Ok(())
 }
 
-pub fn switch_branches(temp_dir: &PathBuf, dense_repo: &PathBuf, sparse_repo: &PathBuf, branch: &String) -> Result<()> {
-    use std::process::{Command, Stdio};
+pub fn switch_branches(
+    temp_dir: &PathBuf,
+    dense_repo: &PathBuf,
+    sparse_repo: &PathBuf,
+    branch: &String,
+) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
+    use std::process::{Command, Stdio};
 
     let git_out_path = &temp_dir.join("git-switch.stdout");
-    let git_out_file = File::create(&git_out_path).context("opening stdout destination file for git command")?;
+    let git_out_file =
+        File::create(&git_out_path).context("opening stdout destination file for git command")?;
     let git_err_path = &temp_dir.join("git-switch.stderr");
-    let git_err_file = File::create(&git_err_path).context("opening stderr destination file for git command")?;
+    let git_err_file =
+        File::create(&git_err_path).context("opening stderr destination file for git command")?;
     log::info!("checking out in '{}'", &sparse_repo.display());
     let output = Command::new(git_binary()?)
         .arg("checkout")
@@ -194,18 +230,26 @@ pub fn switch_branches(temp_dir: &PathBuf, dense_repo: &PathBuf, sparse_repo: &P
     Ok(())
 }
 
-pub fn create_empty_sparse_clone(temp_dir: &PathBuf, dense_repo: &PathBuf, sparse_repo: &PathBuf, branch: &String) -> Result<()> {
-    use std::process::{Command, Stdio};
+pub fn create_empty_sparse_clone(
+    temp_dir: &PathBuf,
+    dense_repo: &PathBuf,
+    sparse_repo: &PathBuf,
+    branch: &String,
+) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
+    use std::process::{Command, Stdio};
 
     let filtering_enabled = true; // If filtering is enabled, use URL-based local clone and disable --shared.
     let mut dense_url = OsString::from(if filtering_enabled { "file://" } else { "" });
     dense_url.push(dense_repo);
 
-    let sparse_repo_dir_parent = &sparse_repo.parent().context("sparse repo parent directory does not exist")?;
+    let sparse_repo_dir_parent = &sparse_repo
+        .parent()
+        .context("sparse repo parent directory does not exist")?;
 
     let git_out_path = &temp_dir.join("git-clone.stdout");
-    let git_out_file = File::create(&git_out_path).context("opening stdout destination file for git command")?;
+    let git_out_file =
+        File::create(&git_out_path).context("opening stdout destination file for git command")?;
     // let git_err_path = &temp_dir.join("git-clone.stderr");
     // let git_err_file = File::create(&git_err_path).context("opening stderr destination file for git command")?;
     // TODO: Support --filter=sparse:oid=<blob-ish>
@@ -222,7 +266,11 @@ pub fn create_empty_sparse_clone(temp_dir: &PathBuf, dense_repo: &PathBuf, spars
         .arg("64")
         .arg("-b")
         .arg("master")
-        .arg(if filtering_enabled { "--filter=blob:none" } else { "--shared" }) // Server doesn't support filtering
+        .arg(if filtering_enabled {
+            "--filter=blob:none"
+        } else {
+            "--shared"
+        }) // Server doesn't support filtering
         .arg(dense_url)
         .arg(sparse_repo)
         .current_dir(sparse_repo_dir_parent)
@@ -242,7 +290,11 @@ pub fn create_empty_sparse_clone(temp_dir: &PathBuf, dense_repo: &PathBuf, spars
     Ok(())
 }
 
-pub fn generate_sparse_profile(dense_repo: &Path, sparse_profile_output: &Path, coordinates: &Vec<String>) -> Result<()> {
+pub fn generate_sparse_profile(
+    dense_repo: &Path,
+    sparse_profile_output: &Path,
+    coordinates: &Vec<String>,
+) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
@@ -273,7 +325,11 @@ pub fn generate_sparse_profile(dense_repo: &Path, sparse_profile_output: &Path, 
         let directories_for_coordinate = client
             .involved_directories_query(&coordinate)
             .with_context(|| format!("determining involved directories for {}", coordinate))?;
-        log::info!("{}: {} directories", coordinate, &directories_for_coordinate.len());
+        log::info!(
+            "{}: {} directories",
+            coordinate,
+            &directories_for_coordinate.len()
+        );
         for dir in directories_for_coordinate {
             let absolute_path = dense_repo.join(dir);
             query_dirs.insert(absolute_path);
@@ -281,7 +337,8 @@ pub fn generate_sparse_profile(dense_repo: &Path, sparse_profile_output: &Path, 
     }
 
     let mut f = File::create(&sparse_profile_output).context("creating output file")?;
-    f.write_all(&SPARSE_PROFILE_PRELUDE.as_bytes()).context("writing sparse profile prelude")?;
+    f.write_all(&SPARSE_PROFILE_PRELUDE.as_bytes())
+        .context("writing sparse profile prelude")?;
     for dir in &query_dirs {
         let mut line = Vec::<u8>::new();
         line.extend(b"/"); // Paths have a '/' prefix
@@ -295,8 +352,8 @@ pub fn generate_sparse_profile(dense_repo: &Path, sparse_profile_output: &Path, 
             line.extend(relative_path.as_os_str().as_bytes());
         }
         line.extend(b"/\n"); // Paths have a '/' suffix
-        f.write_all(&line[..]).with_context(|| { format!("writing output (item={:?})", dir) })?;
-
+        f.write_all(&line[..])
+            .with_context(|| format!("writing output (item={:?})", dir))?;
     }
     f.sync_data().context("syncing data")?;
     // log::info!("Reduced {} coordinate file sets to {} directories", &coordinates.len(), &reduced_dirs.len());
@@ -308,7 +365,6 @@ struct BazelRepo {
     dense_repo: PathBuf,
     coordinates: Vec<String>,
 }
-
 
 impl BazelRepo {
     pub fn new(dense_repo: &Path, coordinates: Vec<String>) -> Result<Self> {
@@ -382,12 +438,17 @@ impl BazelRepo {
         use std::process::{Command, Stdio};
         use tempfile::Builder;
 
-        let temp_dir = Builder::new().prefix("focus-parachute-work").tempdir().context("creating a temporary directory")?;
+        let temp_dir = Builder::new()
+            .prefix("focus-parachute-work")
+            .tempdir()
+            .context("creating a temporary directory")?;
         let temp_dir_path = temp_dir.path();
         let bazel_out_path = &temp_dir_path.join("bazel-query.stdout");
-        let bazel_out_file = File::create(&bazel_out_path).context("opening stdout destination file for bazel command")?;
+        let bazel_out_file = File::create(&bazel_out_path)
+            .context("opening stdout destination file for bazel command")?;
         let bazel_err_path = &temp_dir_path.join("bazel-query.stderr");
-        let bazel_err_file = File::create(&bazel_err_path).context("opening stderr destination file for bazel command")?;
+        let bazel_err_file = File::create(&bazel_err_path)
+            .context("opening stderr destination file for bazel command")?;
 
         let mut directories = Vec::<String>::new();
 
@@ -416,12 +477,18 @@ impl BazelRepo {
             for line in std::io::BufReader::new(file).lines() {
                 if let Ok(line) = line {
                     let path = PathBuf::from(&line);
-                    if !&line.starts_with("@") && !path.starts_with("bazel-out/") && !path.starts_with("external/") {
+                    if !&line.starts_with("@")
+                        && !path.starts_with("bazel-out/")
+                        && !path.starts_with("external/")
+                    {
                         let absolute_path = &self.dense_repo.join(&path);
                         if let Some(path) = absolute_path.to_str() {
                             directories.push(path.to_owned());
                         } else {
-                            bail!("Path '{}' contains characters that cannot be safely converted", &path.display());
+                            bail!(
+                                "Path '{}' contains characters that cannot be safely converted",
+                                &path.display()
+                            );
                         }
                     }
                 }
@@ -441,12 +508,17 @@ impl BazelRepo {
         use std::process::{Command, Stdio};
         use tempfile::Builder;
 
-        let temp_dir = Builder::new().prefix("focus-parachute-work").tempdir().context("creating a temporary directory")?;
+        let temp_dir = Builder::new()
+            .prefix("focus-parachute-work")
+            .tempdir()
+            .context("creating a temporary directory")?;
         let temp_dir_path = temp_dir.path();
         let bazel_out_path = &temp_dir_path.join("bazel-aquery.stdout");
-        let bazel_out_file = File::create(&bazel_out_path).context("opening stdout destination file for bazel command")?;
+        let bazel_out_file = File::create(&bazel_out_path)
+            .context("opening stdout destination file for bazel command")?;
         let bazel_err_path = &temp_dir_path.join("bazel-aquery.stderr");
-        let bazel_err_file = File::create(&bazel_err_path).context("opening stderr destination file for bazel command")?;
+        let bazel_err_file = File::create(&bazel_err_path)
+            .context("opening stderr destination file for bazel command")?;
 
         let mut sources = Vec::<String>::new();
 

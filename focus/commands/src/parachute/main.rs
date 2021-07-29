@@ -56,7 +56,6 @@ enum Subcommand {
         #[structopt(long)]
         coordinates: Coordinates,
 
-
         #[structopt(long)]
         branch: String,
     },
@@ -82,7 +81,7 @@ fn main() -> Result<()> {
         } => {
             client::create_sparse_clone(&dense_repo, &sparse_repo, &coordinates.0, &branch)?;
             Ok(())
-        },
+        }
 
         Subcommand::GenerateSparseProfile {
             dense_repo,
