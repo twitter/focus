@@ -1,0 +1,36 @@
+* TODO [bazel] Bazel simultaneous startup bug
+  Bazel fails to write a temp dir when it is started by multiple
+  threads in quick succession. On macOS, this is relatively easy to
+  reproduce. This probably has to do with Twitter's source wrapper
+  script, which IIRC uses mktemp with directories -- dangerous!
+
+  ```
+  [2021-07-29T06:17:32Z INFO  focus_parachute::sparse_repos] --- Begin bazel stderr ---
+  [2021-07-29T06:17:32Z INFO  focus_parachute::sparse_repos] INFO: Invocation ID: e86b73b7-e976-46f9-a296-62151d899df6
+  [2021-07-29T06:17:32Z INFO  focus_parachute::sparse_repos] ERROR: /var/folders/3_/l3ytpvb16wl34_j53pyc3lm40000gr/T/tmp.X05HC0mV/event.bin
+  [2021-07-29T06:17:32Z INFO  focus_parachute::sparse_repos] ERROR: Unable to write to '/var/folders/3_/l3ytpvb16wl34_j53pyc3lm40000gr/T/tmp.X05HC0mV/event.bin'. Omitting --build_event_binary_file. /var/folders/3_/l3ytpvb16wl34_j53pyc3lm40000gr/T/tmp.X05HC0mV/event.bin
+  [2021-07-29T06:17:32Z INFO  focus_parachute::sparse_repos] --- End bazel stderr ---
+  ```
+
+
+* TODO [sparse-repos] Write coordinates to a known location
+
+* TODO [sparse-repos] Write out some metadata to be included in stats about the repository
+
+* TODO [sparse-repos] Refactor the code for readability
+
+* TODO [sparse-repos] Better job control
+  If one thread dies, the program should just terminate quickly.
+
+* TODO [git] Diagnose regular index loading slowness
+
+* TODO [git] Diagnose sparse index loading slowness
+  This option appears to have disappeared in some builds?
+
+* TODO [git] Diagnose clone with `filter-sparse:blob=<sha>` slowness
+  It's much quicker to just transfer more data because the counting
+  objects phase takes forever.
+
+* TODO [git] [sre] Explore profile guided optimization
+
+* TODO [git] [sre] Explore link-time optimization
