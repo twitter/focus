@@ -1,5 +1,5 @@
-mod sparse_repos;
 mod detail;
+mod sparse_repos;
 mod testing;
 mod util;
 mod working_tree_synchronizer;
@@ -53,6 +53,9 @@ enum Subcommand {
 
         #[structopt(long)]
         coordinates: Coordinates,
+
+        #[structopt(long)]
+        filter_sparse: bool,
     },
 }
 
@@ -74,8 +77,16 @@ fn main() -> Result<()> {
             sparse_repo,
             branch,
             coordinates,
+            filter_sparse,
         } => {
-            sparse_repos::create_sparse_clone(&name, &dense_repo, &sparse_repo, &branch, &coordinates.0)?;
+            sparse_repos::create_sparse_clone(
+                &name,
+                &dense_repo,
+                &sparse_repo,
+                &branch,
+                &coordinates.0,
+                filter_sparse,
+            )?;
             Ok(())
         }
 
@@ -84,7 +95,11 @@ fn main() -> Result<()> {
             sparse_profile_output,
             coordinates,
         } => {
-            sparse_repos::generate_sparse_profile(&dense_repo, &sparse_profile_output, &coordinates.0)?;
+            sparse_repos::generate_sparse_profile(
+                &dense_repo,
+                &sparse_profile_output,
+                &coordinates.0,
+            )?;
             Ok(())
         }
 

@@ -12,13 +12,11 @@ use std::{
     env::current_dir,
     iter::FromIterator,
     path::PathBuf,
+    process::{Command, Stdio},
+    sync::{Arc, Barrier},
 };
 
 use crate::main;
-
-// Write out some metadata to be included in stats about the repository?
-
-// TODO: Write coordinates to a known location
 
 const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
 
@@ -54,8 +52,6 @@ fn add_implicit_coordinates(v: &mut Vec<String>) {
 }
 
 pub fn configure_dense_repo(temp_dir: &PathBuf, dense_repo: &PathBuf) -> Result<()> {
-    use std::process::{Command, Stdio};
-
     let git_out_path = &temp_dir.join("git.stdout");
     let git_out_file =
         File::create(&git_out_path).context("opening stdout destination file for git command")?;
@@ -83,15 +79,32 @@ pub fn configure_dense_repo(temp_dir: &PathBuf, dense_repo: &PathBuf) -> Result<
     Ok(())
 }
 
-// TODO: Refactor this nonsense to be struct-oriented instead of passing stuff all over the place.
-// TODO: Write sparse profiles for for use in `filter=sparse` by writing to the dense repo with `git hash-object`
-// TODO: Implement clones with `--filter=sparse:oid=<blob-ish>`
+// Write an object to a repo returning its identity.
+pub fn write_object(repo: &PathBuf, file: &PathBuf) -> Result<String> {
+    let output = Command::new(git_binary()?)
+        .arg("hash-object")
+        .arg("-w")
+        .arg(file)
+        .current_dir(&repo)
+        .output()?;
+
+    if !output.status.success() {
+        let error_contents = String::from_utf8(output.stderr).context("parsing stderr content")?;
+        bail!("git hash-object failed: {}", error_contents);
+    }
+
+    let output_contents = String::from_utf8(output.stdout).context("parsing stdout content")?;
+
+    Ok(output_contents.trim().to_owned())
+}
+
 pub fn create_sparse_clone(
     name: &String,
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
     coordinates: &Vec<String>,
+    filter_sparse: bool,
 ) -> Result<()> {
     let thread_builder = thread::Builder::new();
 
@@ -119,23 +132,26 @@ pub fn create_sparse_clone(
             .context("setting configuration options in the dense repo")?;
     }
 
+    let profile_generation_barrier = Arc::new(Barrier::new(2));
     let profile_generation_thread = {
         let cloned_temp_dir_path = temp_dir_path.to_owned();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
         let cloned_coordinates = computed_coordinates.to_vec().clone();
+        let cloned_profile_generation_barrier = profile_generation_barrier.clone();
 
         thread::Builder::new()
             .name("SparseProfileGeneration".to_owned())
             .spawn(move || {
-                log::info!("generating sparse profile");
+                log::info!("Generating sparse profile");
                 generate_sparse_profile(
                     &cloned_dense_repo,
                     &cloned_sparse_profile_output,
                     &cloned_coordinates,
                 )
                 .expect("failed to generate a sparse profile");
-                log::info!("finished generating sparse profile");
+                log::info!("Finished generating sparse profile");
+                cloned_profile_generation_barrier.wait();
             })
     };
 
@@ -161,37 +177,55 @@ pub fn create_sparse_clone(
             })
     };
 
+    // profile_generation_thread?
+    //     .join()
+    //     .expect("sparse profile generation thread exited abnormally");
+    project_view_generation_thread?
+        .join()
+        .expect("project view generation thread exited abnormally");
+
+    let profile_generation_joinable = profile_generation_thread.context("getting joinable")?;
+    if filter_sparse {
+        // If we filter using the 'sparse' technique, we have to wait for the sparse profile to be
+        // complete before cloning (since it reads it from the dense repo during clone).
+        profile_generation_barrier.wait();
+    }
+
     let clone_thread = {
         let cloned_temp_dir_path = temp_dir_path.to_owned();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_repo = sparse_repo.to_owned();
         let cloned_branch = branch.clone();
+        let cloned_sparse_profile_output = sparse_profile_output.clone();
 
         thread::Builder::new()
             .name("CloneRepository".to_owned())
             .spawn(move || {
-                log::info!("creating a template clone");
+                log::info!("Creating a template clone");
                 create_empty_sparse_clone(
                     &cloned_temp_dir_path,
                     &cloned_dense_repo,
                     &cloned_sparse_repo,
                     &cloned_branch,
+                    &cloned_sparse_profile_output,
+                    filter_sparse,
                 )
                 .expect("failed to create an empty sparse clone");
-                log::info!("finished creating a template clone");
+                log::info!("Finished creating a template clone");
             })
     };
-
-    profile_generation_thread?
-        .join()
-        .expect("sparse profile generation thread exited abnormally");
     clone_thread?
         .join()
         .expect("clone thread exited abnormally");
-    project_view_generation_thread?
-        .join()
-        .expect("project view generation thread exited abnormally");
 
+    if !filter_sparse {
+        // If we haven't awaited the profile generation thread, we we must now.
+        profile_generation_barrier.wait();
+    }
+
+    profile_generation_joinable
+        .join()
+        .expect("sparse profile generation thread exited abnormally");
     {
         let cloned_temp_dir_path = temp_dir_path.to_owned();
         let cloned_dense_repo = dense_repo.to_owned();
@@ -199,11 +233,11 @@ pub fn create_sparse_clone(
         let cloned_sparse_profile_output = sparse_profile_output.clone();
         let cloned_branch = branch.clone();
 
-        log::info!("configuring visible paths");
+        log::info!("Configuring visible paths");
         set_sparse_checkout(&cloned_temp_dir_path, sparse_repo, &sparse_profile_output)
             .context("setting up sparse checkout options")?;
 
-        log::info!("checking out the working copy");
+        log::info!("Checking out the working copy");
         switch_branches(
             &cloned_temp_dir_path,
             &cloned_dense_repo,
@@ -212,7 +246,7 @@ pub fn create_sparse_clone(
         )
         .context("switching branches")?;
 
-        log::info!("moving the project view into place");
+        log::info!("Moving the project view into place");
         let project_view_file_name = &project_view_output
             .file_name()
             .context("getting the file name failed")?;
@@ -229,14 +263,14 @@ pub fn set_sparse_checkout(
     sparse_profile: &PathBuf,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
-    use std::process::{Command, Stdio};
+
     {
         let git_out_path = &temp_dir.join("git-sparse-checkout-init.stdout");
         let git_out_file = File::create(&git_out_path)
             .context("opening stdout destination file for git command")?;
-        let git_err_path = &temp_dir.join("git-sparse-checkout-init.stderr");
-        let git_err_file = File::create(&git_err_path)
-            .context("opening stderr destination file for git command")?;
+        // let git_err_path = &temp_dir.join("git-sparse-checkout-init.stderr");
+        // let git_err_file = File::create(&git_err_path)
+        //     .context("opening stderr destination file for git command")?;
 
         let output = Command::new(git_binary()?)
             .arg("sparse-checkout")
@@ -245,14 +279,14 @@ pub fn set_sparse_checkout(
             // .arg("--no-sparse-index") // TODO: The sparse index is somehow slower. Figure it out.
             .current_dir(&sparse_repo)
             .stdout(Stdio::from(git_out_file))
-            .stderr(Stdio::from(git_err_file))
+            // .stderr(Stdio::from(git_err_file))
             .spawn()
             .context("spawning git sparse-checkout-init")?
             .wait_with_output()
             .context("awaiting git sparse-checkout-init")?;
         if !output.status.success() {
             exhibit_file(&git_out_path, "git sparse-checkout-init stdout")?;
-            exhibit_file(&git_err_path, "git sparse-checkout-init stderr")?;
+            // exhibit_file(&git_err_path, "git sparse-checkout-init stderr")?;
             bail!("git sparse-checkout-init failed");
         }
     }
@@ -297,7 +331,6 @@ pub fn switch_branches(
     branch: &String,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
-    use std::process::{Command, Stdio};
 
     let git_out_path = &temp_dir.join("git-switch.stdout");
     let git_out_file =
@@ -305,13 +338,12 @@ pub fn switch_branches(
     let git_err_path = &temp_dir.join("git-switch.stderr");
     let git_err_file =
         File::create(&git_err_path).context("opening stderr destination file for git command")?;
-    log::info!("checking out in '{}'", &sparse_repo.display());
+    log::info!("Checking out in '{}'", &sparse_repo.display());
     let output = Command::new(git_binary()?)
         .arg("checkout")
         .arg(branch)
         .current_dir(&sparse_repo)
         .stdout(Stdio::from(git_out_file))
-        // .stderr(Stdio::from(git_err_file))
         .spawn()
         .context("spawning git switch")?
         .wait_with_output()
@@ -331,12 +363,12 @@ pub fn create_empty_sparse_clone(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
+    sparse_profile_output: &PathBuf,
+    filter_sparse: bool,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
-    use std::process::{Command, Stdio};
 
-    let filtering_enabled = true; // If filtering is enabled, use URL-based local clone and disable --shared.
-    let mut dense_url = OsString::from(if filtering_enabled { "file://" } else { "" });
+    let mut dense_url = OsString::from("file://");
     dense_url.push(dense_repo);
 
     let sparse_repo_dir_parent = &sparse_repo
@@ -349,6 +381,19 @@ pub fn create_empty_sparse_clone(
     // let git_err_path = &temp_dir.join("git-clone.stderr");
     // let git_err_file = File::create(&git_err_path).context("opening stderr destination file for git command")?;
     // TODO: Support --filter=sparse:oid=<blob-ish>
+
+    let filter = if filter_sparse {
+        let profile_object_id = write_object(&dense_repo, &sparse_profile_output)
+            .context("writing sparse profile into dense repo")?;
+        log::info!(
+            "Wrote the sparse profile into the dense repo as {}",
+            &profile_object_id
+        );
+        format!("--filter=sparse:oid={}", &profile_object_id).to_owned()
+    } else {
+        "--filter=blob:none".to_owned()
+    };
+
     log::info!("Cloning {:?} into {:?}", &dense_url, &sparse_repo);
     let output = Command::new(git_binary()?)
         .arg("clone")
@@ -362,11 +407,7 @@ pub fn create_empty_sparse_clone(
         .arg("64")
         .arg("-b")
         .arg("master")
-        .arg(if filtering_enabled {
-            "--filter=blob:none"
-        } else {
-            "--shared"
-        }) // Server doesn't support filtering
+        .arg(filter)
         .arg(dense_url)
         .arg(sparse_repo)
         .current_dir(sparse_repo_dir_parent)
@@ -604,7 +645,7 @@ impl BazelRepo {
         use prost::Message;
         use std::fs::File;
         use std::io::prelude::*;
-        use std::process::{Command, Stdio};
+
         use tempfile::Builder;
 
         let temp_dir = Builder::new()
@@ -684,7 +725,7 @@ impl BazelRepo {
         use prost::Message;
         use std::fs::File;
         use std::io::prelude::*;
-        use std::process::{Command, Stdio};
+
         use tempfile::Builder;
 
         let temp_dir = Builder::new()
