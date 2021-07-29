@@ -47,6 +47,9 @@ enum Subcommand {
     },
 
     CreateSparseClone {
+        #[structopt(long)]
+        name: String,
+
         #[structopt(long, parse(from_os_str))]
         dense_repo: PathBuf,
 
@@ -54,10 +57,10 @@ enum Subcommand {
         sparse_repo: PathBuf,
 
         #[structopt(long)]
-        coordinates: Coordinates,
+        branch: String,
 
         #[structopt(long)]
-        branch: String,
+        coordinates: Coordinates,
     },
 }
 
@@ -74,12 +77,13 @@ fn main() -> Result<()> {
     let opt = ParachuteOpts::from_args();
     match opt.cmd {
         Subcommand::CreateSparseClone {
+            name,
             dense_repo,
             sparse_repo,
-            coordinates,
             branch,
+            coordinates,
         } => {
-            client::create_sparse_clone(&dense_repo, &sparse_repo, &coordinates.0, &branch)?;
+            client::create_sparse_clone(&name, &dense_repo, &sparse_repo, &branch, &coordinates.0)?;
             Ok(())
         }
 

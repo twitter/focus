@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use focus_formats::analysis::{Artifact, PathFragment};
 use std::ffi::OsString;
 use std::fs::File;
+use std::io::BufWriter;
 use std::io::prelude::*;
 use std::path::Path;
 use std::thread;
@@ -14,6 +15,8 @@ use std::{
 };
 
 use crate::main;
+
+// Write out some metadata to be included in stats about the repository?
 
 const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
 
@@ -36,7 +39,7 @@ fn exhibit_file(file: &Path, title: &str) -> Result<()> {
 }
 
 fn git_binary() -> Result<OsString> {
-    Ok(OsString::from("/Users/wilhelm/opt/git/bin/git"))
+    Ok(OsString::from("git"))
 }
 
 fn add_implicit_coordinates(v: &mut Vec<String>) {
@@ -48,12 +51,52 @@ fn add_implicit_coordinates(v: &mut Vec<String>) {
     v.extend(implicit_coordinates)
 }
 
+pub fn configure_dense_repo(
+    temp_dir: &PathBuf,
+    dense_repo: &PathBuf,
+) -> Result<()>
+{
+    use std::process::{Command, Stdio};
+
+    let git_out_path = &temp_dir.join("git.stdout");
+    let git_out_file = File::create(&git_out_path)
+        .context("opening stdout destination file for git command")?;
+    let git_err_path = &temp_dir.join("git.stderr");
+    let git_err_file = File::create(&git_err_path)
+        .context("opening stderr destination file for git command")?;
+
+    let output = Command::new(git_binary()?)
+        .arg("config")
+        .arg("uploadpack.allowFilter")
+        .arg("true")
+        .current_dir(&dense_repo)
+        .stdout(Stdio::from(git_out_file))
+        .stderr(Stdio::from(git_err_file))
+        .spawn()
+        .context("spawning git config")?
+        .wait_with_output()
+        .context("awaiting git config")?;
+    if !output.status.success() {
+        exhibit_file(&git_out_path, "git config stdout")?;
+        exhibit_file(&git_err_path, "git config stderr")?;
+        bail!("configuring dense repo failed");
+    }
+
+    Ok(())
+}
+
+// TODO: Refactor this nonsense to be struct-oriented instead of passing stuff all over the place.
+// TODO: Write sparse profiles for for use in `filter=sparse` by writing to the dense repo with `git hash-object`
+// TODO: Implement clones with `--filter=sparse:oid=<blob-ish>`
 pub fn create_sparse_clone(
+    name: &String,
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
-    coordinates: &Vec<String>,
     branch: &String,
+    coordinates: &Vec<String>,
 ) -> Result<()> {
+    let thread_builder = thread::Builder::new();
+
     let temp_dir = tempfile::Builder::new()
         .prefix("focus-parachute-work")
         .tempdir()
@@ -61,25 +104,62 @@ pub fn create_sparse_clone(
     let temp_dir_path = temp_dir.path();
 
     let sparse_profile_output = temp_dir_path.join("sparse-checkout");
-    let mut coordinates = coordinates.clone();
-    add_implicit_coordinates(&mut coordinates);
+    let project_view_output = {
+        let project_view_name = format!("focus-{}.bazelproject", &name);
+        temp_dir_path.join(project_view_name)
+    };
+
+    let computed_coordinates = {
+        let mut coordinates = coordinates.clone();
+        add_implicit_coordinates(&mut coordinates);
+        coordinates
+    };
+
+    {
+        let cloned_temp_dir_path = temp_dir_path.to_owned();
+        configure_dense_repo(&cloned_temp_dir_path, &dense_repo)
+            .context("setting configuration options in the dense repo")?;
+    }
 
     let profile_generation_thread = {
         let cloned_temp_dir_path = temp_dir_path.to_owned();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
-        let cloned_coordinates = coordinates.to_vec().clone();
+        let cloned_coordinates = computed_coordinates.to_vec().clone();
 
-        thread::spawn(move || {
-            log::info!("generating sparse profile");
-            generate_sparse_profile(
-                &cloned_dense_repo,
-                &cloned_sparse_profile_output,
-                &cloned_coordinates,
-            )
-            .expect("failed to generate a sparse profile");
-            log::info!("finished generating sparse profile");
-        })
+        thread::Builder::new()
+            .name("SparseProfileGeneration".to_owned())
+            .spawn(move || {
+                log::info!("generating sparse profile");
+                generate_sparse_profile(
+                    &cloned_dense_repo,
+                    &cloned_sparse_profile_output,
+                    &cloned_coordinates,
+                )
+                    .expect("failed to generate a sparse profile");
+                log::info!("finished generating sparse profile");
+            })
+    };
+
+    let project_view_generation_thread = {
+        let cloned_name = name.to_owned();
+        let cloned_dense_repo = dense_repo.to_owned();
+        let cloned_project_view_output = project_view_output.clone();
+        let cloned_coordinates = computed_coordinates.to_vec().clone();
+        // let cloned_sparse_repo = sparse_repo.to_owned();
+        // let cloned_branch = branch.clone();
+
+        thread::Builder::new()
+            .name("ProjectViewGeneration".to_owned())
+            .spawn(move || {
+                log::info!("Generating project view");
+                write_project_view_file(
+                    &cloned_dense_repo,
+                    &cloned_project_view_output,
+                    &cloned_coordinates,
+                ).expect("generating the project view");
+                log::info!("Finished generating project view");
+            })
     };
 
     let clone_thread = {
@@ -88,7 +168,9 @@ pub fn create_sparse_clone(
         let cloned_sparse_repo = sparse_repo.to_owned();
         let cloned_branch = branch.clone();
 
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name("CloneRepository".to_owned())
+            .spawn(move || {
             log::info!("creating a template clone");
             create_empty_sparse_clone(
                 &cloned_temp_dir_path,
@@ -101,10 +183,12 @@ pub fn create_sparse_clone(
         })
     };
 
-    profile_generation_thread
+    profile_generation_thread?
         .join()
         .expect("sparse profile generation thread exited abnormally");
-    clone_thread.join().expect("clone thread exited abnormally");
+    clone_thread?
+        .join()
+        .expect("clone thread exited abnormally");
 
     {
         let cloned_temp_dir_path = temp_dir_path.to_owned();
@@ -287,6 +371,67 @@ pub fn create_empty_sparse_clone(
         bail!("git clone failed");
     }
 
+    // Write an excludes file that ignores Focus-specific modifications in the sparse repo.
+    let excludes_path = &dense_repo.join(".git").join("info").join("excludes");
+    {
+        use std::fs::OpenOptions;
+        let mut buffer = BufWriter::new(
+            OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(excludes_path)
+                .context("opening the info/excludes file for writing")?
+        );
+        buffer.write_all(b"WORKSPACE.focus\n")?;
+        buffer.write_all(b"BUILD.focus\n")?;
+        buffer.write_all(b"*_focus.bzl\n")?;
+        buffer.write_all(b"focus-*.bazelproject\n")?;
+        buffer.write_all(b"focus-*.bazelrc\n")?;
+        buffer.write_all(b"\n")?;
+        buffer.flush()?;
+    }
+
+    Ok(())
+}
+
+fn write_project_view_file(
+    dense_repo: &PathBuf,
+    bazel_project_view_path: &Path,
+    coordinates: &Vec<String>,
+) -> Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let client = BazelRepo::new(dense_repo, coordinates.clone())?;
+    let mut directories = Vec::<String>::new();
+    for coordinate in coordinates {
+        let directories =
+            client
+            .involved_directories_query(&coordinate, Some(2), true)
+            .context("determining directories for project view")?;
+    }
+
+    if directories.is_empty() {
+        bail!("Refusing to generate a project view with an empty set of directories.");
+    }
+
+    let mut f = File::create(&bazel_project_view_path).context("creating output file")?;
+
+    let mut buffer = BufWriter::new(f);
+    buffer.write_all(b"workspace_type: java\n")?;
+    buffer.write_all(b"\n")?;
+    buffer.write_all(b"additional_languages:\n")?;
+    buffer.write_all(b"  scala\n")?;
+    buffer.write_all(b"\n")?;
+    buffer.write_all(b"derive_targets_from_directories: true\n")?;
+    buffer.write_all(b"\n")?;
+    buffer.write_all(b"directories:\n")?;
+    for dir in &directories {
+        buffer.write_all(b"  ")?;
+        buffer.write_all(dir.as_bytes())?;
+    }
+    buffer.write_all(b"\n")?;
+    buffer.flush()?;
+
     Ok(())
 }
 
@@ -304,7 +449,7 @@ pub fn generate_sparse_profile(
         let sources = client
             .involved_sources_aquery(&coordinate)
             .with_context(|| format!("determining involved sources for {}", coordinate))?;
-        log::info!("{}: {} source files", coordinate, &sources.len());
+        log::info!("Action query: {} yielded {} source files", coordinate, &sources.len());
         source_paths.extend(sources);
     }
 
@@ -314,19 +459,16 @@ pub fn generate_sparse_profile(
         .involved_directories_for_sources(source_paths.iter())
         .context("determining involved directories for sources")?;
 
-    let mut reduced_dirs = reduce_to_shortest_common_prefix(&aquery_dirs)
-        .context("reducing paths to shortest common prefix (second pass)")?;
-
     let mut query_dirs = BTreeSet::<PathBuf>::new();
-    query_dirs.extend(reduced_dirs);
+    query_dirs.extend(aquery_dirs);
 
     for coordinate in coordinates {
         // Do Bazel query by package for each coordinate
         let directories_for_coordinate = client
-            .involved_directories_query(&coordinate)
+            .involved_directories_query(&coordinate, None, false)
             .with_context(|| format!("determining involved directories for {}", coordinate))?;
         log::info!(
-            "{}: {} directories",
+            "Dependency query: {} yielded {} directories",
             coordinate,
             &directories_for_coordinate.len()
         );
@@ -335,6 +477,10 @@ pub fn generate_sparse_profile(
             query_dirs.insert(absolute_path);
         }
     }
+
+    let mut reduced_dirs = reduce_to_shortest_common_prefix(&query_dirs)
+        .context("reducing paths to shortest common prefix (final pass)")?;
+
 
     let mut f = File::create(&sparse_profile_output).context("creating output file")?;
     f.write_all(&SPARSE_PROFILE_PRELUDE.as_bytes())
@@ -428,7 +574,7 @@ impl BazelRepo {
     }
 
     // Use bazel query to get involved packages and turn them into directories.
-    pub fn involved_directories_query(&self, coordinate: &str) -> Result<Vec<String>> {
+    pub fn involved_directories_query(&self, coordinate: &str, depth: Option<usize>, identity: bool) -> Result<Vec<String>> {
         // N.B. `bazel aquery` cannot handle unions ;(
 
         use focus_formats::analysis::*;
@@ -452,7 +598,17 @@ impl BazelRepo {
 
         let mut directories = Vec::<String>::new();
 
-        let query = format!("deps({})", coordinate);
+        let identity_clause = if identity {
+            format!("{} union ", coordinate)
+        } else {
+            "".to_owned()
+        };
+
+        let query = if let Some(depth) = depth {
+            format!("{}deps({}, {})", identity_clause, coordinate, depth)
+        } else {
+            format!("{}deps({})", identity_clause, coordinate)
+        };
 
         // Run Bazel query
         let output = Command::new("./bazel")
