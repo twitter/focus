@@ -364,8 +364,6 @@ pub fn switch_branches(
     log::info!("Checking out in '{}'", &sparse_repo.display());
     let output = Command::new(git_binary()?)
         .arg("checkout")
-        .arg("--quiet")
-        .arg(branch)
         .current_dir(&sparse_repo)
         .stdout(Stdio::from(git_out_file))
         .spawn()
