@@ -36,9 +36,9 @@
 * TODO [git] [sre] Explore link-time optimization
 
 
-* Sparse indices vs regular indices
+* Sparse indices vs regular indices (sparse repo); no watchman
 ** git version 2.32.0
-*** Sparse index
+*** Sparse (cone) index
     ```
     git status > /dev/null  1.98s user 1.07s system 126% cpu 2.407 total
     git status > /dev/null  2.00s user 1.05s system 127% cpu 2.399 total
@@ -73,4 +73,28 @@
     git status > /dev/null  0.48s user 1.02s system 179% cpu 0.836 total
     git status > /dev/null  0.46s user 1.02s system 182% cpu 0.810 total
     git status > /dev/null  0.47s user 1.00s system 182% cpu 0.809 total
+    ```
+
+* Sparse indices vs regular indices (sparse repo); no watchman
+*** Sparse (cone) index
+    ```
+
+    ```
+*** Regular index
+    ```
+    git status > /dev/null  0.57s user 0.47s system 174% cpu 0.593 total                                                                                                                    
+    git status > /dev/null  0.39s user 0.34s system 210% cpu 0.344 total                                                                                                                    
+    git status > /dev/null  0.41s user 0.37s system 235% cpu 0.331 total                                                                                                                    
+    git status > /dev/null  0.37s user 0.33s system 219% cpu 0.319 total                                                                                                                    
+    git status > /dev/null  0.40s user 0.37s system 232% cpu 0.332 total
+    git status > /dev/null  0.38s user 0.33s system 216% cpu 0.329 total
+    git status > /dev/null  0.41s user 0.37s system 236% cpu 0.330 total
+    git status > /dev/null  0.41s user 0.37s system 233% cpu 0.334 total
+    git status > /dev/null  0.42s user 0.37s system 230% cpu 0.341 total
+    git status > /dev/null  0.40s user 0.35s system 222% cpu 0.339 total
+    git status > /dev/null  0.41s user 0.36s system 236% cpu 0.327 total
+    git status > /dev/null  0.41s user 0.37s system 232% cpu 0.335 total
+    git status > /dev/null  0.41s user 0.37s system 231% cpu 0.337 total
+    git status > /dev/null  0.40s user 0.36s system 231% cpu 0.329 total
+    git status > /dev/null  0.43s user 0.36s system 230% cpu 0.343 total
     ```
