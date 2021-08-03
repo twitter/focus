@@ -3,6 +3,7 @@ mod sparse_repos;
 mod testing;
 mod util;
 mod working_tree_synchronizer;
+mod sandbox;
 
 #[macro_use]
 extern crate lazy_static;
@@ -57,6 +58,17 @@ enum Subcommand {
         #[structopt(long)]
         filter_sparse: bool,
     },
+
+    Layers{
+        #[structopt(long, parse(from_os_str))]
+        sparse_repo: PathBuf,
+    },
+
+    AddLayer{
+    },
+
+    RemoveLayer{
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -88,7 +100,34 @@ fn main() -> Result<()> {
                 filter_sparse,
             )?;
             Ok(())
-        }
+        },
+
+        Subcommand::Layers {
+            sparse_repo,
+        } => {
+            println!("List layers");
+            Ok(())
+        },
+
+        // Subcommand::ShowLayer {
+        //     name,
+        //     dense_repo,
+        //     sparse_repo,
+        //     coordinates,
+        //     filter_sparse,
+        // } => {
+
+        // },
+
+        // Subcommand::HideLayer {
+        //     name,
+        //     dense_repo,
+        //     sparse_repo,
+        //     coordinates,
+        //     filter_sparse,
+        // } => {
+
+        // },
 
         Subcommand::GenerateSparseProfile {
             dense_repo,

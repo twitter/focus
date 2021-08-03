@@ -16,8 +16,7 @@ log = "0.4.14"
 thiserror = "1.0.26"
 dirs = "3.0.2"
 git2 = { version = "0.13.20", default-features = false }
-serde = "1.0.126"
-serde_derive = "1.0.126"
+serde = "1.0.127"
 signal-hook = "0.3.9"
 structopt = "0.3.22"
 tempfile = "3.2.0"
@@ -32,6 +31,9 @@ lazy_static = "1.4.0"
 sha2 = "0.9.5"
 prost = "0.8.0"
 walkdir = "2.3.2"
+
+[dev-dependencies]
+serde_derive = "1.0.127"
 
 [[bin]]
 name = "focus-treesnap"

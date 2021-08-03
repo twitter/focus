@@ -16,9 +16,25 @@ use std::{
     sync::{Arc, Barrier},
 };
 
-use crate::main;
-
 const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
+
+// trait CommandOutputHandler {
+// }
+
+// struct CommandExecutor {
+//     path: PathBuf,
+// }
+
+// impl CommandExecutor {
+//     fn new(path: &Path) -> Result<Self> {
+//         Ok(Self{path: path.to_owned()})
+//     }
+
+//     fn run_command(
+//         stdout_file_handler: Option<CommandOutputHandler>,
+//         stderr_file_handler: Option<CommandOutputHandler>) -> Result<> {
+//     }
+// }
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
     use std::fs::File;

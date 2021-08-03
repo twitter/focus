@@ -3,5 +3,4 @@ members = [
         "focus/commands",
         "focus/internals",
         "focus/formats",        
-        # "focus/delegate",
 ]
