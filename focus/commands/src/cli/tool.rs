@@ -10,13 +10,19 @@ use std::{
 pub struct Tool {
     name: String,
     executable: OsString,
+    prefix_args: Vec<OsString>,
 }
 
 impl Tool {
-    pub fn new(name: &str, executable: &OsStr) -> Result<Self> {
+    pub fn new(
+        name: &str,
+        executable: &OsStr,
+        prefix_args: Option<&Vec<OsString>>,
+    ) -> Result<Self> {
         Ok(Self {
             name: name.to_owned(),
             executable: executable.to_owned(),
+            prefix_args: prefix_args.unwrap_or(&Vec::<OsString>::new()).to_owned(),
         })
     }
 
@@ -24,7 +30,6 @@ impl Tool {
         let (file, path) = sandbox
             .create_file(Some(name), Some(extension))
             .with_context(|| format!("creating file to capture {}", name))?;
-
         Ok((Stdio::from(file), path))
     }
 
@@ -37,12 +42,16 @@ impl Tool {
     ) -> Result<InvocationResult> {
         let (stdout_stdio, stdout_path) = Self::captor(&self.name, "stdout", &sandbox)?;
         let (stderr_stdio, stderr_path) = Self::captor(&self.name, "stderr", &sandbox)?;
-        let args = args.unwrap_or(&Vec::<OsString>::new()).to_owned();
+        let mut arguments = self.prefix_args.clone();
+        if let Some(args) = args {
+            arguments.extend(args.iter().map(|arg| arg.to_owned()));
+        }
+
         let exit_status = Command::new(&self.executable)
             .stdin(stdin_file.unwrap_or(Stdio::null()))
             .stdout(stdout_stdio)
             .stderr(stderr_stdio)
-            .args(&args)
+            .args(&arguments)
             .spawn()
             .with_context(|| format!("spawning {}", self.name))?
             .wait()
@@ -51,7 +60,7 @@ impl Tool {
         Ok(InvocationResult {
             name: self.name.clone(),
             binary: self.executable.to_owned(),
-            args: args,
+            args: arguments,
             exit_status,
             stdout_path,
             stderr_path,
@@ -152,17 +161,17 @@ mod tests {
         init_logging();
         let sandbox = Sandbox::new(false)?;
         let (mut file, path) = sandbox.create_file(None, Some("txt"))?;
-        let original_contents = "hello there\n".as_bytes();
-        file.write(original_contents)?;
+        let original_contents = "hello there\n";
+        file.write(original_contents.as_bytes())?;
         file.seek(SeekFrom::Start(0))?;
         file.sync_all()?;
-        let cat = Tool::new("cat", OsStr::new("cat"))?;
+        let cat = Tool::new("cat", OsStr::new("cat"), None)?;
         let reopened_file = File::open(path).context("reopening file")?;
         let invocation = cat.invoke(None, None, Some(Stdio::from(reopened_file)), &sandbox)?;
         assert!(invocation.or_display_logs().is_ok());
         let mut reader = BufReader::new(File::open(invocation.stdout_path())?);
-        let mut contents = Vec::<u8>::new();
-        reader.read_to_end(&mut contents)?;
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents)?;
         assert_eq!(contents, original_contents);
 
         Ok(())
@@ -172,10 +181,8 @@ mod tests {
     fn arg_handling() -> Result<()> {
         init_logging();
         let sandbox = Sandbox::new(false)?;
-        let original_contents = "fee fie foe fum".as_bytes();
-        let echo = Tool::new("echo", OsStr::new("echo"))?;
+        let echo = Tool::new("echo1", OsStr::new("echo"), Some(&vec![OsString::from("-n")]))?;
         let args = vec![
-            OsString::from("-n"),
             OsString::from("fee"),
             OsString::from("fie"),
             OsString::from("foe"),
@@ -184,9 +191,27 @@ mod tests {
         let invocation = echo.invoke(Some(&args), None, None, &sandbox)?;
         assert!(invocation.or_display_logs().is_ok());
         let mut reader = BufReader::new(File::open(invocation.stdout_path())?);
-        let mut contents = Vec::<u8>::new();
-        reader.read_to_end(&mut contents)?;
-        assert_eq!(contents, original_contents);
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents)?;
+        let expected_contents = "fee fie foe fum";
+        assert_eq!(contents, expected_contents);
+
+        Ok(())
+    }
+
+    #[test]
+    fn arg_handling_default_args() -> Result<()> {
+        init_logging();
+        let sandbox = Sandbox::new(false)?;
+        let echo = Tool::new("echo1", OsStr::new("echo"), Some(&vec![OsString::from("-n"), OsString::from("howdy")]))?;
+        let args = vec![OsString::from("hey"), OsString::from("hello")];
+        let invocation = echo.invoke(Some(&args), None, None, &sandbox)?;
+        assert!(invocation.or_display_logs().is_ok());
+        let mut reader = BufReader::new(File::open(invocation.stdout_path())?);
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents)?;
+        let expected_contents = "howdy hey hello";
+        assert_eq!(contents, expected_contents);
 
         Ok(())
     }
