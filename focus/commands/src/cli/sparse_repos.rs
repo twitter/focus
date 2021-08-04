@@ -18,24 +18,6 @@ use std::{
 
 const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
 
-// trait CommandOutputHandler {
-// }
-
-// struct CommandExecutor {
-//     path: PathBuf,
-// }
-
-// impl CommandExecutor {
-//     fn new(path: &Path) -> Result<Self> {
-//         Ok(Self{path: path.to_owned()})
-//     }
-
-//     fn run_command(
-//         stdout_file_handler: Option<CommandOutputHandler>,
-//         stderr_file_handler: Option<CommandOutputHandler>) -> Result<> {
-//     }
-// }
-
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
     use std::fs::File;
     use std::io::{self, BufRead};
@@ -248,7 +230,8 @@ pub fn create_sparse_clone(
                     &cloned_branch,
                     &cloned_sparse_profile_output,
                     filter_sparse,
-                ).expect("failed to create an empty sparse clone");
+                )
+                .expect("failed to create an empty sparse clone");
                 // configure_sparse_repo(&cloned_temp_dir_path, &cloned_sparse_repo).expect("failed to configure sparse clone");
                 // log::info!("Finished creating a template clone");
             })
@@ -474,7 +457,7 @@ pub fn create_empty_sparse_clone(
                 .write(true)
                 .create(true)
                 .open(excludes_path)
-                .context("opening the info/excludes file for writing")?
+                .context("opening the info/excludes file for writing")?,
         );
         buffer.write_all(b"WORKSPACE.focus\n")?;
         buffer.write_all(b"BUILD.focus\n")?;
@@ -488,8 +471,7 @@ pub fn create_empty_sparse_clone(
     Ok(())
 }
 
-fn allowable_project_view_directory_predicate(dense_repo: &Path,
-                                              directory: &Path) -> bool {
+fn allowable_project_view_directory_predicate(dense_repo: &Path, directory: &Path) -> bool {
     let scrooge_internal = dense_repo.join("scrooge-internal");
     let loglens = dense_repo.join("loglens");
     !directory.starts_with(scrooge_internal) && !directory.starts_with(loglens)

@@ -1,18 +1,19 @@
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
-use tempfile::{Builder, TempDir};
 use log;
 use std::fs;
-use std::fs::File; use std::sync::atomic::{AtomicUsize, Ordering};
+use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tempfile::{Builder, TempDir};
 
-struct Sandbox {
+pub struct Sandbox {
     temp_dir: Option<tempfile::TempDir>,
     path: PathBuf,
     serial_sequence: AtomicUsize,
 }
 
 impl Sandbox {
-    fn new(preserve_contents: bool) -> Result<Self> {
+    pub fn new(preserve_contents: bool) -> Result<Self> {
         let underlying: TempDir = tempfile::Builder::new()
             .prefix("focus")
             .tempdir()
@@ -24,7 +25,10 @@ impl Sandbox {
             drop(&underlying);
             underlying.close().context("closing temporary directory")?;
             fs::create_dir_all(&path).context("recreating the directory")?;
-            log::info!("Created sandbox in '{}', which will not be cleaned up at exit", &path.display());
+            log::info!(
+                "Created sandbox in '{}', which will not be cleaned up at exit",
+                &path.display()
+            );
 
             None
         } else {
@@ -33,10 +37,18 @@ impl Sandbox {
 
         let serial_sequence = AtomicUsize::new(0);
 
-        Ok(Self{temp_dir, path, serial_sequence})
+        Ok(Self {
+            temp_dir,
+            path,
+            serial_sequence,
+        })
     }
 
-    fn create_file(&self, prefix: Option<&str>, extension: Option<&str>) -> Result<(File, PathBuf)> {
+    pub fn create_file(
+        &self,
+        prefix: Option<&str>,
+        extension: Option<&str>,
+    ) -> Result<(File, PathBuf)> {
         let mut path = self.path.to_owned();
 
         let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
@@ -51,17 +63,17 @@ impl Sandbox {
         Ok((file, path))
     }
 
-    fn path(&self) -> &Path {
+    pub fn path(&self) -> &Path {
         self.path.as_path()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use anyhow::{bail, Result};
     use super::*;
-    use std::fs;
+    use anyhow::{bail, Result};
     use std::ffi::OsStr;
+    use std::fs;
 
     #[test]
     fn sandbox_deletion() -> Result<()> {
@@ -93,7 +105,7 @@ mod tests {
                 let s = format!("hello-{:x}.txt", 0 as usize);
                 let expected = OsStr::new(&s);
                 assert_eq!(&path.file_name().unwrap(), &expected);
-            },
+            }
             _ => bail!("expected a file"),
         }
         match sandbox.create_file(None, Some("txt")) {
@@ -101,7 +113,7 @@ mod tests {
                 let s = format!("unknown-{:x}.txt", 1 as usize);
                 let expected = OsStr::new(&s);
                 assert_eq!(&path.file_name().unwrap(), &expected);
-            },
+            }
             _ => bail!("expected a file"),
         }
         match sandbox.create_file(Some("adieu"), None) {
@@ -109,7 +121,7 @@ mod tests {
                 let s = format!("adieu-{:x}", 2 as usize);
                 let expected = OsStr::new(&s);
                 assert_eq!(&path.file_name().unwrap(), &expected);
-            },
+            }
             _ => bail!("expected a file"),
         }
 
