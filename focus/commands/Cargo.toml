@@ -35,10 +35,18 @@ walkdir = "2.3.2"
 [dev-dependencies]
 serde_derive = "1.0.127"
 
+
+##
+## Focus CLI: The primary UI for Project Focused Development
+##
 [[bin]]
-name = "focus-treesnap"
+name = "focus"
+path = "src/cli/main.rs"
+
+##
+## Treesnap: Tools to produce source tree images
+##
+[[bin]]
+name = "treesnap"
 path = "src/treesnap/main.rs"
 
-[[bin]]
-name = "focus-parachute"
-path = "src/parachute/main.rs"
