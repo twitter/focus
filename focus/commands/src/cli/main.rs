@@ -4,6 +4,7 @@ mod testing;
 mod util;
 mod working_tree_synchronizer;
 mod sandbox;
+mod tool;
 
 #[macro_use]
 extern crate lazy_static;
