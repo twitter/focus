@@ -11,7 +11,6 @@ extern crate lazy_static;
 
 use anyhow::{bail, Result};
 use env_logger::{self, Env};
-use log::error;
 use std::{path::PathBuf, str::FromStr};
 use structopt::StructOpt;
 
