@@ -15,7 +15,7 @@ pub struct Sandbox {
 impl Sandbox {
     pub fn new(preserve_contents: bool) -> Result<Self> {
         let underlying: TempDir = tempfile::Builder::new()
-            .prefix("focus")
+            .prefix("focus.")
             .tempdir()
             .context("creating a temporary directory")?;
         let path: PathBuf = (&underlying.path().to_path_buf()).to_owned();
@@ -49,18 +49,18 @@ impl Sandbox {
         prefix: Option<&str>,
         extension: Option<&str>,
     ) -> Result<(File, PathBuf)> {
-        let mut path = self.path.to_owned();
-
+        let parent = self.path.to_owned();
+let mut path = PathBuf::new();
         let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
         let name = format!("{}-{:x}", prefix.unwrap_or("unknown"), serial);
         path.set_file_name(name);
         if let Some(extension) = extension {
             path.set_extension(extension);
         }
+        let qualified_path = parent.join(path);
+        let file = File::create(&qualified_path.as_path()).context("creating a temporary file")?;
 
-        let mut file = File::create(&path.as_path()).context("creating a temporary file")?;
-
-        Ok((file, path))
+        Ok((file, qualified_path))
     }
 
     pub fn path(&self) -> &Path {
