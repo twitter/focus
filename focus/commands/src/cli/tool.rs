@@ -33,7 +33,7 @@ pub struct SandboxCommand {
 }
 
 #[derive(Debug)]
-enum SandboxCommandOutput {
+pub enum SandboxCommandOutput {
     All,
     Stdout,
     Stderr,
@@ -65,6 +65,10 @@ impl SandboxCommand {
             Some(path) => (Stdio::from(File::open(&path)?), path.to_owned()),
             None => output_file("stderr").context("preparing stderr")?,
         };
+
+        command.stdin(stdin)
+        .stdout(stdout)
+        .stderr(stderr);
 
         Ok(Self {
             stdout_path,
@@ -116,14 +120,13 @@ impl SandboxCommand {
         use std::io::prelude::*;
 
         let path = match output {
-            SandboxCommandOutput::Stdout => self.stdout_path,
-            SandboxCommandOutput::Stderr => self.stderr_path,
+            SandboxCommandOutput::Stdout => &self.stdout_path,
+            SandboxCommandOutput::Stderr => &self.stderr_path,
             _ => bail!("cannot read all outputs into one string"),
         };
 
-        let reader = BufReader::new(File::open(path)?);
-        let mut output = String::new();
-        reader.read_to_string(&mut output_string)?;
+        let mut reader = BufReader::new(File::open(path)?);
+        reader.read_to_string(output_string)?;
         Ok(())
     }
 }
@@ -132,7 +135,7 @@ pub fn os_strings<'a, I>(iter: I) -> Vec<OsString>
 where
     I: IntoIterator<Item = &'a str>,
 {
-    let results = Vec::<OsString>::new();
+    let mut results = Vec::<OsString>::new();
     results.extend(iter.into_iter().map(|s| OsString::from(s)));
     results
 }
@@ -241,7 +244,7 @@ impl InvocationResult {
 
     fn file_contents_trimmed(path: &Path) -> Result<String> {
         use std::io::prelude::*;
-        let reader = BufReader::new(File::open(path)?);
+        let mut reader = BufReader::new(File::open(path)?);
         let mut output = String::new();
         reader.read_to_string(&mut output)?;
         Ok(output)
@@ -361,8 +364,10 @@ mod tests {
     fn sandboxed_command() -> Result<()> {
         init_logging();
         let sandbox = Sandbox::new(false)?;
-        let command = Command::new("echo").arg("-n").arg("hey").arg("there");
-        let sc = SandboxCommand::new(command, &sandbox)?;
+        let mut command = Command::new("echo");
+        let sc = SandboxCommand::new(&mut command, &sandbox)?;
+        log::info!("c={:?}", &command);
+        command.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
         sc.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
         assert_eq!(output_string, "hey there");
