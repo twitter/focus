@@ -9,9 +9,10 @@ mod working_tree_synchronizer;
 #[macro_use]
 extern crate lazy_static;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
-use std::{path::PathBuf, str::FromStr};
+use sandbox::Sandbox;
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use structopt::StructOpt;
 
 #[derive(Debug)]
@@ -28,17 +29,6 @@ impl FromStr for Coordinates {
 
 #[derive(StructOpt, Debug)]
 enum Subcommand {
-    GenerateSparseProfile {
-        #[structopt(long, parse(from_os_str))]
-        dense_repo: PathBuf,
-
-        #[structopt(long, parse(from_os_str))]
-        sparse_profile_output: PathBuf,
-
-        #[structopt(long)]
-        coordinates: Coordinates,
-    },
-
     CreateSparseClone {
         #[structopt(long)]
         name: String,
@@ -64,14 +54,23 @@ enum Subcommand {
         sparse_repo: PathBuf,
     },
 
-    AddLayer {},
+    // PushLayer {
+    //     #[structopt(long, parse(from_os_str))]
+    //     sparse_repo: PathBuf,
+    // },
 
-    RemoveLayer {},
+    // PopLayer {
+    //     #[structopt(long, parse(from_os_str))]
+    //     sparse_repo: PathBuf,
+    // },
 }
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Focused Development Tools")]
 struct ParachuteOpts {
+    #[structopt(long)]
+    preserve_sandbox: bool,
+
     #[structopt(subcommand)]
     cmd: Subcommand,
 }
@@ -80,6 +79,9 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let opt = ParachuteOpts::from_args();
+
+    let sandbox = Arc::new(Sandbox::new(opt.preserve_sandbox).context("Creating a sandbox")?);
+
     match opt.cmd {
         Subcommand::CreateSparseClone {
             name,
@@ -90,6 +92,7 @@ fn main() -> Result<()> {
             filter_sparse,
         } => {
             sparse_repos::create_sparse_clone(
+                sandbox,
                 &name,
                 &dense_repo,
                 &sparse_repo,
@@ -124,18 +127,19 @@ fn main() -> Result<()> {
         // } => {
 
         // },
-        Subcommand::GenerateSparseProfile {
-            dense_repo,
-            sparse_profile_output,
-            coordinates,
-        } => {
-            sparse_repos::generate_sparse_profile(
-                &dense_repo,
-                &sparse_profile_output,
-                &coordinates.0,
-            )?;
-            Ok(())
-        }
+        // Subcommand::GenerateSparseProfile {
+        //     dense_repo,
+        //     sparse_profile_output,
+        //     coordinates,
+        // } => {
+        //     sparse_repos::generate_sparse_profile(
+        //         &sandbox,
+        //         &dense_repo,
+        //         &sparse_profile_output,
+        //         &coordinates.0,
+        //     )?;
+        //     Ok(())
+        // }
 
         _ => {
             bail!("Not implemented");
