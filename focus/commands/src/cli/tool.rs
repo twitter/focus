@@ -41,10 +41,10 @@ pub enum SandboxCommandOutput {
 
 impl SandboxCommand {
     pub fn new(command: &mut Command, sandbox: &Sandbox) -> Result<Self> {
-        Self::new_with_ios(command, None, None, None, sandbox)
+        Self::new_with_handles(command, None, None, None, sandbox)
     }
 
-    pub fn new_with_ios(
+    pub fn new_with_handles(
         command: &mut Command,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
@@ -66,9 +66,7 @@ impl SandboxCommand {
             None => output_file("stderr").context("preparing stderr")?,
         };
 
-        command.stdin(stdin)
-        .stdout(stdout)
-        .stderr(stderr);
+        command.stdin(stdin).stdout(stdout).stderr(stderr);
 
         Ok(Self {
             stdout_path,
@@ -361,16 +359,41 @@ mod tests {
     }
 
     #[test]
-    fn sandboxed_command() -> Result<()> {
+    fn sandboxed_command_capture_all() -> Result<()> {
         init_logging();
         let sandbox = Sandbox::new(false)?;
         let mut command = Command::new("echo");
         let sc = SandboxCommand::new(&mut command, &sandbox)?;
-        log::info!("c={:?}", &command);
         command.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
         sc.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
         assert_eq!(output_string, "hey there");
+
+        Ok(())
+    }
+
+    #[test]
+    fn sandboxed_command_specific_stdin() -> Result<()> {
+        init_logging();
+        let sandbox = Sandbox::new(false)?;
+        let mut command = Command::new("cat");
+
+        let path  = {
+            let (mut file, path) = sandbox.create_file(None, None)?;
+            file.write_all(b"hello, world")?;
+            path
+        };
+        let sc = SandboxCommand::new_with_handles(
+            &mut command,
+            Some(Stdio::from(File::open(&path)?)),
+            None,
+            None,
+            &sandbox,
+        )?;
+        command.status()?;
+        let mut output_string = String::new();
+        sc.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
+        assert_eq!(output_string, "hello, world");
 
         Ok(())
     }
