@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use focus_formats::analysis::{Artifact, PathFragment};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
@@ -7,38 +6,18 @@ use std::io::BufWriter;
 use std::path::Path;
 use std::thread;
 use std::{
-    cell::Cell,
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
-    env::current_dir,
-    iter::FromIterator,
     path::PathBuf,
     process::{Command, Stdio},
     sync::{Arc, Barrier},
 };
 
+use crate::sandbox;
+use crate::sandbox::Sandbox;
+use crate::tool::SandboxCommand;
+use crate::tool::SandboxCommandOutput;
+
 const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
-
-fn exhibit_file(file: &Path, title: &str) -> Result<()> {
-    use std::fs::File;
-    use std::io::{self, BufRead};
-    use std::path::Path;
-
-    let file = File::open(file)?;
-    let lines = io::BufReader::new(file).lines();
-    log::info!("--- Begin {} ---", title);
-    for line in lines {
-        if let Ok(line) = line {
-            log::info!("{}", line);
-        }
-    }
-    log::info!("--- End {} ---", title);
-
-    Ok(())
-}
-
-fn git_binary() -> Result<OsString> {
-    Ok(OsString::from("git"))
-}
 
 fn add_implicit_coordinates(v: &mut Vec<String>) {
     let implicit_coordinates: Vec<String> = vec![
@@ -49,79 +28,44 @@ fn add_implicit_coordinates(v: &mut Vec<String>) {
     v.extend(implicit_coordinates)
 }
 
-pub fn configure_dense_repo(temp_dir: &PathBuf, dense_repo: &PathBuf) -> Result<()> {
-    let git_out_path = &temp_dir.join("git.stdout");
-    let git_out_file =
-        File::create(&git_out_path).context("opening stdout destination file for git command")?;
-    let git_err_path = &temp_dir.join("git.stderr");
-    let git_err_file =
-        File::create(&git_err_path).context("opening stderr destination file for git command")?;
+fn git_binary() -> OsString {
+    OsString::from("git")
+}
 
-    let output = Command::new(git_binary()?)
-        .arg("config")
-        .arg("uploadpack.allowFilter")
-        .arg("true")
-        .current_dir(&dense_repo)
-        .stdout(Stdio::from(git_out_file))
-        .stderr(Stdio::from(git_err_file))
-        .spawn()
-        .context("spawning git config")?
-        .wait_with_output()
-        .context("awaiting git config")?;
-    if !output.status.success() {
-        exhibit_file(&git_out_path, "git config stdout")?;
-        exhibit_file(&git_err_path, "git config stderr")?;
-        bail!("configuring dense repo failed");
-    }
+fn git_command(sandbox: &Sandbox) -> Result<(Command, SandboxCommand)> {
+    SandboxCommand::new(git_binary(), sandbox)
+}
 
+fn git_config<P: AsRef<Path>>(repo_path: P, key: &str, val: &str, sandbox: &Sandbox) -> Result<()> {
+    let (mut cmd, scmd) = git_command(&sandbox)?;
+    if let Err(e) = cmd.current_dir(repo_path).arg("config").arg(key).arg(val).status() {
+        scmd.log(crate::tool::SandboxCommandOutput::Stderr, &"failed 'git config' command");
+        bail!("git config failed: {}", e);
+    } 
+    
     Ok(())
 }
 
-pub fn configure_sparse_repo(temp_dir: &PathBuf, dense_repo: &PathBuf) -> Result<()> {
-    let git_out_path = &temp_dir.join("git.stdout");
-    let git_out_file =
-        File::create(&git_out_path).context("opening stdout destination file for git command")?;
-    let git_err_path = &temp_dir.join("git.stderr");
-    let git_err_file =
-        File::create(&git_err_path).context("opening stderr destination file for git command")?;
+pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+  git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
+}
 
-    let output = Command::new(git_binary()?)
-        .arg("config")
-        .arg("core.fsmonitor")
-        .arg("rs-git-fsmonitor")
-        .current_dir(&dense_repo)
-        .stdout(Stdio::from(git_out_file))
-        .stderr(Stdio::from(git_err_file))
-        .spawn()
-        .context("spawning git config")?
-        .wait_with_output()
-        .context("awaiting git config")?;
-    if !output.status.success() {
-        exhibit_file(&git_out_path, "git config stdout")?;
-        exhibit_file(&git_err_path, "git config stderr")?;
-        bail!("configuring dense repo failed");
-    }
-
+pub fn configure_sparse_repo(sandbox: &Sandbox, sparse_repo: &PathBuf) -> Result<()> {
+    // TODO: Consider enabling the fsmonitor after it can be bundled.
+    // git_config(sparse_repo, "core.fsmonitor", "rs-git-fsmonitor", sandbox)?;
     Ok(())
 }
 
 // Write an object to a repo returning its identity.
-pub fn write_object(repo: &PathBuf, file: &PathBuf) -> Result<String> {
-    let output = Command::new(git_binary()?)
-        .arg("hash-object")
-        .arg("-w")
-        .arg(file)
-        .current_dir(&repo)
-        .output()?;
-
-    if !output.status.success() {
-        let error_contents = String::from_utf8(output.stderr).context("parsing stderr content")?;
-        bail!("git hash-object failed: {}", error_contents);
-    }
-
-    let output_contents = String::from_utf8(output.stdout).context("parsing stdout content")?;
-
-    Ok(output_contents.trim().to_owned())
+pub fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<String> {
+    let (mut cmd, scmd) = git_command(&sandbox)?;
+    if let Err(e) = cmd.current_dir(repo).arg("hash-object").arg("-w").arg(file).status() {
+        scmd.log(crate::tool::SandboxCommandOutput::Stderr, &"failed 'git hash-object' command");
+        bail!("git hash-object failed: {}", e);
+    } 
+    let mut stdout_contents = String::new();
+    scmd.read_to_string(SandboxCommandOutput::Stdout, &mut stdout_contents)?;
+    Ok(stdout_contents.trim().to_owned())
 }
 
 pub fn create_sparse_clone(
@@ -131,19 +75,14 @@ pub fn create_sparse_clone(
     branch: &String,
     coordinates: &Vec<String>,
     filter_sparse: bool,
+    sandbox: Arc<Sandbox>,
 ) -> Result<()> {
     let thread_builder = thread::Builder::new();
 
-    let temp_dir = tempfile::Builder::new()
-        .prefix("focus-parachute-work")
-        .tempdir()
-        .context("creating a temporary directory")?;
-    let temp_dir_path = temp_dir.path();
-
-    let sparse_profile_output = temp_dir_path.join("sparse-checkout");
+    let sparse_profile_output = sandbox.path().join("sparse-checkout");
     let project_view_output = {
         let project_view_name = format!("focus-{}.bazelproject", &name);
-        temp_dir_path.join(project_view_name)
+        sandbox.path().join(project_view_name)
     };
 
     let computed_coordinates = {
@@ -152,15 +91,12 @@ pub fn create_sparse_clone(
         coordinates
     };
 
-    {
-        let cloned_temp_dir_path = temp_dir_path.to_owned();
-        configure_dense_repo(&cloned_temp_dir_path, &dense_repo)
-            .context("setting configuration options in the dense repo")?;
-    }
+    configure_dense_repo(&dense_repo, sandbox.as_ref())
+        .context("setting configuration options in the dense repo")?;
 
     let profile_generation_barrier = Arc::new(Barrier::new(2));
     let profile_generation_thread = {
-        let cloned_temp_dir_path = temp_dir_path.to_owned();
+        let cloned_sandbox = sandbox.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
         let cloned_coordinates = computed_coordinates.to_vec().clone();
@@ -213,7 +149,7 @@ pub fn create_sparse_clone(
     }
 
     let clone_thread = {
-        let cloned_temp_dir_path = temp_dir_path.to_owned();
+        let cloned_sandbox = sandbox.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_repo = sparse_repo.to_owned();
         let cloned_branch = branch.clone();
@@ -224,15 +160,15 @@ pub fn create_sparse_clone(
             .spawn(move || {
                 log::info!("Creating a template clone");
                 create_empty_sparse_clone(
-                    &cloned_temp_dir_path,
                     &cloned_dense_repo,
                     &cloned_sparse_repo,
                     &cloned_branch,
                     &cloned_sparse_profile_output,
                     filter_sparse,
+                    &cloned_sandbox,
                 )
                 .expect("failed to create an empty sparse clone");
-                // configure_sparse_repo(&cloned_temp_dir_path, &cloned_sparse_repo).expect("failed to configure sparse clone");
+                // configure_sparse_repo(&cloned_sandbox, &cloned_sparse_repo).expect("failed to configure sparse clone");
                 // log::info!("Finished creating a template clone");
             })
     };
@@ -249,19 +185,19 @@ pub fn create_sparse_clone(
         .join()
         .expect("sparse profile generation thread exited abnormally");
     {
-        let cloned_temp_dir_path = temp_dir_path.to_owned();
+        let cloned_sandbox = sandbox.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_repo = sparse_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.clone();
         let cloned_branch = branch.clone();
 
         log::info!("Configuring visible paths");
-        set_sparse_checkout(&cloned_temp_dir_path, sparse_repo, &sparse_profile_output)
+        set_sparse_checkout(&cloned_sandbox, sparse_repo, &sparse_profile_output)
             .context("setting up sparse checkout options")?;
 
         log::info!("Checking out the working copy");
         switch_branches(
-            &cloned_temp_dir_path,
+            &cloned_sandbox,
             &cloned_dense_repo,
             &cloned_sparse_repo,
             &cloned_branch,
@@ -280,7 +216,7 @@ pub fn create_sparse_clone(
 }
 
 pub fn set_sparse_checkout(
-    temp_dir: &PathBuf,
+    sandbox: &Sandbox,
     sparse_repo: &PathBuf,
     sparse_profile: &PathBuf,
 ) -> Result<()> {
@@ -347,7 +283,7 @@ pub fn set_sparse_checkout(
 }
 
 pub fn switch_branches(
-    temp_dir: &PathBuf,
+    sandbox: &Sandbox,
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
@@ -380,12 +316,12 @@ pub fn switch_branches(
 }
 
 pub fn create_empty_sparse_clone(
-    temp_dir: &PathBuf,
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
     sparse_profile_output: &PathBuf,
     filter_sparse: bool,
+    sandbox: &Sandbox,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -404,7 +340,7 @@ pub fn create_empty_sparse_clone(
     // TODO: Support --filter=sparse:oid=<blob-ish>
 
     let filter = if filter_sparse {
-        let profile_object_id = write_object(&dense_repo, &sparse_profile_output)
+        let profile_object_id = git_hash_object(&dense_repo, &sparse_profile_output)
             .context("writing sparse profile into dense repo")?;
         log::info!(
             "Wrote the sparse profile into the dense repo as {}",

@@ -91,15 +91,15 @@ fn main() -> Result<()> {
             coordinates,
             filter_sparse,
         } => {
-            sparse_repos::create_sparse_clone(
-                sandbox,
-                &name,
-                &dense_repo,
-                &sparse_repo,
-                &branch,
-                &coordinates.0,
-                filter_sparse,
-            )?;
+            // sparse_repos::create_sparse_clone(
+            //     &sandbox,
+            //     &name,
+            //     &dense_repo,
+            //     &sparse_repo,
+            //     &branch,
+            //     &coordinates.0,
+            //     filter_sparse,
+            // )?;
             Ok(())
         }
 

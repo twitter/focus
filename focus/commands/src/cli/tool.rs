@@ -40,11 +40,30 @@ pub enum SandboxCommandOutput {
 }
 
 impl SandboxCommand {
-    pub fn new(command: &mut Command, sandbox: &Sandbox) -> Result<Self> {
-        Self::new_with_handles(command, None, None, None, sandbox)
+    pub fn new<S: AsRef<OsStr>>(program: S, sandbox: &Sandbox) -> Result<(Command, Self)> {
+        let mut command = Command::new(program);
+        let sandbox_command = Self::with_command(&mut command, sandbox)?;
+        Ok((command, sandbox_command))
     }
 
-    pub fn new_with_handles(
+    pub fn new_with_handles<S: AsRef<OsStr>>(
+        program: S,
+        stdin: Option<Stdio>,
+        stdout: Option<&Path>,
+        stderr: Option<&Path>,
+        sandbox: &Sandbox,
+    ) -> Result<(Command, Self)> {
+        let mut command = Command::new(program);
+        let sandbox_command =
+            Self::with_command_and_handles(&mut command, stdin, stdout, stderr, sandbox)?;
+        Ok((command, sandbox_command))
+    }
+
+    pub fn with_command(command: &mut Command, sandbox: &Sandbox) -> Result<Self> {
+        Self::with_command_and_handles(command, None, None, None, sandbox)
+    }
+
+    pub fn with_command_and_handles(
         command: &mut Command,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
@@ -110,7 +129,7 @@ impl SandboxCommand {
         Ok(())
     }
 
-    fn read_to_string(
+    pub fn read_to_string(
         &self,
         output: SandboxCommandOutput,
         output_string: &mut String,
@@ -378,7 +397,7 @@ mod tests {
         let sandbox = Sandbox::new(false)?;
         let mut command = Command::new("cat");
 
-        let path  = {
+        let path = {
             let (mut file, path) = sandbox.create_file(None, None)?;
             file.write_all(b"hello, world")?;
             path
