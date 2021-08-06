@@ -105,8 +105,8 @@ pub fn create_sparse_clone(
     
     // Being on the right ref in the dense repsitory is a prerequisite for any work.
     // TODO: This assumes that the remote is called "origin"... Fix this.
-    let refname = format!("refs/heads/origin/{}", branch);
-    switch_to_detached_ref_discarding_changes(&dense_repo, &refname, sandbox.as_ref())?;
+    let refname = format!("origin/{}", branch);
+    switch_to_detached_branch_discarding_changes(&dense_repo, &refname, sandbox.as_ref())?;
 
     let profile_generation_barrier = Arc::new(Barrier::new(2));
     let profile_generation_thread = {
@@ -438,7 +438,7 @@ fn write_project_view_file(
     Ok(())
 }
 
-pub fn switch_to_detached_ref_discarding_changes(repo: &Path, refname: &str, sandbox: &Sandbox) -> Result<()> {
+pub fn switch_to_detached_branch_discarding_changes(repo: &Path, refname: &str, sandbox: &Sandbox) -> Result<()> {
     let (mut cmd, scmd) = git_command(sandbox)?;
     scmd.ensure_success_or_log(
         cmd.arg("switch")
