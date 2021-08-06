@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use git2::Repository;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
@@ -106,6 +107,7 @@ pub fn create_sparse_clone(
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
         let cloned_coordinates = computed_coordinates.to_vec().clone();
+        let cloned_branch = branch.clone();
         let cloned_profile_generation_barrier = profile_generation_barrier.clone();
 
         thread::Builder::new()
@@ -116,6 +118,7 @@ pub fn create_sparse_clone(
                     &cloned_dense_repo,
                     &cloned_sparse_profile_output,
                     &cloned_coordinates,
+                    &cloned_branch,
                     &cloned_sandbox.as_ref(),
                 )
                 .expect("failed to generate a sparse profile");
@@ -428,13 +431,33 @@ fn write_project_view_file(
     Ok(())
 }
 
+pub fn switch_to_detached_branch_discarding_changes(repo: &Path, branch: &str, sandbox: &Sandbox) -> Result<()> {
+    let (mut cmd, scmd) = git_command(sandbox)?;
+    // scm>?cmd.arg("")
+    scmd.ensure_success_or_log(
+        cmd.arg("switch")
+            .arg(branch)
+            .arg("--quiet")
+            .arg("--detach")
+            .arg("--discard-changes"),
+        SandboxCommandOutput::Stderr,
+        &format!("switching to branch {} in repo {}", branch, &repo.display()),
+    )?;
+
+    Ok(())
+}
+
 pub fn generate_sparse_profile(
     dense_repo: &Path,
     sparse_profile_output: &Path,
     coordinates: &Vec<String>,
+    branch: &str,
     sandbox: &Sandbox,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
+
+    // First make sure we are on the right branch.
+    switch_to_detached_branch_discarding_changes(&dense_repo, branch, sandbox)?;
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
 
