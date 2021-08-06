@@ -1,15 +1,12 @@
 use anyhow::{bail, Context, Result};
-use env_logger::filter;
-use signal_hook::low_level::exit;
 use std::ffi::OsString;
 use std::fs::File;
-use std::intrinsics::write_bytes;
 use std::io::prelude::*;
 use std::io::BufWriter;
 use std::path::Path;
 use std::thread;
 use std::{
-    collections::{BTreeSet, HashMap, HashSet, VecDeque},
+    collections::BTreeSet,
     path::PathBuf,
     process::{Command, Stdio},
     sync::{Arc, Barrier},
@@ -71,7 +68,7 @@ pub fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Res
         scmd.log(
             crate::tool::SandboxCommandOutput::Stderr,
             &"failed 'git hash-object' command",
-        );
+        )?;
         bail!("git hash-object failed: {}", e);
     }
     let mut stdout_contents = String::new();
@@ -179,8 +176,9 @@ pub fn create_sparse_clone(
                     &cloned_sandbox,
                 )
                 .expect("failed to create an empty sparse clone");
-                // configure_sparse_repo(&cloned_sandbox, &cloned_sparse_repo).expect("failed to configure sparse clone");
-                // log::info!("Finished creating a template clone");
+                configure_sparse_repo(&cloned_sandbox, &cloned_sparse_repo)
+                    .expect("failed to configure sparse clone");
+                log::info!("Finished creating a template clone");
             })
     };
     clone_thread?
@@ -303,7 +301,11 @@ pub fn create_empty_sparse_clone(
         "--filter=blob:none".to_owned()
     };
 
-    log::info!("Dense repo: {}, sparse repo: {}", &dense_repo.display(), &sparse_repo.display());
+    log::info!(
+        "Dense repo: {}, sparse repo: {}",
+        &dense_repo.display(),
+        &sparse_repo.display()
+    );
     // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
     let (mut cmd, scmd) = git_command(&sandbox)?;
     scmd.ensure_success_or_log(
@@ -524,32 +526,6 @@ impl BazelRepo {
         }
     }
 
-    // Given a source path, get the closest directory with a BUILD file.
-    pub fn involved_directories_for_sources<'a, I>(&self, sources: I) -> Result<BTreeSet<PathBuf>>
-    where
-        I: IntoIterator<Item = &'a String>,
-        I::IntoIter: 'a,
-    {
-        let mut results = BTreeSet::<PathBuf>::new();
-        for source in sources {
-            let source_path = self.dense_repo.join(source);
-            if let Some(build_dir) = self
-                .find_closest_directory_with_build_file(&source_path, self.dense_repo.as_path())
-                .with_context(|| format!("finding a build file for {}", source))?
-            {
-                results.insert(build_dir);
-            } else {
-                // In the case that there is no BUILD file, include the directory itself.
-                let parent = source_path
-                    .parent()
-                    .context("getting parent directory for BUILD-less file")?
-                    .to_owned();
-                results.insert(parent);
-            }
-        }
-        Ok(results)
-    }
-
     // Use bazel query to get involved packages and turn them into directories.
     pub fn involved_directories_query(
         &self,
@@ -561,7 +537,6 @@ impl BazelRepo {
         // N.B. `bazel aquery` cannot handle unions ;(
         let mut directories = Vec::<String>::new();
 
-        let mut clauses = Vec::<String>::new();
         let clauses: Vec<String> = coordinates
             .iter()
             .map(|coordinate| {

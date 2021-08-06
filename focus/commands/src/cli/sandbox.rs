@@ -50,7 +50,7 @@ impl Sandbox {
         extension: Option<&str>,
     ) -> Result<(File, PathBuf)> {
         let parent = self.path.to_owned();
-let mut path = PathBuf::new();
+        let mut path = PathBuf::new();
         let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
         let name = format!("{}-{:x}", prefix.unwrap_or("unknown"), serial);
         path.set_file_name(name);
@@ -93,7 +93,7 @@ mod tests {
         let path = &sandbox.path().to_owned();
         drop(&sandbox);
         assert!(fs::metadata(path)?.is_dir());
-        fs::remove_dir(path);
+        fs::remove_dir(path)?;
         Ok(())
     }
 

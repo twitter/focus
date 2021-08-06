@@ -53,7 +53,6 @@ enum Subcommand {
         #[structopt(long, parse(from_os_str))]
         sparse_repo: PathBuf,
     },
-
     // PushLayer {
     //     #[structopt(long, parse(from_os_str))]
     //     sparse_repo: PathBuf,
@@ -140,7 +139,6 @@ fn main() -> Result<()> {
         //     )?;
         //     Ok(())
         // }
-
         _ => {
             bail!("Not implemented");
         }
