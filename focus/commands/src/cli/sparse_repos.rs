@@ -74,7 +74,7 @@ pub fn configure_sparse_repo_final(
             log::warn!("Dense path {} does not exist!", &from.display());
             continue;
         }
-        let to = dense_git_dir.join(name);
+        let to = sparse_git_dir.join(name);
         let (mut cmd, scmd) = SandboxCommand::new("cp", sandbox)?;
         scmd.ensure_success_or_log(
             cmd.arg("-v").arg("-r").arg(&from).arg(&to),
