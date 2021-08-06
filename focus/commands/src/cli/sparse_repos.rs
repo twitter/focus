@@ -82,6 +82,16 @@ pub fn configure_sparse_repo_final(
             &format!("Copying {} -> {}", &from.display(), &to.display()),
         )?;
     }
+
+    // Add a URL to the dense repo
+    let dense_url = format!("file://{}", dense_repo.to_str().unwrap());
+    let (mut cmd, scmd) = git_command(sandbox)?;
+    scmd.ensure_success_or_log(
+        cmd.arg("remote").arg("add").arg("dense").arg(&dense_url),
+        SandboxCommandOutput::Stderr,
+        &format!("adding dense remote ({})", &dense_url),
+    )?;
+    
     Ok(())
 }
 
