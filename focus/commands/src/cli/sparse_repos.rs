@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use git2::Repository;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
@@ -86,7 +85,7 @@ pub fn create_sparse_clone(
     filter_sparse: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
-    // TODO: Crash harder in threads to prevent extra work. 
+    // TODO: Crash harder in threads to prevent extra work.
 
     let sparse_profile_output = sandbox.path().join("sparse-checkout");
     let project_view_output = {
@@ -102,7 +101,7 @@ pub fn create_sparse_clone(
 
     configure_dense_repo(&dense_repo, sandbox.as_ref())
         .context("setting configuration options in the dense repo")?;
-    
+
     // Being on the right branch in the dense repsitory is a prerequisite for any work.
     switch_to_detached_branch_discarding_changes(&dense_repo, &branch, sandbox.as_ref())?;
 
@@ -434,7 +433,11 @@ fn write_project_view_file(
     Ok(())
 }
 
-pub fn switch_to_detached_branch_discarding_changes(repo: &Path, refname: &str, sandbox: &Sandbox) -> Result<()> {
+pub fn switch_to_detached_branch_discarding_changes(
+    repo: &Path,
+    refname: &str,
+    sandbox: &Sandbox,
+) -> Result<()> {
     let (mut cmd, scmd) = git_command(sandbox)?;
     scmd.ensure_success_or_log(
         cmd.arg("switch")

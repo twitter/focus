@@ -1,8 +1,8 @@
 mod detail;
 mod sandbox;
+mod sandbox_command;
 mod sparse_repos;
 mod testing;
-mod sandbox_command;
 mod util;
 mod working_tree_synchronizer;
 
