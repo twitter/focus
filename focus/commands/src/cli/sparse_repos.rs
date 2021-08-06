@@ -13,8 +13,8 @@ use std::{
 };
 
 use crate::sandbox::Sandbox;
-use crate::tool::SandboxCommand;
-use crate::tool::SandboxCommandOutput;
+use crate::sandbox_command::SandboxCommand;
+use crate::sandbox_command::SandboxCommandOutput;
 
 const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
 
@@ -66,7 +66,7 @@ pub fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Res
         .status()
     {
         scmd.log(
-            crate::tool::SandboxCommandOutput::Stderr,
+            crate::sandbox_command::SandboxCommandOutput::Stderr,
             &"failed 'git hash-object' command",
         )?;
         bail!("git hash-object failed: {}", e);

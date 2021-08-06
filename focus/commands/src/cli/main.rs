@@ -2,7 +2,7 @@ mod detail;
 mod sandbox;
 mod sparse_repos;
 mod testing;
-mod tool;
+mod sandbox_command;
 mod util;
 mod working_tree_synchronizer;
 
