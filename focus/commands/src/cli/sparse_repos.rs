@@ -49,9 +49,39 @@ pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<(
     git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
 }
 
-pub fn configure_sparse_repo(sandbox: &Sandbox, sparse_repo: &PathBuf) -> Result<()> {
+pub fn configure_sparse_repo_initial(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
     // TODO: Consider enabling the fsmonitor after it can be bundled.
     // git_config(sparse_repo, "core.fsmonitor", "rs-git-fsmonitor", sandbox)?;
+    Ok(())
+}
+
+pub fn configure_sparse_repo_final(
+    dense_repo: &PathBuf,
+    sparse_repo: &PathBuf,
+    sandbox: &Sandbox,
+) -> Result<()> {
+    let dense_git_dir = dense_repo.join(".git");
+    let sparse_git_dir = sparse_repo.join(".git");
+    let dense_config = dense_git_dir.join("config");
+    let sparse_config = sparse_git_dir.join("config");
+    std::fs::copy(dense_config, sparse_config)
+        .context("copying repo configuration the dense repo to the sparse repo")?;
+
+    let paths_to_copy = vec!["config", "hooks", "hooks_multi", "repo.d"];
+    for name in paths_to_copy {
+        let from = dense_git_dir.join(name);
+        if !from.exists() {
+            log::warn!("Dense path {} does not exist!", &from.display());
+            continue;
+        }
+        let to = dense_git_dir.join(name);
+        let (mut cmd, scmd) = SandboxCommand::new("cp", sandbox)?;
+        scmd.ensure_success_or_log(
+            cmd.arg("-v").arg("-r").arg(&from).arg(&to),
+            SandboxCommandOutput::Stderr,
+            &format!("Copying {} -> {}", &from.display(), &to.display()),
+        )?;
+    }
     Ok(())
 }
 
@@ -181,7 +211,7 @@ pub fn create_sparse_clone(
                     &cloned_sandbox,
                 )
                 .expect("failed to create an empty sparse clone");
-                configure_sparse_repo(&cloned_sandbox, &cloned_sparse_repo)
+                configure_sparse_repo_initial(&cloned_sparse_repo, &cloned_sandbox)
                     .expect("failed to configure sparse clone");
                 log::info!("Finished creating a template clone");
             })
@@ -200,11 +230,16 @@ pub fn create_sparse_clone(
         .expect("sparse profile generation thread exited abnormally");
     {
         let cloned_sandbox = sandbox.clone();
-        let cloned_sparse_repo = sparse_repo.to_owned();
+        let cloned_sparse_repo = sparse_repo.clone();
+        let cloned_dense_repo = dense_repo.clone();
 
         log::info!("Configuring visible paths");
         set_sparse_checkout(sparse_repo, &sparse_profile_output, &cloned_sandbox)
             .context("setting up sparse checkout options")?;
+
+        log::info!("Finalizing configuration");
+        configure_sparse_repo_final(&cloned_dense_repo, &cloned_sparse_repo, &cloned_sandbox)
+            .context("failed to perform final configuration in the sparse repo")?;
 
         log::info!("Checking out the working copy");
         checkout_working_copy(&cloned_sparse_repo, &cloned_sandbox)
@@ -218,6 +253,7 @@ pub fn create_sparse_clone(
         std::fs::rename(project_view_output, project_view_destination)
             .context("copying in the project view")?;
     }
+
     Ok(())
 }
 
@@ -306,11 +342,6 @@ pub fn create_empty_sparse_clone(
         "--filter=blob:none".to_owned()
     };
 
-    log::info!(
-        "Dense repo: {}, sparse repo: {}",
-        &dense_repo.display(),
-        &sparse_repo.display()
-    );
     // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
     let (mut cmd, scmd) = git_command(&sandbox)?;
     scmd.ensure_success_or_log(
