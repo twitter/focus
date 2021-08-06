@@ -49,7 +49,7 @@ pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<(
     git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
 }
 
-pub fn configure_sparse_repo_initial(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
     // TODO: Consider enabling the fsmonitor after it can be bundled.
     // git_config(sparse_repo, "core.fsmonitor", "rs-git-fsmonitor", sandbox)?;
     Ok(())
@@ -445,7 +445,7 @@ fn write_project_view_file(
         bail!("Refusing to generate a project view with an empty set of directories.");
     }
 
-    let mut f = File::create(&bazel_project_view_path).context("creating output file")?;
+    let f = File::create(&bazel_project_view_path).context("creating output file")?;
 
     let mut buffer = BufWriter::new(f);
     writeln!(buffer, "workspace_type: java")?;
@@ -554,7 +554,7 @@ struct BazelRepo {
 }
 
 impl BazelRepo {
-    pub fn new(dense_repo: &Path, coordinates: Vec<String>) -> Result<Self> {
+    pub fn new(dense_repo: &Path, _coordinates: Vec<String>) -> Result<Self> {
         Ok(Self {
             dense_repo: dense_repo.to_owned(),
         })
@@ -652,51 +652,5 @@ impl BazelRepo {
         }
 
         Ok(directories)
-    }
-}
-
-fn reduce_to_shortest_common_prefix(paths: &BTreeSet<PathBuf>) -> Result<BTreeSet<PathBuf>> {
-    let mut results = BTreeSet::<PathBuf>::new();
-    let mut last_path: Option<PathBuf> = None;
-    for path in paths {
-        let insert = match &last_path {
-            Some(last_path) => !path.starts_with(last_path),
-            None => true,
-        };
-
-        if insert {
-            results.insert(path.clone());
-            last_path = Some(path.to_owned());
-        }
-    }
-
-    Ok(results)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_reduce_to_shortest_common_prefix() -> Result<()> {
-        let tempdir = tempfile::tempdir()?;
-        let dir = tempdir.path();
-        let mut set = BTreeSet::<PathBuf>::new();
-        let a0 = dir.join("a0");
-        let a0_b = a0.join("b");
-        let a0_b_c = a0_b.join("c");
-        let a1 = dir.join("a1");
-
-        set.insert(a0_b.clone());
-        set.insert(a0_b_c.clone());
-        set.insert(a1.clone());
-
-        let resulting_set = reduce_to_shortest_common_prefix(&set)?;
-
-        assert_eq!(resulting_set.len(), 2);
-        assert!(resulting_set.contains(&a0_b));
-        assert!(resulting_set.contains(&a1));
-
-        Ok(())
     }
 }

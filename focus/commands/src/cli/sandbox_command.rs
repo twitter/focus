@@ -1,13 +1,11 @@
 use crate::sandbox::Sandbox;
 use anyhow::{bail, Context, Result};
 use std::{
-    ffi::{OsStr, OsString},
-    fmt::Display,
+    ffi::OsStr,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
-    sync::Arc,
 };
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
@@ -32,6 +30,7 @@ pub struct SandboxCommand {
     stderr_path: PathBuf,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum SandboxCommandOutput {
     All,
@@ -183,9 +182,8 @@ impl SandboxCommand {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use std::ffi::OsStr;
     use std::fs::File;
-    use std::io::{prelude::*, BufReader, SeekFrom, Write};
+    use std::io::Write;
 
     fn init_logging() {
         let _ = env_logger::builder().is_test(true).try_init();

@@ -4,9 +4,10 @@ use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tempfile::{Builder, TempDir};
+use tempfile::TempDir;
 
 pub struct Sandbox {
+    #[allow(dead_code)]
     temp_dir: Option<tempfile::TempDir>,
     path: PathBuf,
     serial_sequence: AtomicUsize,
