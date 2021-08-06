@@ -103,10 +103,8 @@ pub fn create_sparse_clone(
     configure_dense_repo(&dense_repo, sandbox.as_ref())
         .context("setting configuration options in the dense repo")?;
     
-    // Being on the right ref in the dense repsitory is a prerequisite for any work.
-    // TODO: This assumes that the remote is called "origin"... Fix this.
-    let refname = format!("origin/{}", branch);
-    switch_to_detached_branch_discarding_changes(&dense_repo, &refname, sandbox.as_ref())?;
+    // Being on the right branch in the dense repsitory is a prerequisite for any work.
+    switch_to_detached_branch_discarding_changes(&dense_repo, &branch, sandbox.as_ref())?;
 
     let profile_generation_barrier = Arc::new(Barrier::new(2));
     let profile_generation_thread = {
@@ -114,7 +112,6 @@ pub fn create_sparse_clone(
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
         let cloned_coordinates = computed_coordinates.to_vec().clone();
-        let cloned_branch = branch.clone();
         let cloned_profile_generation_barrier = profile_generation_barrier.clone();
 
         thread::Builder::new()
@@ -125,7 +122,6 @@ pub fn create_sparse_clone(
                     &cloned_dense_repo,
                     &cloned_sparse_profile_output,
                     &cloned_coordinates,
-                    &cloned_branch,
                     &cloned_sandbox.as_ref(),
                 )
                 .expect("failed to generate a sparse profile");
@@ -445,7 +441,8 @@ pub fn switch_to_detached_branch_discarding_changes(repo: &Path, refname: &str, 
             .arg(refname)
             .arg("--quiet")
             .arg("--detach")
-            .arg("--discard-changes"),
+            .arg("--discard-changes")
+            .current_dir(&repo),
         SandboxCommandOutput::Stderr,
         &format!("switching to ref '{}' in repo {}", refname, &repo.display()),
     )?;
@@ -457,12 +454,9 @@ pub fn generate_sparse_profile(
     dense_repo: &Path,
     sparse_profile_output: &Path,
     coordinates: &Vec<String>,
-    branch: &str,
     sandbox: &Sandbox,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
-
-
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
 
