@@ -379,25 +379,25 @@ pub fn create_empty_sparse_clone(
     .context("creating the sparse clone")?;
 
     // Write an excludes file that ignores Focus-specific modifications in the sparse repo.
-    let info_dir = &dense_repo.join(".git").join("info");
-    std::fs::create_dir_all(info_dir);
-    let excludes_path = &info_dir.join("excludes.focus");
+    let info_dir = &sparse_repo.join(".git").join("info");
+    let excludes_path = &info_dir.join("excludes");
     {
         use std::fs::OpenOptions;
         let mut buffer = BufWriter::new(
             OpenOptions::new()
-                .read(true)
                 .write(true)
                 .create(true)
+                .append(true)
                 .open(excludes_path)
                 .context("opening the info/excludes file for writing")?,
         );
-        buffer.write_all(b"WORKSPACE.focus\n")?;
-        buffer.write_all(b"BUILD.focus\n")?;
-        buffer.write_all(b"*_focus.bzl\n")?;
-        buffer.write_all(b"focus-*.bazelproject\n")?;
-        buffer.write_all(b"focus-*.bazelrc\n")?;
-        buffer.write_all(b"\n")?;
+
+        writeln!(buffer, "WORKSPACE.focus")?;
+        writeln!(buffer, "BUILD.focus")?;
+        writeln!(buffer, "*_focus.bzl")?;
+        writeln!(buffer, "focus-*.bazelproject")?;
+        writeln!(buffer, "focus-*.bazelrc")?;
+        writeln!(buffer, "")?;
         buffer.flush()?;
     }
 
