@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use env_logger::filter;
+use signal_hook::low_level::exit;
 use std::ffi::OsString;
 use std::fs::File;
 use std::intrinsics::write_bytes;
@@ -283,8 +284,6 @@ pub fn create_empty_sparse_clone(
     filter_sparse: bool,
     sandbox: &Sandbox,
 ) -> Result<()> {
-    // use std::os::unix::ffi::OsStrExt;
-
     let mut dense_url = OsString::from("file://");
     dense_url.push(dense_repo);
 
@@ -304,6 +303,7 @@ pub fn create_empty_sparse_clone(
         "--filter=blob:none".to_owned()
     };
 
+    log::info!("Dense repo: {}, sparse repo: {}", &dense_repo.display(), &sparse_repo.display());
     // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
     let (mut cmd, scmd) = git_command(&sandbox)?;
     scmd.ensure_success_or_log(
@@ -319,7 +319,7 @@ pub fn create_empty_sparse_clone(
             .arg(branch.as_str())
             .arg(filter_arg)
             .arg(dense_url)
-            .arg(dense_repo),
+            .arg(sparse_repo),
         SandboxCommandOutput::Stderr,
         "clone",
     )
