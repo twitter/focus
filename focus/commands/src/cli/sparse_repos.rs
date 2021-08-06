@@ -431,17 +431,16 @@ fn write_project_view_file(
     Ok(())
 }
 
-pub fn switch_to_detached_branch_discarding_changes(repo: &Path, branch: &str, sandbox: &Sandbox) -> Result<()> {
+pub fn switch_to_detached_ref_discarding_changes(repo: &Path, refname: &str, sandbox: &Sandbox) -> Result<()> {
     let (mut cmd, scmd) = git_command(sandbox)?;
-    // scm>?cmd.arg("")
     scmd.ensure_success_or_log(
         cmd.arg("switch")
-            .arg(branch)
+            .arg(refname)
             .arg("--quiet")
             .arg("--detach")
             .arg("--discard-changes"),
         SandboxCommandOutput::Stderr,
-        &format!("switching to branch {} in repo {}", branch, &repo.display()),
+        &format!("switching to ref '{}' in repo {}", refname, &repo.display()),
     )?;
 
     Ok(())
@@ -457,7 +456,9 @@ pub fn generate_sparse_profile(
     use std::os::unix::ffi::OsStrExt;
 
     // First make sure we are on the right branch.
-    switch_to_detached_branch_discarding_changes(&dense_repo, branch, sandbox)?;
+    // TODO: This assumes that the remote is called "origin"... Fix this.
+    let refname = format!("origin/{}", branch);
+    switch_to_detached_ref_discarding_changes(&dense_repo, &refname, sandbox)?;
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
 
@@ -477,9 +478,6 @@ pub fn generate_sparse_profile(
         let absolute_path = dense_repo.join(dir);
         query_dirs.insert(absolute_path);
     }
-
-    let mut reduced_dirs = reduce_to_shortest_common_prefix(&query_dirs)
-        .context("reducing paths to shortest common prefix (final pass)")?;
 
     let mut f = File::create(&sparse_profile_output).context("creating output file")?;
     f.write_all(&SPARSE_PROFILE_PRELUDE.as_bytes())
@@ -507,14 +505,12 @@ pub fn generate_sparse_profile(
 
 struct BazelRepo {
     dense_repo: PathBuf,
-    coordinates: Vec<String>,
 }
 
 impl BazelRepo {
     pub fn new(dense_repo: &Path, coordinates: Vec<String>) -> Result<Self> {
         Ok(Self {
             dense_repo: dense_repo.to_owned(),
-            coordinates: coordinates,
         })
     }
 
