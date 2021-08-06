@@ -86,6 +86,8 @@ pub fn create_sparse_clone(
     filter_sparse: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
+    // TODO: Crash harder in threads to prevent extra work. 
+
     let sparse_profile_output = sandbox.path().join("sparse-checkout");
     let project_view_output = {
         let project_view_name = format!("focus-{}.bazelproject", &name);
@@ -100,6 +102,11 @@ pub fn create_sparse_clone(
 
     configure_dense_repo(&dense_repo, sandbox.as_ref())
         .context("setting configuration options in the dense repo")?;
+    
+    // Being on the right ref in the dense repsitory is a prerequisite for any work.
+    // TODO: This assumes that the remote is called "origin"... Fix this.
+    let refname = format!("refs/heads/origin/{}", branch);
+    switch_to_detached_ref_discarding_changes(&dense_repo, &refname, sandbox.as_ref())?;
 
     let profile_generation_barrier = Arc::new(Barrier::new(2));
     let profile_generation_thread = {
@@ -455,10 +462,7 @@ pub fn generate_sparse_profile(
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
-    // First make sure we are on the right branch.
-    // TODO: This assumes that the remote is called "origin"... Fix this.
-    let refname = format!("origin/{}", branch);
-    switch_to_detached_ref_discarding_changes(&dense_repo, &refname, sandbox)?;
+
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
 
