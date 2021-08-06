@@ -1,6 +1,8 @@
 use anyhow::{bail, Context, Result};
+use env_logger::filter;
 use std::ffi::OsString;
 use std::fs::File;
+use std::intrinsics::write_bytes;
 use std::io::prelude::*;
 use std::io::BufWriter;
 use std::path::Path;
@@ -12,7 +14,6 @@ use std::{
     sync::{Arc, Barrier},
 };
 
-use crate::sandbox;
 use crate::sandbox::Sandbox;
 use crate::tool::SandboxCommand;
 use crate::tool::SandboxCommandOutput;
@@ -38,16 +39,16 @@ fn git_command(sandbox: &Sandbox) -> Result<(Command, SandboxCommand)> {
 
 fn git_config<P: AsRef<Path>>(repo_path: P, key: &str, val: &str, sandbox: &Sandbox) -> Result<()> {
     let (mut cmd, scmd) = git_command(&sandbox)?;
-    if let Err(e) = cmd.current_dir(repo_path).arg("config").arg(key).arg(val).status() {
-        scmd.log(crate::tool::SandboxCommandOutput::Stderr, &"failed 'git config' command");
-        bail!("git config failed: {}", e);
-    } 
-    
-    Ok(())
+    scmd.ensure_success_or_log(
+        cmd.current_dir(repo_path).arg("config").arg(key).arg(val),
+        SandboxCommandOutput::Stderr,
+        "git config",
+    )
+    .map(|_| ())
 }
 
 pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
-  git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
+    git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
 }
 
 pub fn configure_sparse_repo(sandbox: &Sandbox, sparse_repo: &PathBuf) -> Result<()> {
@@ -59,10 +60,19 @@ pub fn configure_sparse_repo(sandbox: &Sandbox, sparse_repo: &PathBuf) -> Result
 // Write an object to a repo returning its identity.
 pub fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<String> {
     let (mut cmd, scmd) = git_command(&sandbox)?;
-    if let Err(e) = cmd.current_dir(repo).arg("hash-object").arg("-w").arg(file).status() {
-        scmd.log(crate::tool::SandboxCommandOutput::Stderr, &"failed 'git hash-object' command");
+    if let Err(e) = cmd
+        .current_dir(repo)
+        .arg("hash-object")
+        .arg("-w")
+        .arg(file)
+        .status()
+    {
+        scmd.log(
+            crate::tool::SandboxCommandOutput::Stderr,
+            &"failed 'git hash-object' command",
+        );
         bail!("git hash-object failed: {}", e);
-    } 
+    }
     let mut stdout_contents = String::new();
     scmd.read_to_string(SandboxCommandOutput::Stdout, &mut stdout_contents)?;
     Ok(stdout_contents.trim().to_owned())
@@ -77,8 +87,6 @@ pub fn create_sparse_clone(
     filter_sparse: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
-    let thread_builder = thread::Builder::new();
-
     let sparse_profile_output = sandbox.path().join("sparse-checkout");
     let project_view_output = {
         let project_view_name = format!("focus-{}.bazelproject", &name);
@@ -110,6 +118,7 @@ pub fn create_sparse_clone(
                     &cloned_dense_repo,
                     &cloned_sparse_profile_output,
                     &cloned_coordinates,
+                    &cloned_sandbox.as_ref(),
                 )
                 .expect("failed to generate a sparse profile");
                 log::info!("Finished generating sparse profile");
@@ -118,7 +127,7 @@ pub fn create_sparse_clone(
     };
 
     let project_view_generation_thread = {
-        let cloned_name = name.to_owned();
+        let cloned_sandbox = sandbox.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_project_view_output = project_view_output.clone();
         let cloned_coordinates = computed_coordinates.to_vec().clone();
@@ -131,6 +140,7 @@ pub fn create_sparse_clone(
                     &cloned_dense_repo,
                     &cloned_project_view_output,
                     &cloned_coordinates,
+                    &cloned_sandbox.as_ref(),
                 )
                 .expect("generating the project view");
                 log::info!("Finished generating project view");
@@ -186,23 +196,15 @@ pub fn create_sparse_clone(
         .expect("sparse profile generation thread exited abnormally");
     {
         let cloned_sandbox = sandbox.clone();
-        let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_repo = sparse_repo.to_owned();
-        let cloned_sparse_profile_output = sparse_profile_output.clone();
-        let cloned_branch = branch.clone();
 
         log::info!("Configuring visible paths");
-        set_sparse_checkout(&cloned_sandbox, sparse_repo, &sparse_profile_output)
+        set_sparse_checkout(sparse_repo, &sparse_profile_output, &cloned_sandbox)
             .context("setting up sparse checkout options")?;
 
         log::info!("Checking out the working copy");
-        switch_branches(
-            &cloned_sandbox,
-            &cloned_dense_repo,
-            &cloned_sparse_repo,
-            &cloned_branch,
-        )
-        .context("switching branches")?;
+        checkout_working_copy(&cloned_sparse_repo, &cloned_sandbox)
+            .context("switching branches")?;
 
         log::info!("Moving the project view into place");
         let project_view_file_name = &project_view_output
@@ -216,103 +218,61 @@ pub fn create_sparse_clone(
 }
 
 pub fn set_sparse_checkout(
-    sandbox: &Sandbox,
     sparse_repo: &PathBuf,
     sparse_profile: &PathBuf,
+    sandbox: &Sandbox,
 ) -> Result<()> {
-    use std::os::unix::ffi::OsStrExt;
-
     {
-        let git_out_path = &temp_dir.join("git-sparse-checkout-init.stdout");
-        let git_out_file = File::create(&git_out_path)
-            .context("opening stdout destination file for git command")?;
-        // let git_err_path = &temp_dir.join("git-sparse-checkout-init.stderr");
-        // let git_err_file = File::create(&git_err_path)
-        //     .context("opening stderr destination file for git command")?;
-
-        let output = Command::new(git_binary()?)
-            .arg("sparse-checkout")
-            .arg("init")
-            .arg("--cone")
-            // .arg("--no-sparse-index") // TODO: The sparse index is somehow slower. Figure it out.
-            .current_dir(&sparse_repo)
-            .stdout(Stdio::from(git_out_file))
-            // .stderr(Stdio::from(git_err_file))
-            .spawn()
-            .context("spawning git sparse-checkout-init")?
-            .wait_with_output()
-            .context("awaiting git sparse-checkout-init")?;
-        if !output.status.success() {
-            exhibit_file(&git_out_path, "git sparse-checkout-init stdout")?;
-            // exhibit_file(&git_err_path, "git sparse-checkout-init stderr")?;
-            bail!("git sparse-checkout-init failed");
-        }
+        // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
+        let (mut cmd, scmd) = git_command(&sandbox)?;
+        scmd.ensure_success_or_log(
+            cmd.current_dir(sparse_repo)
+                .arg("sparse-checkout")
+                .arg("init")
+                .arg("--cone"),
+            SandboxCommandOutput::Stderr,
+            "sparse-checkout init",
+        )
+        .map(|_| ())
+        .context("initializing sparse checkout")?;
     }
 
     {
-        let git_out_path = &temp_dir.join("git-sparse-checkout-set.stdout");
-        let git_out_file = File::create(&git_out_path)
-            .context("opening stdout destination file for git command")?;
-        let git_err_path = &temp_dir.join("git-sparse-checkout-set.stderr");
-        let git_err_file = File::create(&git_err_path)
-            .context("opening stderr destination file for git command")?;
-        let sparse_profile_file =
-            File::open(&sparse_profile).context("opening sparse profile for git command")?;
+        // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
 
-        let output = Command::new(git_binary()?)
-            .arg("sparse-checkout")
-            .arg("set")
-            .arg("--stdin")
-            .current_dir(&sparse_repo)
-            .stdin(Stdio::from(sparse_profile_file))
-            .stdout(Stdio::from(git_out_file))
-            .stderr(Stdio::from(git_err_file))
-            .spawn()
-            .context("spawning git sparse-checkout-set")?
-            .wait_with_output()
-            .context("awaiting git sparse-checkout-set")?;
-
-        if !output.status.success() {
-            exhibit_file(&git_out_path, "git sparse-checkout-set stdout")?;
-            exhibit_file(&git_err_path, "git sparse-checkout-set stderr")?;
-            bail!("git sparse-checkout-set failed");
-        }
+        // Start a sparse-checkout with the sparse profile file as input.
+        let sparse_profile_file = File::open(&sparse_profile).context("opening sparse profile")?;
+        let (mut cmd, scmd) = SandboxCommand::new_with_handles(
+            git_binary(),
+            Some(Stdio::from(sparse_profile_file)),
+            None,
+            None,
+            &sandbox,
+        )?;
+        scmd.ensure_success_or_log(
+            cmd.current_dir(sparse_repo)
+                .arg("sparse-checkout")
+                .arg("set"),
+            SandboxCommandOutput::Stderr,
+            "sparse-checkout set",
+        )
+        .map(|_| ())
+        .context("initializing sparse checkout")?;
     }
 
     Ok(())
 }
 
-pub fn switch_branches(
-    sandbox: &Sandbox,
-    dense_repo: &PathBuf,
-    sparse_repo: &PathBuf,
-    branch: &String,
-) -> Result<()> {
-    use std::os::unix::ffi::OsStrExt;
-
-    let git_out_path = &temp_dir.join("git-switch.stdout");
-    let git_out_file =
-        File::create(&git_out_path).context("opening stdout destination file for git command")?;
-    let git_err_path = &temp_dir.join("git-switch.stderr");
-    let git_err_file =
-        File::create(&git_err_path).context("opening stderr destination file for git command")?;
-    log::info!("Checking out in '{}'", &sparse_repo.display());
-    let output = Command::new(git_binary()?)
-        .arg("checkout")
-        .current_dir(&sparse_repo)
-        .stdout(Stdio::from(git_out_file))
-        .spawn()
-        .context("spawning git switch")?
-        .wait_with_output()
-        .context("awaiting git switch")?;
-
-    if !output.status.success() {
-        exhibit_file(&git_out_path, "git switch stdout")?;
-        exhibit_file(&git_err_path, "git switch stderr")?;
-        bail!("git switch failed");
-    }
-
-    Ok(())
+pub fn checkout_working_copy(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+    // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
+    let (mut cmd, scmd) = git_command(&sandbox)?;
+    scmd.ensure_success_or_log(
+        cmd.current_dir(sparse_repo).arg("checkout"),
+        SandboxCommandOutput::Stderr,
+        "checkout",
+    )
+    .map(|_| ())
+    .context("checking out the working copy")
 }
 
 pub fn create_empty_sparse_clone(
@@ -323,7 +283,7 @@ pub fn create_empty_sparse_clone(
     filter_sparse: bool,
     sandbox: &Sandbox,
 ) -> Result<()> {
-    use std::os::unix::ffi::OsStrExt;
+    // use std::os::unix::ffi::OsStrExt;
 
     let mut dense_url = OsString::from("file://");
     dense_url.push(dense_repo);
@@ -332,15 +292,8 @@ pub fn create_empty_sparse_clone(
         .parent()
         .context("sparse repo parent directory does not exist")?;
 
-    let git_out_path = &temp_dir.join("git-clone.stdout");
-    let git_out_file =
-        File::create(&git_out_path).context("opening stdout destination file for git command")?;
-    // let git_err_path = &temp_dir.join("git-clone.stderr");
-    // let git_err_file = File::create(&git_err_path).context("opening stderr destination file for git command")?;
-    // TODO: Support --filter=sparse:oid=<blob-ish>
-
-    let filter = if filter_sparse {
-        let profile_object_id = git_hash_object(&dense_repo, &sparse_profile_output)
+    let filter_arg = if filter_sparse {
+        let profile_object_id = git_hash_object(&dense_repo, &sparse_profile_output, sandbox)
             .context("writing sparse profile into dense repo")?;
         log::info!(
             "Wrote the sparse profile into the dense repo as {}",
@@ -351,40 +304,32 @@ pub fn create_empty_sparse_clone(
         "--filter=blob:none".to_owned()
     };
 
-    log::info!("Cloning {:?} into {:?}", &dense_url, &sparse_repo);
-    let output = Command::new(git_binary()?)
-        .arg("clone")
-        .arg("-c")
-        .arg("core.compression=1")
-        .arg("--sparse")
-        .arg("--no-checkout")
-        .arg("--no-tags")
-        .arg("--single-branch")
-        .arg("--depth")
-        .arg("64")
-        .arg("-b")
-        .arg("master")
-        .arg(filter)
-        .arg(dense_url)
-        .arg(sparse_repo)
-        .current_dir(sparse_repo_dir_parent)
-        .stdout(Stdio::from(git_out_file))
-        // .stderr(Stdio::from(git_err_file)) // Disable stderr redirection temporarily to exhibit status
-        .spawn()
-        .context("spawning git clone")?
-        .wait_with_output()
-        .context("awaiting git clone")?;
-
-    if !output.status.success() {
-        exhibit_file(&git_out_path, "git clone stdout")?;
-        // exhibit_file(&git_err_path, "git clone stderr")?;
-        bail!("git clone failed");
-    }
+    // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
+    let (mut cmd, scmd) = git_command(&sandbox)?;
+    scmd.ensure_success_or_log(
+        cmd.current_dir(sparse_repo_dir_parent)
+            .arg("clone")
+            .arg("--sparse")
+            .arg("--no-checkout")
+            .arg("--no-tags")
+            .arg("--single-branch")
+            .arg("--depth")
+            .arg("64")
+            .arg("-b")
+            .arg(branch.as_str())
+            .arg(filter_arg)
+            .arg(dense_url)
+            .arg(dense_repo),
+        SandboxCommandOutput::Stderr,
+        "clone",
+    )
+    .map(|_| ())
+    .context("creating the sparse clone")?;
 
     // Write an excludes file that ignores Focus-specific modifications in the sparse repo.
     let info_dir = &dense_repo.join(".git").join("info");
     std::fs::create_dir_all(info_dir);
-    let excludes_path = &info_dir.join("exclude.focus");
+    let excludes_path = &info_dir.join("excludes.focus");
     {
         use std::fs::OpenOptions;
         let mut buffer = BufWriter::new(
@@ -417,6 +362,7 @@ fn write_project_view_file(
     dense_repo: &PathBuf,
     bazel_project_view_path: &Path,
     coordinates: &Vec<String>,
+    sandbox: &Sandbox,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -424,7 +370,7 @@ fn write_project_view_file(
     let mut directories = BTreeSet::<PathBuf>::new();
 
     let directories_for_coordinate = client
-        .involved_directories_query(&coordinates, Some(1), true)
+        .involved_directories_query(&coordinates, Some(1), true, sandbox)
         .context("determining directories for project view")?;
     for dir in directories_for_coordinate {
         let dir_path = PathBuf::from(dir);
@@ -450,19 +396,18 @@ fn write_project_view_file(
     let mut f = File::create(&bazel_project_view_path).context("creating output file")?;
 
     let mut buffer = BufWriter::new(f);
-    buffer.write_all(b"workspace_type: java\n")?;
-    buffer.write_all(b"\n")?;
-    buffer.write_all(b"additional_languages:\n")?;
-    buffer.write_all(b"  scala\n")?;
-    buffer.write_all(b"\n")?;
-    buffer.write_all(b"derive_targets_from_directories: true\n")?;
-    buffer.write_all(b"\n")?;
-    buffer.write_all(b"directories:\n")?;
+    writeln!(buffer, "workspace_type: java")?;
+    writeln!(buffer, "")?;
+    writeln!(buffer, "additional_languages:")?;
+    writeln!(buffer, "  scala")?;
+    writeln!(buffer, "")?;
+    writeln!(buffer, "derive_targets_from_directories: true")?;
+    writeln!(buffer, "")?;
+    writeln!(buffer, "directories:")?;
     let prefix = dense_repo
         .to_str()
         .context("interpreting prefix as utf-8")?;
     // TODO: Sort and dedup. Fix weird breaks
-    // Are we adding too many directories? Is it because of reduction or what?
     for dir in &directories {
         let relative_path = dir.strip_prefix(&prefix);
         let path_bytestring = relative_path
@@ -470,12 +415,12 @@ fn write_project_view_file(
             .as_os_str()
             .as_bytes();
         if !path_bytestring.is_empty() {
-            buffer.write_all(b"  ")?;
-            buffer.write_all(&path_bytestring[..])?;
-            buffer.write_all(b"\n")?;
+            write!(buffer, "  ")?;
+            buffer.write(&path_bytestring[..])?;
+            writeln!(buffer, "")?;
         }
     }
-    buffer.write_all(b"\n")?;
+    writeln!(buffer, "")?;
     buffer.flush()?;
 
     Ok(())
@@ -485,35 +430,18 @@ pub fn generate_sparse_profile(
     dense_repo: &Path,
     sparse_profile_output: &Path,
     coordinates: &Vec<String>,
+    sandbox: &Sandbox,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     let client = BazelRepo::new(dense_repo, coordinates.clone())?;
-    // let mut source_paths = HashSet::<String>::new();
-    // for coordinate in coordinates {
-    //     // Do Bazel aquery for each coordinate
-    //     let sources = client
-    //         .involved_sources_aquery(&coordinate)
-    //         .with_context(|| format!("determining involved sources for {}", coordinate))?;
-    //     log::info!(
-    //         "Action query: {} yielded {} source files",
-    //         coordinate,
-    //         &sources.len()
-    //     );
-    //     source_paths.extend(sources);
-    // }
 
     let repo_component_count = dense_repo.components().count();
 
-    // let mut aquery_dirs = client
-    //     .involved_directories_for_sources(source_paths.iter())
-    //     .context("determining involved directories for sources")?;
-
     let mut query_dirs = BTreeSet::<PathBuf>::new();
-    // query_dirs.extend(aquery_dirs);
 
     let directories_for_coordinate = client
-        .involved_directories_query(&coordinates, None, false)
+        .involved_directories_query(&coordinates, None, false, sandbox)
         .with_context(|| format!("Determining involved directories for {:?}", &coordinates))?;
     log::info!(
         "Dependency query: {:?} yielded {} directories",
@@ -548,7 +476,6 @@ pub fn generate_sparse_profile(
             .with_context(|| format!("writing output (item={:?})", dir))?;
     }
     f.sync_data().context("syncing data")?;
-    // log::info!("Reduced {} coordinate file sets to {} directories", &coordinates.len(), &reduced_dirs.len());
 
     Ok(())
 }
@@ -629,28 +556,9 @@ impl BazelRepo {
         coordinates: &Vec<String>,
         depth: Option<usize>,
         identity: bool,
+        sandbox: &Sandbox,
     ) -> Result<Vec<String>> {
         // N.B. `bazel aquery` cannot handle unions ;(
-
-        use focus_formats::analysis::*;
-        use prost::Message;
-        use std::fs::File;
-        use std::io::prelude::*;
-
-        use tempfile::Builder;
-
-        let temp_dir = Builder::new()
-            .prefix("focus-parachute-work")
-            .tempdir()
-            .context("creating a temporary directory")?;
-        let temp_dir_path = temp_dir.path();
-        let bazel_out_path = &temp_dir_path.join("bazel-query.stdout");
-        let bazel_out_file = File::create(&bazel_out_path)
-            .context("opening stdout destination file for bazel command")?;
-        let bazel_err_path = &temp_dir_path.join("bazel-query.stderr");
-        let bazel_err_file = File::create(&bazel_err_path)
-            .context("opening stderr destination file for bazel command")?;
-
         let mut directories = Vec::<String>::new();
 
         let mut clauses = Vec::<String>::new();
@@ -672,207 +580,38 @@ impl BazelRepo {
         log::info!("Running Bazel query [{}]", &query);
 
         // Run Bazel query
-        let output = Command::new("./bazel")
-            .arg("query")
-            .arg(&query)
-            .arg("--output=package")
-            .current_dir(&self.dense_repo)
-            .stdout(Stdio::from(bazel_out_file))
-            .stderr(Stdio::from(bazel_err_file))
-            .spawn()
-            .context("spawning bazel query")?
-            .wait_with_output()
-            .context("awaiting bazel query")?;
+        let (mut cmd, scmd) = SandboxCommand::new("./bazel", sandbox)?;
+        scmd.ensure_success_or_log(
+            cmd.arg("query")
+                .arg(query)
+                .arg("--output=package")
+                .current_dir(&self.dense_repo),
+            SandboxCommandOutput::Stderr,
+            "bazel query",
+        )?;
 
-        if !output.status.success() {
-            exhibit_file(&bazel_err_path, "bazel stderr")?;
-            bail!("bazel query failed");
-        }
-
-        {
-            let file = File::open(bazel_out_path)?;
-            for line in std::io::BufReader::new(file).lines() {
-                if let Ok(line) = line {
-                    let path = PathBuf::from(&line);
-                    if !&line.starts_with("@")
-                        && !path.starts_with("bazel-out/")
-                        && !path.starts_with("external/")
-                    {
-                        let absolute_path = &self.dense_repo.join(&path);
-                        if let Some(path) = absolute_path.to_str() {
-                            directories.push(path.to_owned());
-                        } else {
-                            bail!(
-                                "Path '{}' contains characters that cannot be safely converted",
-                                &path.display()
-                            );
-                        }
+        let reader = scmd.read_buffered(SandboxCommandOutput::Stdout)?;
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                let path = PathBuf::from(&line);
+                if !&line.starts_with("@")
+                    && !path.starts_with("bazel-out/")
+                    && !path.starts_with("external/")
+                {
+                    let absolute_path = &self.dense_repo.join(&path);
+                    if let Some(path) = absolute_path.to_str() {
+                        directories.push(path.to_owned());
+                    } else {
+                        bail!(
+                            "Path '{}' contains characters that cannot be safely converted",
+                            &path.display()
+                        );
                     }
                 }
             }
         }
 
         Ok(directories)
-    }
-
-    pub fn involved_sources_aquery(&self, coordinate: &str) -> Result<Vec<String>> {
-        // N.B. `bazel aquery` cannot handle unions ;(
-
-        use focus_formats::analysis::*;
-        use prost::Message;
-        use std::fs::File;
-        use std::io::prelude::*;
-
-        use tempfile::Builder;
-
-        let temp_dir = Builder::new()
-            .prefix("focus-parachute-work")
-            .tempdir()
-            .context("creating a temporary directory")?;
-        let temp_dir_path = temp_dir.path();
-        let bazel_out_path = &temp_dir_path.join("bazel-aquery.stdout");
-        let bazel_out_file = File::create(&bazel_out_path)
-            .context("opening stdout destination file for bazel command")?;
-        let bazel_err_path = &temp_dir_path.join("bazel-aquery.stderr");
-        let bazel_err_file = File::create(&bazel_err_path)
-            .context("opening stderr destination file for bazel command")?;
-
-        let mut sources = Vec::<String>::new();
-
-        let query = format!("inputs('.*', ({} union deps({})))", coordinate, coordinate);
-
-        // Run Bazel aquery
-        let output = Command::new("./bazel")
-            .arg("aquery")
-            .arg(query)
-            .arg("--output=proto")
-            .current_dir(&self.dense_repo)
-            .stdout(Stdio::from(bazel_out_file))
-            .stderr(Stdio::from(bazel_err_file))
-            .spawn()
-            .context("spawning bazel aquery")?
-            .wait_with_output()
-            .context("awaiting bazel aquery")?;
-
-        if !output.status.success() {
-            exhibit_file(&bazel_err_path, "bazel stderr")?;
-            bail!("bazel aquery failed");
-        }
-
-        let container: ActionGraphContainer;
-        {
-            let mut bytes = Vec::<u8>::new();
-            let mut proto_output =
-                File::open(&bazel_out_path).context("opening protobuf output for reading")?;
-            proto_output
-                .read_to_end(&mut bytes)
-                .expect("reading proto output");
-            container = ActionGraphContainer::decode(&bytes[..])
-                .context("decoding action graph container protobuf")?;
-        }
-
-        let mut path_fragments = HashMap::<u32, PathFragment>::new();
-        for path_fragment in container.path_fragments {
-            let id = path_fragment.id;
-            assert!(id != 0);
-            if let Some(_) = path_fragments.insert(id, path_fragment) {
-                bail!("duplicate fragment inserted with id {}", &id);
-            }
-        }
-
-        let mut artifacts = HashMap::<u32, Artifact>::new();
-        for artifact in container.artifacts {
-            let id = artifact.id;
-            if let Some(_) = artifacts.insert(artifact.id, artifact) {
-                bail!("duplicate artifact inserted with id {}", id);
-            }
-        }
-
-        let mut depsets = HashMap::<u32, DepSetOfFiles>::new();
-        for depset in container.dep_set_of_files {
-            let id = depset.id;
-            if let Some(_) = depsets.insert(depset.id, depset) {
-                bail!("duplicate artifact inserted with id {}", id);
-            }
-        }
-
-        let qualify_path_fragment = |path_fragment_id: u32| -> Result<String> {
-            let mut fragments = VecDeque::<&PathFragment>::new();
-            let mut fragment_id = path_fragment_id;
-            assert!(fragment_id != 0);
-            loop {
-                if let Some(fragment) = path_fragments.get(&fragment_id) {
-                    fragments.push_front(fragment);
-                    if fragment.parent_id == 0 {
-                        break;
-                    } else {
-                        fragment_id = fragment.parent_id;
-                    }
-                } else {
-                    bail!("missing path fragment")
-                }
-            }
-
-            let mut label = Vec::<&str>::new();
-            for fragment in fragments {
-                label.push(&fragment.label);
-            }
-            Ok(label.join("/"))
-        };
-
-        for action in container.actions {
-            let mut path_fragment_ids = Vec::<u32>::new();
-
-            let mut process_depset = |ids: &Vec<u32>| -> Result<()> {
-                for artifact_id in ids {
-                    match artifacts.get(&artifact_id) {
-                        Some(artifact) => {
-                            path_fragment_ids.push(artifact.path_fragment_id);
-                        }
-                        None => {
-                            bail!("missing artifact with id {}", &artifact_id);
-                        }
-                    }
-                }
-
-                Ok(())
-            };
-
-            let mut transitive_depsets = HashSet::<u32>::new();
-            for dep_set_id in &action.input_dep_set_ids {
-                match depsets.get(&dep_set_id) {
-                    Some(depset) => {
-                        transitive_depsets.extend(&depset.transitive_dep_set_ids);
-                        process_depset(&depset.direct_artifact_ids)
-                            .context("processing direct depsets")?;
-                    }
-                    None => {
-                        bail!("missing direct depset with id {}", &dep_set_id);
-                    }
-                }
-            }
-
-            // Remove directs
-            for dep_set_id in &action.input_dep_set_ids {
-                transitive_depsets.remove(&dep_set_id);
-            }
-
-            // Process transitive depsets
-            for dep_set_id in transitive_depsets {
-                let ids = vec![dep_set_id];
-                process_depset(&ids).context("processing transitive depsets")?;
-            }
-
-            for path_fragment_id in path_fragment_ids {
-                let path =
-                    qualify_path_fragment(path_fragment_id).context("qualifying path fragment")?;
-                // TODO: Factor out these forbidden prefixes.
-                if !path.starts_with("bazel-out/") && !path.starts_with("external/") {
-                    sources.push(path);
-                }
-            }
-        }
-        Ok(sources)
     }
 }
 

@@ -146,6 +146,41 @@ impl SandboxCommand {
         reader.read_to_string(output_string)?;
         Ok(())
     }
+    
+    pub fn read_buffered(
+        &self,
+        output: SandboxCommandOutput,
+        
+    ) -> Result<BufReader<File>> {
+        let path = match output {
+            SandboxCommandOutput::Stdout => &self.stdout_path,
+            SandboxCommandOutput::Stderr => &self.stderr_path,
+            _ => bail!("cannot read all outputs using one reader"),
+        };
+
+        Ok(BufReader::new(File::open(path)?))
+    }
+
+    // Run the provided command and if it is not successful, log the process output
+    pub fn ensure_success_or_log(
+        &self,
+        cmd: &mut Command,
+        output: SandboxCommandOutput,
+        description: &str,
+    ) -> Result<ExitStatus> {
+        let status = cmd
+            .status()
+            .with_context(|| format!("launching command {}", description))?;
+
+        log::info!("Command {:?} exited with status {}", cmd, &status);
+
+        if !status.success() {
+            self.log(output, description).context("logging output")?;
+            bail!("command {:?} failed: {}", cmd, description);
+        }
+
+        Ok(status)
+    }
 }
 
 pub fn os_strings<'a, I>(iter: I) -> Vec<OsString>
@@ -323,28 +358,6 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn arg_handling() -> Result<()> {
-    //     init_logging();
-    //     let sandbox = Sandbox::new(false)?;
-    //     let echo = Tool::new("echo1", &OsStr::new("echo"), &vec![OsString::from("-n")))?;
-    //     let args = vec![
-    //         OsString::from("fee"),
-    //         OsString::from("fie"),
-    //         OsString::from("foe"),
-    //         OsString::from("fum"),
-    //     ];
-    //     let invocation = echo.invoke(Some(&args), None, None, &sandbox)?;
-    //     assert!(invocation.or_display_logs().is_ok());
-    //     let mut reader = BufReader::new(File::open(invocation.stdout_path())?);
-    //     let mut contents = String::new();
-    //     reader.read_to_string(&mut contents)?;
-    //     let expected_contents = "fee fie foe fum";
-    //     assert_eq!(contents, expected_contents);
-
-    //     Ok(())
-    // }
-
     #[test]
     fn arg_handling_default_args() -> Result<()> {
         init_logging();
@@ -381,11 +394,10 @@ mod tests {
     fn sandboxed_command_capture_all() -> Result<()> {
         init_logging();
         let sandbox = Sandbox::new(false)?;
-        let mut command = Command::new("echo");
-        let sc = SandboxCommand::new(&mut command, &sandbox)?;
-        command.arg("-n").arg("hey").arg("there").status()?;
+        let (mut cmd, scmd) = SandboxCommand::new("echo", &sandbox)?;
+        cmd.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
-        sc.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
+        scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
         assert_eq!(output_string, "hey there");
 
         Ok(())
@@ -395,23 +407,21 @@ mod tests {
     fn sandboxed_command_specific_stdin() -> Result<()> {
         init_logging();
         let sandbox = Sandbox::new(false)?;
-        let mut command = Command::new("cat");
-
         let path = {
             let (mut file, path) = sandbox.create_file(None, None)?;
             file.write_all(b"hello, world")?;
             path
         };
-        let sc = SandboxCommand::new_with_handles(
-            &mut command,
+        let (mut cmd, scmd) = SandboxCommand::new_with_handles(
+            "cat",
             Some(Stdio::from(File::open(&path)?)),
             None,
             None,
             &sandbox,
         )?;
-        command.status()?;
+        cmd.status()?;
         let mut output_string = String::new();
-        sc.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
+        scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
         assert_eq!(output_string, "hello, world");
 
         Ok(())
