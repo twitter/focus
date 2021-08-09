@@ -1,6 +1,7 @@
 mod detail;
-mod sandbox;
+mod model;
 mod sandbox_command;
+mod sandbox;
 mod sparse_repos;
 mod testing;
 mod util;
@@ -9,7 +10,7 @@ mod working_tree_synchronizer;
 #[macro_use]
 extern crate lazy_static;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 use sandbox::Sandbox;
 use std::{path::PathBuf, str::FromStr, sync::Arc};
@@ -103,8 +104,44 @@ fn main() -> Result<()> {
         }
 
         Subcommand::Layers { sparse_repo } => {
-            println!("List layers for {}", sparse_repo.display());
+            println!("List layers");
             Ok(())
+        }
+
+        // Subcommand::ShowLayer {
+        //     name,
+        //     dense_repo,
+        //     sparse_repo,
+        //     coordinates,
+        //     filter_sparse,
+        // } => {
+
+        // },
+
+        // Subcommand::HideLayer {
+        //     name,
+        //     dense_repo,
+        //     sparse_repo,
+        //     coordinates,
+        //     filter_sparse,
+        // } => {
+
+        // },
+        // Subcommand::GenerateSparseProfile {
+        //     dense_repo,
+        //     sparse_profile_output,
+        //     coordinates,
+        // } => {
+        //     sparse_repos::generate_sparse_profile(
+        //         &sandbox,
+        //         &dense_repo,
+        //         &sparse_profile_output,
+        //         &coordinates.0,
+        //     )?;
+        //     Ok(())
+        // }
+        _ => {
+            bail!("Not implemented");
         }
     }
 }

@@ -7,7 +7,6 @@ pub mod config;
 pub mod constants;
 pub mod error;
 pub mod fixtures;
-pub mod proto_file_stream;
 pub mod repo;
 pub mod tokentab;
 pub mod util;

@@ -4,10 +4,9 @@ use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 
 pub struct Sandbox {
-    #[allow(dead_code)]
     temp_dir: Option<tempfile::TempDir>,
     path: PathBuf,
     serial_sequence: AtomicUsize,
@@ -81,7 +80,6 @@ mod tests {
         let path = {
             let sandbox = Sandbox::new(false)?;
             let owned_path = sandbox.path().to_owned();
-            // drop(&sandbox);
             owned_path
         };
         assert!(fs::metadata(path).is_err());

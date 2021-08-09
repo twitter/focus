@@ -215,7 +215,6 @@ dependencies = [
  "structopt",
  "tempfile",
  "thiserror",
- "toml",
  "uuid",
  "walkdir",
 ]
