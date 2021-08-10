@@ -186,9 +186,14 @@ mod tests {
     use std::ffi::OsStr;
     use std::fs::File;
     use std::io::{prelude::*, BufReader, SeekFrom, Write};
+    use std::sync::{Once};
+
+    static INIT_LOGGING_ONCE: Once = Once::new();
 
     fn init_logging() {
-        let _ = env_logger::builder().is_test(true).try_init();
+        INIT_LOGGING_ONCE.call_once(|| {
+            let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+        });
     }
 
     #[test]

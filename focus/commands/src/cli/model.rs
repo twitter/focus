@@ -33,7 +33,7 @@ pub struct Layer {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, PartialOrd)]
-pub struct Topology {
+pub struct LayerSet {
     layers: Vec<Layer>,
 }
 
@@ -42,7 +42,7 @@ enum RemoveResult {
     NotFound,
 }
 
-impl Topology {
+impl LayerSet {
     pub fn validate(&self) -> Result<()> {
         // Find duplicate names
         let mut visited_names = HashMap::<String, usize>::new();
@@ -64,7 +64,7 @@ impl Topology {
         Ok(())
     }
 
-    pub fn extend(&mut self, other: &Topology) {
+    pub fn extend(&mut self, other: &LayerSet) {
         self.layers.extend(other.layers.clone());
     }
 
@@ -96,29 +96,29 @@ impl Topology {
                 .collect())
     }
 
-    fn load(path: &Path) -> Result<Topology> {
+    fn load(path: &Path) -> Result<LayerSet> {
         Ok(
             serde_json::from_slice(&std::fs::read(&path).context("opening file for read")?)
-                .context("storing topology")?,
+                .context("storing layer_set")?,
         )
     }
 
-    fn store(path: &Path, t: &Topology) -> Result<()> {
+    fn store(path: &Path, t: &LayerSet) -> Result<()> {
         std::fs::write(
             &path,
             &serde_json::to_vec(&t).context("opening file for write")?,
         )
-        .context("storing topology")?;
+        .context("storing layer_set")?;
 
         Ok(())
     }
 }
 
-pub struct Topologies {
+pub struct LayerSets {
     repo_path: PathBuf,
 }
 
-impl Topologies {
+impl LayerSets {
     pub fn new(repo_path: &Path) -> Self {
         Self {
             repo_path: repo_path.to_owned(),
@@ -130,21 +130,21 @@ impl Topologies {
     }
 
     // The layers the user has chosen
-    pub fn selected_topology_path(&self) -> PathBuf {
-        self.selected_directory().join("user.topo.json")
+    pub fn selected_layer_set_path(&self) -> PathBuf {
+        self.selected_directory().join("user.layer.json")
     }
 
-    // The directory containing project-oriented layers. All .topo.json will be scanned.
+    // The directory containing project-oriented layers. All .layer.json will be scanned.
     pub fn project_directory(&self) -> PathBuf {
         self.repo_path.join("focus")
     }
 
-    fn topo_json_filter(entry: &DirEntry) -> bool {
+    fn layer_json_filter(entry: &DirEntry) -> bool {
         if entry.path().is_dir() {
             return true;
         }
 
-        let suffix = OsString::from(".topo.json");
+        let suffix = OsString::from(".layer.json");
         let ostr = entry.path().as_os_str();
         if ostr.len() < suffix.len() {
             return false;
@@ -153,7 +153,7 @@ impl Topologies {
         ostr.as_bytes().ends_with(suffix.as_bytes())
     }
 
-    fn locate_topology_files(&self) -> Result<Vec<PathBuf>> {
+    fn locate_layer_set_files(&self) -> Result<Vec<PathBuf>> {
         let mut results = Vec::<PathBuf>::new();
         let walker = WalkDir::new(self.project_directory())
             .sort_by_file_name()
@@ -164,7 +164,7 @@ impl Topologies {
             &self.project_directory().display()
         );
 
-        for entry in walker.filter_entry(|e| Self::topo_json_filter(&e)) {
+        for entry in walker.filter_entry(|e| Self::layer_json_filter(&e)) {
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
@@ -181,43 +181,43 @@ impl Topologies {
         return Ok(results);
     }
 
-    // Return a topology including all available layers
-    pub fn available_layers(&self) -> Result<Topology> {
-        let mut topo = Topology { layers: vec![] };
+    // Return a layer_set cataloging all available layers
+    pub fn available_layers(&self) -> Result<LayerSet> {
+        let mut layer = LayerSet { layers: vec![] };
 
         let paths = self
-            .locate_topology_files()
-            .context("scanning project topology files")?;
+            .locate_layer_set_files()
+            .context("scanning project layer_set files")?;
 
         for path in &paths {
-            topo.extend(
-                &Topology::load(&path)
-                    .with_context(|| format!("loading topology from {}", &path.display()))?,
+            layer.extend(
+                &LayerSet::load(&path)
+                    .with_context(|| format!("loading layer_set from {}", &path.display()))?,
             );
         }
 
-        Ok(topo)
+        Ok(layer)
     }
 
-    // Return a topology containing the layers a user has selected
-    fn selected_layers(&self) -> Result<Option<Topology>> {
-        let path = self.selected_topology_path();
+    // Return a layer_set containing the layers a user has selected
+    fn selected_layers(&self) -> Result<Option<LayerSet>> {
+        let path = self.selected_layer_set_path();
         if !path.exists() {
             return Ok(None);
         }
 
-        Topology::load(&path)
-            .context("loading the user topology")
+        LayerSet::load(&path)
+            .context("loading the user layer_set")
             .map(|t| Some(t))
     }
 
-    fn store_selected_layers(&self, t: &Topology) -> Result<()> {
+    fn store_selected_layers(&self, t: &LayerSet) -> Result<()> {
         std::fs::create_dir_all(self.selected_directory())
             .context("creating the directory to store user layers")?;
-        Topology::store(&self.selected_topology_path(), &t).context("storing user layers")
+        LayerSet::store(&self.selected_layer_set_path(), &t).context("storing user layers")
     }
 
-    fn add_to_selection(&self) -> Result<Topology> {
+    fn add_to_selection(&self) -> Result<LayerSet> {
         let selection = self
             .selected_layers()
             .unwrap_or_default()
@@ -231,9 +231,14 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use tempfile::{tempdir, TempDir};
+    use std::sync::{Once};
+
+    static INIT_LOGGING_ONCE: Once = Once::new();
 
     fn init_logging() {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+        INIT_LOGGING_ONCE.call_once(|| {
+            let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+        });
     }
 
     fn layers() -> Vec<Layer> {
@@ -265,8 +270,8 @@ mod tests {
         ]
     }
 
-    fn topology() -> Topology {
-        Topology { layers: layers() }
+    fn layer_set() -> LayerSet {
+        LayerSet { layers: layers() }
     }
 
     #[test]
@@ -274,8 +279,8 @@ mod tests {
         init_logging();
 
         {
-            let topology = topology();
-            assert!(topology.validate().is_ok());
+            let layer_set = layer_set();
+            assert!(layer_set.validate().is_ok());
         }
 
         {
@@ -286,9 +291,9 @@ mod tests {
                 mandatory: false,
                 coordinates: vec!["it doesn't matter".to_owned()],
             });
-            let topology = Topology { layers };
-            let e = topology.validate().unwrap_err();
-            assert_eq!("Layer named 'baseline/loglens' at index 3 has the same name as existing layer at index 2",e.to_string());
+            let layer_set = LayerSet { layers };
+            let e = layer_set.validate().unwrap_err();
+            assert_eq!("Layer named 'baseline/loglens' at index 4 has the same name as existing layer at index 2",e.to_string());
         }
 
         Ok(())
@@ -298,8 +303,8 @@ mod tests {
     fn merge() -> Result<()> {
         init_logging();
 
-        let mut t1 = topology();
-        let t2 = Topology {
+        let mut t1 = layer_set();
+        let t2 = LayerSet {
             layers: vec![Layer {
                 name: "foo".to_owned(),
                 description: "".to_owned(),
@@ -317,8 +322,8 @@ mod tests {
     fn remove_named_layer() -> Result<()> {
         init_logging();
 
-        let mut topology = topology();
-        topology.remove_named_layer("projects/cdpain")?;
+        let mut layer_set = layer_set();
+        layer_set.remove_named_layer("projects/cdpain")?;
 
         Ok(())
     }
@@ -327,8 +332,8 @@ mod tests {
     fn remove_named_layer_not_found() -> Result<()> {
         init_logging();
 
-        let mut topology = topology();
-        let result = topology.remove_named_layer("baseline/boo");
+        let mut layer_set = layer_set();
+        let result = layer_set.remove_named_layer("baseline/boo");
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().root_cause().to_string(),
@@ -342,8 +347,8 @@ mod tests {
     fn remove_named_layer_cannot_remove_mandatory_layers() -> Result<()> {
         init_logging();
 
-        let mut topology = topology();
-        let result = topology.remove_named_layer("baseline/loglens");
+        let mut layer_set = layer_set();
+        let result = layer_set.remove_named_layer("baseline/loglens");
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().root_cause().to_string(),
@@ -353,30 +358,30 @@ mod tests {
         Ok(())
     }
 
-    fn project_fixture(name: &str) -> Topology {
-        Topology {
+    fn project_fixture(name: &str) -> LayerSet {
+        LayerSet {
             layers: vec![Layer {
                 name: name.to_owned(),
-                description: format!("Fixture topology {}", name),
+                description: format!("Fixture layer_set {}", name),
                 mandatory: false,
                 coordinates: vec![format!("//{}/...", name)],
             }],
         }
     }
 
-    fn repo_fixture() -> Result<(TempDir, Topologies)> {
+    fn repo_fixture() -> Result<(TempDir, LayerSets)> {
         let dir = tempdir().context("making a temporary directory")?;
         let path = dir.path().join("test_repo");
-        let t = Topologies::new(&path);
+        let t = LayerSets::new(&path);
         let project_dir = t.project_directory();
         std::fs::create_dir_all(&project_dir).context("creating project dir")?;
 
         let random_file_path = project_dir.join("whatever.json");
         std::fs::write(&random_file_path, b"{}").context("writing random file")?;
 
-        let builtins_topo = topology();
-        let builtins_path = project_dir.join("builtins.topo.json");
-        Topology::store(&builtins_path, &builtins_topo).context("storing builtins_topo")?;
+        let builtins_layer = layer_set();
+        let builtins_path = project_dir.join("builtins.layer.json");
+        LayerSet::store(&builtins_path, &builtins_layer).context("storing builtins_layer")?;
 
         Ok((dir, t))
     }
@@ -388,9 +393,9 @@ mod tests {
         let (_tdir, t) = repo_fixture().context("building repo fixture")?;
         let project_dir = t.project_directory();
 
-        let my_project_path = project_dir.join("my_project.topo.json");
+        let my_project_path = project_dir.join("my_project.layer.json");
         let my_project = project_fixture("my_project");
-        Topology::store(&my_project_path, &my_project).context("storing my_project")?;
+        LayerSet::store(&my_project_path, &my_project).context("storing my_project")?;
 
         let cat = t.available_layers().context("reading available_layers")?;
         assert_eq!(cat.layers.len(), 5);
@@ -412,7 +417,7 @@ mod tests {
             coordinates: vec!["//b/...ı".to_owned()],
             mandatory: false,
         }];
-        let t = Topology {
+        let t = LayerSet {
             layers: ls,
         };
         
@@ -428,8 +433,6 @@ mod tests {
 
         let (_tdir, t) = repo_fixture().context("building repo fixture")?;
         assert!(t.selected_layers().unwrap().is_none());
-
-        //t.catalog()
 
         Ok(())
     }
