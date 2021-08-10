@@ -1,13 +1,11 @@
 use crate::sandbox::Sandbox;
 use anyhow::{bail, Context, Result};
 use std::{
-    ffi::{OsStr, OsString},
-    fmt::Display,
+    ffi::OsStr,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
-    sync::Arc,
 };
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
@@ -183,9 +181,8 @@ impl SandboxCommand {
 mod tests {
     use super::*;
     use anyhow::Result;
-    
     use std::fs::File;
-    use std::io::{prelude::*, Write};
+    use std::io::Write;
     use std::sync::Once;
 
     static INIT_LOGGING_ONCE: Once = Once::new();

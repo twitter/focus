@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tempfile::{TempDir};
 
 pub struct Sandbox {
+    #[allow(unreachable_code)]
     temp_dir: Option<tempfile::TempDir>,
     path: PathBuf,
     serial_sequence: AtomicUsize,
