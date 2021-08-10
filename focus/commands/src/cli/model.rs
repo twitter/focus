@@ -1,8 +1,6 @@
 use std::{
     collections::HashMap,
-    ffi::{OsStr, OsString},
-    fs::File,
-    io::Read,
+    ffi::OsString,
     os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
 };
@@ -20,6 +18,12 @@ pub enum RemovalError {
     Mandatory,
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum LoadError {
+    #[error("not found")]
+    NotFound,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub struct Layer {
     name: String,
@@ -28,7 +32,7 @@ pub struct Layer {
     coordinates: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub struct Topology {
     layers: Vec<Layer>,
 }
@@ -78,6 +82,20 @@ impl Topology {
         return Err(Error::new(RemovalError::NotFound));
     }
 
+    pub fn optional_layers(&self) -> Result<Vec<&Layer>> {
+            Ok(self
+                .layers
+                .iter()
+                .filter_map(|l| {
+                    if !l.mandatory {
+                        Some(l)
+                    } else {
+                        None
+                    }
+                })
+                .collect())
+    }
+
     fn load(path: &Path) -> Result<Topology> {
         Ok(
             serde_json::from_slice(&std::fs::read(&path).context("opening file for read")?)
@@ -107,9 +125,13 @@ impl Topologies {
         }
     }
 
+    pub fn selected_directory(&self) -> PathBuf {
+        self.repo_path.join(".focus")
+    }
+
     // The layers the user has chosen
-    pub fn user_topology_path(&self) -> PathBuf {
-        self.repo_path.join(".focus").join("user.topo.json")
+    pub fn selected_topology_path(&self) -> PathBuf {
+        self.selected_directory().join("user.topo.json")
     }
 
     // The directory containing project-oriented layers. All .topo.json will be scanned.
@@ -131,25 +153,24 @@ impl Topologies {
         ostr.as_bytes().ends_with(suffix.as_bytes())
     }
 
-    fn scan_projects(&self) -> Result<Vec<PathBuf>> {
+    fn locate_topology_files(&self) -> Result<Vec<PathBuf>> {
         let mut results = Vec::<PathBuf>::new();
         let walker = WalkDir::new(self.project_directory())
             .sort_by_file_name()
             .follow_links(true)
             .into_iter();
-        log::debug!("scanning project directory {}", &self.project_directory().display());
+        log::debug!(
+            "scanning project directory {}",
+            &self.project_directory().display()
+        );
 
         for entry in walker.filter_entry(|e| Self::topo_json_filter(&e)) {
-            
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
-                    if !path.is_file() {
-                        // Ignore non-files -- walkdir includes them.
-                        continue;
+                    if path.is_file() {
+                        results.push(path.to_owned());
                     }
-                    log::debug!("Processing project file {}", &path.display());
-                    results.push(path.to_owned());
                 }
                 Err(e) => {
                     log::warn!("Encountered error: {}", e);
@@ -160,22 +181,48 @@ impl Topologies {
         return Ok(results);
     }
 
-    // Return a catalog of project topologies (excludes mandatory topologies)
-    pub fn catalog(&self) -> Result<Topology> {
-        let mut catalog_topo = Topology { layers: vec![] };
+    // Return a topology cataloging all available project topologies (excludes mandatory topologies)
+    pub fn available_layers(&self) -> Result<Topology> {
+        let mut topo = Topology { layers: vec![] };
 
         let paths = self
-            .scan_projects()
+            .locate_topology_files()
             .context("scanning project topology files")?;
 
         for path in &paths {
-            let path = path.as_path();
-            let topo = Topology::load(&path)
-                .with_context(|| format!("loading topology from {}", &path.display()))?;
-            catalog_topo.extend(&topo);
+            topo.extend(
+                &Topology::load(&path)
+                    .with_context(|| format!("loading topology from {}", &path.display()))?,
+            );
         }
 
-        Ok(catalog_topo)
+        Ok(topo)
+    }
+
+    // Return a topology containing the layers a user has selected
+    fn selected_layers(&self) -> Result<Option<Topology>> {
+        let path = self.selected_topology_path();
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        Topology::load(&path)
+            .context("loading the user topology")
+            .map(|t| Some(t))
+    }
+
+    fn store_selected_layers(&self, t: &Topology) -> Result<()> {
+        std::fs::create_dir_all(self.selected_directory())
+            .context("creating the directory to store user layers")?;
+        Topology::store(&self.selected_topology_path(), &t).context("storing user layers")
+    }
+
+    fn add_to_selection(&self) -> Result<Topology> {
+        let selection = self
+            .selected_layers()
+            .unwrap_or_default()
+            .unwrap_or_default();
+        todo!("impl");
     }
 }
 
@@ -335,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog() -> Result<()> {
+    fn available_layers() -> Result<()> {
         init_logging();
 
         let (_tdir, t) = repo_fixture().context("building repo fixture")?;
@@ -344,10 +391,45 @@ mod tests {
         let my_project_path = project_dir.join("my_project.topo.json");
         let my_project = project_fixture("my_project");
         Topology::store(&my_project_path, &my_project).context("storing my_project")?;
-        log::info!("stored to {}", &my_project_path.display());
 
-        let cat = t.catalog().context("reading catalog")?;
+        let cat = t.available_layers().context("reading available_layers")?;
         assert_eq!(cat.layers.len(), 5);
+
+        Ok(())
+    }
+
+    #[test]
+    fn optional_layers() -> Result<()> {
+        init_logging();
+        let ls = vec![Layer {
+            name: "a".to_owned(),
+            description: "".to_owned(),
+            coordinates: vec!["//a/...".to_owned()],
+            mandatory: true,
+        }, Layer {
+            name: "b".to_owned(),
+            description: "".to_owned(),
+            coordinates: vec!["//b/...ı".to_owned()],
+            mandatory: false,
+        }];
+        let t = Topology {
+            layers: ls,
+        };
+        
+        let layers = t.optional_layers()?;
+        assert_eq!(layers.len(), 1);
+        assert_eq!(layers.last().unwrap().name, "b");
+
+        Ok(())
+    }
+
+    fn selected_layers() -> Result<()> {
+        init_logging();
+
+        let (_tdir, t) = repo_fixture().context("building repo fixture")?;
+        assert!(t.selected_layers().unwrap().is_none());
+
+        //t.catalog()
 
         Ok(())
     }
