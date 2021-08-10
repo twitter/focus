@@ -181,7 +181,7 @@ impl Topologies {
         return Ok(results);
     }
 
-    // Return a topology cataloging all available project topologies (excludes mandatory topologies)
+    // Return a topology including all available layers
     pub fn available_layers(&self) -> Result<Topology> {
         let mut topo = Topology { layers: vec![] };
 
