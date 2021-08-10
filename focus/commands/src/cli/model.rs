@@ -83,17 +83,11 @@ impl LayerSet {
     }
 
     pub fn optional_layers(&self) -> Result<Vec<&Layer>> {
-            Ok(self
-                .layers
-                .iter()
-                .filter_map(|l| {
-                    if !l.mandatory {
-                        Some(l)
-                    } else {
-                        None
-                    }
-                })
-                .collect())
+        Ok(self
+            .layers
+            .iter()
+            .filter_map(|l| if !l.mandatory { Some(l) } else { None })
+            .collect())
     }
 
     fn load(path: &Path) -> Result<LayerSet> {
@@ -230,14 +224,16 @@ impl LayerSets {
 mod tests {
     use super::*;
     use anyhow::Result;
+    use std::sync::Once;
     use tempfile::{tempdir, TempDir};
-    use std::sync::{Once};
 
     static INIT_LOGGING_ONCE: Once = Once::new();
 
     fn init_logging() {
         INIT_LOGGING_ONCE.call_once(|| {
-            let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            let _ =
+                env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+                    .init();
         });
     }
 
@@ -406,21 +402,22 @@ mod tests {
     #[test]
     fn optional_layers() -> Result<()> {
         init_logging();
-        let ls = vec![Layer {
-            name: "a".to_owned(),
-            description: "".to_owned(),
-            coordinates: vec!["//a/...".to_owned()],
-            mandatory: true,
-        }, Layer {
-            name: "b".to_owned(),
-            description: "".to_owned(),
-            coordinates: vec!["//b/...ı".to_owned()],
-            mandatory: false,
-        }];
-        let t = LayerSet {
-            layers: ls,
-        };
-        
+        let ls = vec![
+            Layer {
+                name: "a".to_owned(),
+                description: "".to_owned(),
+                coordinates: vec!["//a/...".to_owned()],
+                mandatory: true,
+            },
+            Layer {
+                name: "b".to_owned(),
+                description: "".to_owned(),
+                coordinates: vec!["//b/...ı".to_owned()],
+                mandatory: false,
+            },
+        ];
+        let t = LayerSet { layers: ls };
+
         let layers = t.optional_layers()?;
         assert_eq!(layers.len(), 1);
         assert_eq!(layers.last().unwrap().name, "b");

@@ -65,14 +65,16 @@ mod tests {
     use crate::testing::scratch_git_repo::ScratchGitRepo;
     use anyhow::Result;
     use env_logger::Env;
+    use std::sync::Once;
     use tempfile::tempdir;
-    use std::sync::{Once};
 
     static INIT_LOGGING_ONCE: Once = Once::new();
 
     fn init_logging() {
         INIT_LOGGING_ONCE.call_once(|| {
-            let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            let _ =
+                env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+                    .init();
         });
     }
 
