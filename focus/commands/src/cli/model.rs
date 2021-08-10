@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    os::unix::prelude::OsStrExt,
-    path::{Path, PathBuf},
-};
+use std::{borrow::{Borrow, BorrowMut}, collections::HashMap, ffi::OsString, iter::FromIterator, os::unix::prelude::OsStrExt, path::{Path, PathBuf}};
 
 use anyhow::{bail, Context, Error, Result};
 use serde_derive::{Deserialize, Serialize};
@@ -105,6 +100,36 @@ impl LayerSet {
         .context("storing layer_set")?;
 
         Ok(())
+    }
+}
+pub struct IndexedLayerSet {
+    underlying: LayerSet,
+    name_to_index: HashMap<String, usize>,
+}
+
+impl<'a> IndexedLayerSet {
+    pub fn new(underlying: LayerSet) -> Result<Self> {
+        let mut instance = Self {
+            underlying,
+            name_to_index: HashMap::new(),
+        };
+
+        for (index, layer) in instance.underlying.layers.iter().enumerate() {
+            if let Some(existing) = instance.name_to_index.insert(layer.name.clone(), index) {
+                bail!("Layer {:?} has the same name as layer {:?}", &layer, &instance.underlying.layers[existing]);
+            }
+        }
+
+        Ok(instance)
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Layer> {
+        if let Some(ix) = self.name_to_index.get(name) {
+            let layer: &Layer = &self.underlying.layers[*ix];
+            return Some(layer)
+        }
+
+        None
     }
 }
 
