@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use git2::{ObjectType, TreeEntry, TreeWalkMode, TreeWalkResult};
 use internals::error::AppError;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
-use std::ffi::{OsStr, OsString};
+
+use std::ffi::{OsString};
 use std::fs::Permissions;
 
 fn normalize_tree_entry_path(path: &str, tree_entry: &TreeEntry) -> Result<String, AppError> {
@@ -62,7 +62,7 @@ pub fn snapshot(repo: &Path, _output: &Path) -> Result<(), AppError> {
     };
     commit.tree()?.walk(TreeWalkMode::PreOrder, |path, entry| {
         if let Ok(normal_path) = normalize_tree_entry_path(path, entry) {
-            let permissions: Permissions = PermissionsExt::from_mode(entry.filemode() as u32);
+            let _permissions: Permissions = PermissionsExt::from_mode(entry.filemode() as u32);
             // info!("{:?} {:?} {:?}", normal_path, entry.kind(), permissions);
             match entry.kind() {
                 Some(ObjectType::Tree) => {

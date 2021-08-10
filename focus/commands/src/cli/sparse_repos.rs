@@ -49,7 +49,7 @@ pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<(
     git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
 }
 
-pub fn configure_sparse_repo_initial(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
     // TODO: Consider enabling the fsmonitor after it can be bundled.
     // git_config(sparse_repo, "core.fsmonitor", "rs-git-fsmonitor", sandbox)?;
     Ok(())
@@ -445,7 +445,7 @@ fn write_project_view_file(
         bail!("Refusing to generate a project view with an empty set of directories.");
     }
 
-    let mut f = File::create(&bazel_project_view_path).context("creating output file")?;
+    let f = File::create(&bazel_project_view_path).context("creating output file")?;
 
     let mut buffer = BufWriter::new(f);
     writeln!(buffer, "workspace_type: java")?;
@@ -554,7 +554,7 @@ struct BazelRepo {
 }
 
 impl BazelRepo {
-    pub fn new(dense_repo: &Path, coordinates: Vec<String>) -> Result<Self> {
+    pub fn new(dense_repo: &Path, _coordinates: Vec<String>) -> Result<Self> {
         Ok(Self {
             dense_repo: dense_repo.to_owned(),
         })

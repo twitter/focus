@@ -183,9 +183,9 @@ impl SandboxCommand {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use std::ffi::OsStr;
+    
     use std::fs::File;
-    use std::io::{prelude::*, BufReader, SeekFrom, Write};
+    use std::io::{prelude::*, Write};
     use std::sync::Once;
 
     static INIT_LOGGING_ONCE: Once = Once::new();

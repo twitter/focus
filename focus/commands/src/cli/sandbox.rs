@@ -4,7 +4,7 @@ use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tempfile::{Builder, TempDir};
+use tempfile::{TempDir};
 
 pub struct Sandbox {
     temp_dir: Option<tempfile::TempDir>,

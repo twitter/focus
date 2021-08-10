@@ -1,14 +1,14 @@
-use anyhow::{bail, Error, Result};
+use anyhow::{bail, Result};
 
-use internals::error::AppError;
+
 use internals::util::lock_file::LockFile;
-use log::warn;
-use std::cell::Cell;
-use std::ffi::{OsStr, OsString};
-use std::fs::{File, OpenOptions};
+
+
+use std::ffi::{OsString};
+
 use std::path::{Path, PathBuf};
-use tempfile::{NamedTempFile, TempDir};
-use walkdir::DirEntry;
+
+
 
 lazy_static! {
     static ref JOURNAL_INDEX_EXTENSION: OsString = OsString::from("journal_index");
@@ -55,7 +55,7 @@ impl JournalManager {
     }
 
     // Verify that all of the journals in the directory are consistent with the indices
-    fn verify_one(path: &Path) -> Result<bool> {
+    fn verify_one(_path: &Path) -> Result<bool> {
         todo!("impl")
     }
 
@@ -111,7 +111,7 @@ mod tests {
     fn journal_manager_new() -> Result<()> {
         let temp_dir = tempdir()?;
         let temp_dir_path = temp_dir.path().to_owned();
-        let manager = JournalManager::new(&temp_dir_path.as_path());
+        let _manager = JournalManager::new(&temp_dir_path.as_path());
 
         Ok(())
     }

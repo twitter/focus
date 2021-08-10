@@ -168,10 +168,10 @@ impl<'a> ManagedRepo {
         let repo = self.underlying().unwrap();
 
         for thread_num in 0..IMPORT_CONCURRENCY {
-            let thread_num = thread_num.clone();
+            let _thread_num = thread_num.clone();
             let work_queue_clone = work_queue.clone();
             let populating_clone = populating.clone();
-            let write_count_clone = write_count.clone();
+            let _write_count_clone = write_count.clone();
             let stall_count_clone = stall_count.clone();
 
             // let storage_clone = self.storage();
@@ -183,7 +183,7 @@ impl<'a> ManagedRepo {
                     if let Some(oid) = work_queue_clone.pop() {
                         match odb.read(oid) {
                             Ok(obj) => {
-                                let key = format!("o:{}", oid.to_string());
+                                let _key = format!("o:{}", oid.to_string());
                                 let hdr = format!("{} {}\0", obj.kind().str(), obj.len());
                                 let mut val = Vec::<u8>::from(hdr.as_bytes());
                                 val.extend(obj.data());

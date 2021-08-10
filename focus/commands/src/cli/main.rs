@@ -103,7 +103,7 @@ fn main() -> Result<()> {
             Ok(())
         }
 
-        Subcommand::Layers { sparse_repo } => {
+        Subcommand::Layers { sparse_repo: _ } => {
             println!("List layers");
             Ok(())
         }

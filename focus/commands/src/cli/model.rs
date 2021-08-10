@@ -237,7 +237,7 @@ impl LayerSets {
     }
 
     fn add_to_selection(&self) -> Result<LayerSet> {
-        let selection = self
+        let _selection = self
             .selected_layers()
             .unwrap_or_default()
             .unwrap_or_default();
