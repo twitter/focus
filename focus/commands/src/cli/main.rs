@@ -1,7 +1,7 @@
 mod detail;
 mod model;
-mod sandbox_command;
 mod sandbox;
+mod sandbox_command;
 mod sparse_repos;
 mod testing;
 mod util;
