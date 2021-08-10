@@ -22,8 +22,8 @@ impl Sandbox {
 
         let temp_dir: Option<TempDir> = if preserve_contents {
             // We preserve the contents of the temporary directory by dropping and recreating it.
-            drop(&underlying);
-            underlying.close().context("closing temporary directory")?;
+            drop(underlying);
+
             fs::create_dir_all(&path).context("recreating the directory")?;
             log::info!(
                 "Created sandbox in '{}', which will not be cleaned up at exit",

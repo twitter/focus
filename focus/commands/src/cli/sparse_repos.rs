@@ -468,7 +468,7 @@ fn write_project_view_file(
             .as_bytes();
         if !path_bytestring.is_empty() {
             write!(buffer, "  ")?;
-            buffer.write(&path_bytestring[..])?;
+            buffer.write_all(&path_bytestring[..])?;
             writeln!(buffer, "")?;
         }
     }
