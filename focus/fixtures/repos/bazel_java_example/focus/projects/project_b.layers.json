@@ -1,7 +1,11 @@
 {
-    "name": "team_zissou/project_b",
-    "description": "Stuff relating to project B",
-    "coordinates": [
-        "//project_b/..."
+    "layers": [
+        {
+            "name": "team_zissou/project_b",
+            "description": "Stuff relating to project B",
+            "coordinates": [
+                "//project_b/..."
+            ]
+        }
     ]
 }

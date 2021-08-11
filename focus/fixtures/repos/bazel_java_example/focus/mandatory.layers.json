@@ -1,7 +1,11 @@
 {
-    "name": "mandatory",
-    "description": "Mandatory dependencies imposed by the repository",
-    "coordinates": [
-        "//mandatory_z/..."
+    "layers": [
+        {
+            "name": "mandatory",
+            "description": "Mandatory dependencies imposed by the repository",
+            "coordinates": [
+                "//mandatory_z/..."
+            ]
+        }
     ]
 }
