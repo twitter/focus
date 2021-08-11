@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     ffi::OsString,
+    fmt::Display,
     os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
 };
@@ -28,9 +29,26 @@ pub enum LoadError {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub struct Layer {
     name: String,
+
     description: String,
+
+    #[serde(default)]
     mandatory: bool,
+
     coordinates: Vec<String>,
+}
+
+impl Display for Layer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{} ({}) -> {:?}",
+            &self.name,
+            if self.mandatory { " <mandatory>" } else { "" },
+            &self.description,
+            &self.coordinates,
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, PartialOrd)]
@@ -68,6 +86,10 @@ impl LayerSet {
         Ok(())
     }
 
+    pub fn layers(&self) -> &Vec<Layer> {
+        &self.layers
+    }
+
     pub fn extend(&mut self, other: &LayerSet) {
         self.layers.extend(other.layers.clone());
     }
@@ -97,8 +119,8 @@ impl LayerSet {
     fn load(path: &Path) -> Result<LayerSet> {
         let slice = &std::fs::read(&path).context("opening file for read")?;
 
-        let mut layer_set: LayerSet =
-            serde_json::from_slice(&slice).context("storing layer_set")?;
+        let mut layer_set: LayerSet = serde_json::from_slice(&slice)
+            .with_context(|| format!("loading layer set from {}", &path.display()))?;
 
         // let mut hasher = Sha256::new();
         // hasher.update(&slice);
@@ -332,7 +354,9 @@ impl LayerSets {
 
     // Return the computed layers, namely the mandatory layers and the selected layers
     fn computed_layers(&self) -> Result<LayerSet> {
-        let mut layers = self.mandatory_layers().context("loading mandatory layers")?;
+        let mut layers = self
+            .mandatory_layers()
+            .context("loading mandatory layers")?;
         if let Some(selected_layers) = self.selected_layers().context("loading selected layers")? {
             layers.extend(&selected_layers);
         } else {

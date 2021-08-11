@@ -1,14 +1,10 @@
 use anyhow::{bail, Result};
 
-
 use internals::util::lock_file::LockFile;
 
-
-use std::ffi::{OsString};
+use std::ffi::OsString;
 
 use std::path::{Path, PathBuf};
-
-
 
 lazy_static! {
     static ref JOURNAL_INDEX_EXTENSION: OsString = OsString::from("journal_index");

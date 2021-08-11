@@ -3,6 +3,7 @@ mod model;
 mod sandbox;
 mod sandbox_command;
 mod sparse_repos;
+mod subcommands;
 mod testing;
 mod util;
 mod working_tree_synchronizer;
@@ -50,19 +51,34 @@ enum Subcommand {
         filter_sparse: bool,
     },
 
-    Layers {
+    Refresh {
         #[structopt(long, parse(from_os_str))]
         sparse_repo: PathBuf,
     },
-    // PushLayer {
-    //     #[structopt(long, parse(from_os_str))]
-    //     sparse_repo: PathBuf,
-    // },
 
-    // PopLayer {
-    //     #[structopt(long, parse(from_os_str))]
-    //     sparse_repo: PathBuf,
-    // },
+    AvailableLayers {
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+    },
+
+    CurrentLayers {
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+    },
+
+    PushLayer {
+        #[structopt(long, parse(from_os_str))]
+        sparse_repo: PathBuf,
+
+        name: String,
+    },
+
+    PopLayer {
+        #[structopt(long, parse(from_os_str))]
+        sparse_repo: PathBuf,
+
+        name: String,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -90,58 +106,18 @@ fn main() -> Result<()> {
             branch,
             coordinates,
             filter_sparse,
-        } => {
-            sparse_repos::create_sparse_clone(
-                &name,
-                &dense_repo,
-                &sparse_repo,
-                &branch,
-                &coordinates.0,
-                filter_sparse,
-                sandbox,
-            )?;
-            Ok(())
-        }
+        } => sparse_repos::create_sparse_clone(
+            &name,
+            &dense_repo,
+            &sparse_repo,
+            &branch,
+            &coordinates.0,
+            filter_sparse,
+            sandbox,
+        ),
 
-        Subcommand::Layers { sparse_repo: _ } => {
-            println!("List layers");
-            Ok(())
-        }
+        Subcommand::AvailableLayers { repo } => subcommands::available_layers::run(&repo),
 
-        // Subcommand::ShowLayer {
-        //     name,
-        //     dense_repo,
-        //     sparse_repo,
-        //     coordinates,
-        //     filter_sparse,
-        // } => {
-
-        // },
-
-        // Subcommand::HideLayer {
-        //     name,
-        //     dense_repo,
-        //     sparse_repo,
-        //     coordinates,
-        //     filter_sparse,
-        // } => {
-
-        // },
-        // Subcommand::GenerateSparseProfile {
-        //     dense_repo,
-        //     sparse_profile_output,
-        //     coordinates,
-        // } => {
-        //     sparse_repos::generate_sparse_profile(
-        //         &sandbox,
-        //         &dense_repo,
-        //         &sparse_profile_output,
-        //         &coordinates.0,
-        //     )?;
-        //     Ok(())
-        // }
-        _ => {
-            bail!("Not implemented");
-        }
+        Subcommand::CurrentLayers { repo } => subcommands::current_layers::run(&repo),
     }
 }

@@ -7,7 +7,7 @@ use git2::{ObjectType, TreeEntry, TreeWalkMode, TreeWalkResult};
 use internals::error::AppError;
 use sha2::{Digest, Sha256};
 
-use std::ffi::{OsString};
+use std::ffi::OsString;
 use std::fs::Permissions;
 
 fn normalize_tree_entry_path(path: &str, tree_entry: &TreeEntry) -> Result<String, AppError> {
