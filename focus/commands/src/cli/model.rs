@@ -1,7 +1,14 @@
-use std::{borrow::{Borrow, BorrowMut}, collections::HashMap, ffi::OsString, iter::FromIterator, os::unix::prelude::OsStrExt, path::{Path, PathBuf}};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    ffi::OsString,
+    os::unix::prelude::OsStrExt,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{bail, Context, Error, Result};
 use serde_derive::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(thiserror::Error, Debug)]
@@ -30,6 +37,9 @@ pub struct Layer {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub struct LayerSet {
     layers: Vec<Layer>,
+
+    #[serde(skip)]
+    content_hash: Option<String>, // Hex representation of a SHA-256 checksum
 }
 
 enum RemoveResult {
@@ -86,10 +96,16 @@ impl LayerSet {
     }
 
     fn load(path: &Path) -> Result<LayerSet> {
-        Ok(
-            serde_json::from_slice(&std::fs::read(&path).context("opening file for read")?)
-                .context("storing layer_set")?,
-        )
+        let slice = &std::fs::read(&path).context("opening file for read")?;
+
+        let mut layer_set: LayerSet =
+            serde_json::from_slice(&slice).context("storing layer_set")?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(&slice);
+        layer_set.content_hash = Some(format!("{:x}", hasher.finalize()));
+
+        Ok(layer_set)
     }
 
     fn store(path: &Path, t: &LayerSet) -> Result<()> {
@@ -102,31 +118,75 @@ impl LayerSet {
         Ok(())
     }
 }
-pub struct IndexedLayerSet {
-    underlying: LayerSet,
-    name_to_index: HashMap<String, usize>,
+
+// Selections are stacks of pointers to layers.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub(crate) struct LayerStack {
+    selected_layer_names: Vec<String>,
 }
 
-impl<'a> IndexedLayerSet {
+impl LayerStack {
+    pub fn load(path: &Path) -> Result<LayerStack> {
+        Ok(
+            serde_json::from_slice(&std::fs::read(&path).context("opening file for read")?)
+                .context("loading layer stack")?,
+        )
+    }
+
+    pub fn store(path: &Path, t: &LayerStack) -> Result<()> {
+        std::fs::write(
+            &path,
+            &serde_json::to_vec(&t).context("opening file for write")?,
+        )
+        .context("storing layer stack")?;
+
+        Ok(())
+    }
+}
+
+// RichLayerSet adds indexing to layer sets and
+pub struct RichLayerSet {
+    underlying: LayerSet,
+    index_on_name: RefCell<HashMap<String, usize>>,
+}
+
+impl<'a> RichLayerSet {
     pub fn new(underlying: LayerSet) -> Result<Self> {
         let mut instance = Self {
             underlying,
-            name_to_index: HashMap::new(),
+            index_on_name: RefCell::new(HashMap::new()),
         };
 
-        for (index, layer) in instance.underlying.layers.iter().enumerate() {
-            if let Some(existing) = instance.name_to_index.insert(layer.name.clone(), index) {
-                bail!("Layer {:?} has the same name as layer {:?}", &layer, &instance.underlying.layers[existing]);
-            }
-        }
+        Self::index(&instance.underlying, instance.index_on_name.get_mut());
 
         Ok(instance)
     }
 
+    fn index(layer_set: &LayerSet, index_map: &mut HashMap<String, usize>) -> Result<()> {
+        for (index, layer) in layer_set.layers.iter().enumerate() {
+            if let Some(existing) = index_map.insert(layer.name.clone(), index) {
+                bail!(
+                    "Layer {:?} has the same name as layer {:?}",
+                    &layer,
+                    &layer_set.layers[existing]
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn reindex(&self) -> Result<()> {
+        let mut new_index = HashMap::<String, usize>::new();
+        Self::index(&self.underlying, &mut new_index)?;
+        self.index_on_name.replace(new_index);
+        Ok(())
+    }
+
     pub fn get(&self, name: &str) -> Option<&Layer> {
-        if let Some(ix) = self.name_to_index.get(name) {
+        let index_on_name = self.index_on_name.borrow();
+        if let Some(ix) = index_on_name.get(name) {
             let layer: &Layer = &self.underlying.layers[*ix];
-            return Some(layer)
+            return Some(layer);
         }
 
         None
@@ -144,13 +204,13 @@ impl LayerSets {
         }
     }
 
-    pub fn selected_directory(&self) -> PathBuf {
+    pub fn user_directory(&self) -> PathBuf {
         self.repo_path.join(".focus")
     }
 
     // The layers the user has chosen
-    pub fn selected_layer_set_path(&self) -> PathBuf {
-        self.selected_directory().join("user.layer.json")
+    pub fn selected_layer_stack_path(&self) -> PathBuf {
+        self.user_directory().join("user.stack.json")
     }
 
     // The directory containing project-oriented layers. All .layer.json will be scanned.
@@ -202,7 +262,10 @@ impl LayerSets {
 
     // Return a layer_set cataloging all available layers
     pub fn available_layers(&self) -> Result<LayerSet> {
-        let mut layer = LayerSet { layers: vec![] };
+        let mut layer = LayerSet {
+            layers: vec![],
+            content_hash: None,
+        };
 
         let paths = self
             .locate_layer_set_files()
@@ -220,20 +283,25 @@ impl LayerSets {
 
     // Return a layer_set containing the layers a user has selected
     fn selected_layers(&self) -> Result<Option<LayerSet>> {
-        let path = self.selected_layer_set_path();
+        let path = self.selected_layer_stack_path();
         if !path.exists() {
             return Ok(None);
         }
 
-        LayerSet::load(&path)
-            .context("loading the user layer_set")
-            .map(|t| Some(t))
+        let layer_stack = LayerStack::load(&path).context("loading user layer stack")?;
+
+        todo!("implement")
+        // // layer_stack.
+        // LayerSet::load(&path)
+        //     .context("loading the user layer_set")
+        //     .map(|t| Some(t))
     }
 
-    fn store_selected_layers(&self, t: &LayerSet) -> Result<()> {
-        std::fs::create_dir_all(self.selected_directory())
+    fn store_selected_layers(&self, stack: &LayerStack) -> Result<()> {
+        std::fs::create_dir_all(self.user_directory())
             .context("creating the directory to store user layers")?;
-        LayerSet::store(&self.selected_layer_set_path(), &t).context("storing user layers")
+        LayerStack::store(&self.selected_layer_stack_path(), &stack)
+            .context("storing user layer stack")
     }
 
     fn add_to_selection(&self) -> Result<LayerSet> {
@@ -292,7 +360,10 @@ mod tests {
     }
 
     fn layer_set() -> LayerSet {
-        LayerSet { layers: layers() }
+        LayerSet {
+            layers: layers(),
+            content_hash: None,
+        }
     }
 
     #[test]
@@ -312,7 +383,10 @@ mod tests {
                 mandatory: false,
                 coordinates: vec!["it doesn't matter".to_owned()],
             });
-            let layer_set = LayerSet { layers };
+            let layer_set = LayerSet {
+                layers,
+                content_hash: None,
+            };
             let e = layer_set.validate().unwrap_err();
             assert_eq!("Layer named 'baseline/loglens' at index 4 has the same name as existing layer at index 2",e.to_string());
         }
@@ -332,6 +406,7 @@ mod tests {
                 mandatory: false,
                 coordinates: vec!["//foo/bar/...".to_owned()],
             }],
+            content_hash: None,
         };
 
         t1.extend(&t2);
@@ -387,6 +462,7 @@ mod tests {
                 mandatory: false,
                 coordinates: vec![format!("//{}/...", name)],
             }],
+            content_hash: None,
         }
     }
 
@@ -441,7 +517,10 @@ mod tests {
                 mandatory: false,
             },
         ];
-        let t = LayerSet { layers: ls };
+        let t = LayerSet {
+            layers: ls,
+            content_hash: None,
+        };
 
         let layers = t.optional_layers()?;
         assert_eq!(layers.len(), 1);
