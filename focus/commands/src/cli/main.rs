@@ -51,9 +51,9 @@ enum Subcommand {
         filter_sparse: bool,
     },
 
-    Refresh {
+    Reapply {
         #[structopt(long, parse(from_os_str))]
-        sparse_repo: PathBuf,
+        repo: PathBuf,
     },
 
     AvailableLayers {
@@ -61,21 +61,21 @@ enum Subcommand {
         repo: PathBuf,
     },
 
-    CurrentLayers {
+    SelectedLayers {
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
 
     PushLayer {
         #[structopt(long, parse(from_os_str))]
-        sparse_repo: PathBuf,
+        repo: PathBuf,
 
         name: String,
     },
 
     PopLayer {
         #[structopt(long, parse(from_os_str))]
-        sparse_repo: PathBuf,
+        repo: PathBuf,
 
         name: String,
     },
@@ -116,8 +116,14 @@ fn main() -> Result<()> {
             sandbox,
         ),
 
+        Subcommand::Reapply { repo } => subcommands::reapply::run(&repo),
+
         Subcommand::AvailableLayers { repo } => subcommands::available_layers::run(&repo),
 
-        Subcommand::CurrentLayers { repo } => subcommands::current_layers::run(&repo),
+        Subcommand::SelectedLayers { repo } => subcommands::selected_layers::run(&repo),
+
+        Subcommand::PushLayer { repo, name } => subcommands::push_layer::run(&repo, &name),
+
+        Subcommand::PopLayer { repo, name } => subcommands::pop_layer::run(&repo, &name),
     }
 }

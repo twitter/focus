@@ -331,7 +331,7 @@ impl LayerSets {
     }
 
     // Return a layer_set containing the layers a user has selected
-    fn selected_layers(&self) -> Result<Option<LayerSet>> {
+    pub fn selected_layers(&self) -> Result<Option<LayerSet>> {
         let path = self.selected_layer_stack_path();
         if !path.exists() {
             return Ok(None);
