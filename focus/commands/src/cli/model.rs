@@ -8,7 +8,6 @@ use std::{
 
 use anyhow::{bail, Context, Error, Result};
 use serde_derive::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(thiserror::Error, Debug)]
@@ -101,9 +100,10 @@ impl LayerSet {
         let mut layer_set: LayerSet =
             serde_json::from_slice(&slice).context("storing layer_set")?;
 
-        let mut hasher = Sha256::new();
-        hasher.update(&slice);
-        layer_set.content_hash = Some(format!("{:x}", hasher.finalize()));
+        // let mut hasher = Sha256::new();
+        // hasher.update(&slice);
+        // layer_set.content_hash = Some(format!("{:x}", hasher.finalize()));
+        layer_set.content_hash = None;
 
         Ok(layer_set)
     }
@@ -213,17 +213,21 @@ impl LayerSets {
         self.user_directory().join("user.stack.json")
     }
 
-    // The directory containing project-oriented layers. All .layer.json will be scanned.
+    // The directory containing project-oriented layers. All .layers.json will be scanned.
     pub fn project_directory(&self) -> PathBuf {
-        self.repo_path.join("focus")
+        self.repo_path.join("focus").join("projects")
     }
 
-    fn layer_json_filter(entry: &DirEntry) -> bool {
+    pub fn mandatory_layer_path(&self) -> PathBuf {
+        self.repo_path.join("focus").join("mandatory.layers.json")
+    }
+
+    fn layer_file_filter(entry: &DirEntry) -> bool {
         if entry.path().is_dir() {
             return true;
         }
 
-        let suffix = OsString::from(".layer.json");
+        let suffix = OsString::from(".layers.json");
         let ostr = entry.path().as_os_str();
         if ostr.len() < suffix.len() {
             return false;
@@ -232,9 +236,9 @@ impl LayerSets {
         ostr.as_bytes().ends_with(suffix.as_bytes())
     }
 
-    fn locate_layer_set_files(&self) -> Result<Vec<PathBuf>> {
+    fn locate_layer_set_files(&self, path: &Path) -> Result<Vec<PathBuf>> {
         let mut results = Vec::<PathBuf>::new();
-        let walker = WalkDir::new(self.project_directory())
+        let walker = WalkDir::new(path)
             .sort_by_file_name()
             .follow_links(true)
             .into_iter();
@@ -243,7 +247,7 @@ impl LayerSets {
             &self.project_directory().display()
         );
 
-        for entry in walker.filter_entry(|e| Self::layer_json_filter(&e)) {
+        for entry in walker.filter_entry(|e| Self::layer_file_filter(&e)) {
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
@@ -260,6 +264,11 @@ impl LayerSets {
         return Ok(results);
     }
 
+    // Return a layer_set containing all mandatory layers
+    pub fn mandatory_layers(&self) -> Result<LayerSet> {
+        LayerSet::load(&self.mandatory_layer_path()).context("loading mandatory layer set")
+    }
+
     // Return a layer_set cataloging all available layers
     pub fn available_layers(&self) -> Result<LayerSet> {
         let mut layer = LayerSet {
@@ -268,7 +277,7 @@ impl LayerSets {
         };
 
         let paths = self
-            .locate_layer_set_files()
+            .locate_layer_set_files(&self.project_directory())
             .context("scanning project layer_set files")?;
 
         for path in &paths {
@@ -281,6 +290,24 @@ impl LayerSets {
         Ok(layer)
     }
 
+    fn find_named_layers(names: &Vec<String>, set: &RichLayerSet) -> Result<Vec<Layer>> {
+        let mut layers = Vec::<Layer>::new();
+
+        for (index, name) in names.iter().enumerate() {
+            if let Some(layer) = set.get(name) {
+                layers.push(layer.to_owned())
+            } else {
+                // TODO: Provide an affordance for ignoring missing layers
+                return Err(Error::new(LoadError::NotFound).context(format!(
+                    "Layer named '{}' (at index {}) is not present",
+                    &name, index
+                )));
+            }
+        }
+
+        Ok(layers)
+    }
+
     // Return a layer_set containing the layers a user has selected
     fn selected_layers(&self) -> Result<Option<LayerSet>> {
         let path = self.selected_layer_stack_path();
@@ -289,12 +316,29 @@ impl LayerSets {
         }
 
         let layer_stack = LayerStack::load(&path).context("loading user layer stack")?;
+        let indexed_available_layers = RichLayerSet::new(
+            self.available_layers()
+                .context("loading available layers")?,
+        )?;
+        let layers =
+            Self::find_named_layers(&layer_stack.selected_layer_names, &indexed_available_layers)
+                .context("extracting selected layers from the set of all available layers")?;
 
-        todo!("implement")
-        // // layer_stack.
-        // LayerSet::load(&path)
-        //     .context("loading the user layer_set")
-        //     .map(|t| Some(t))
+        Ok(Some(LayerSet {
+            layers,
+            content_hash: None,
+        }))
+    }
+
+    // Return the computed layers, namely the mandatory layers and the selected layers
+    fn computed_layers(&self) -> Result<LayerSet> {
+        let mut layers = self.mandatory_layers().context("loading mandatory layers")?;
+        if let Some(selected_layers) = self.selected_layers().context("loading selected layers")? {
+            layers.extend(&selected_layers);
+        } else {
+            log::warn!("No layers are selected!");
+        }
+        Ok(layers)
     }
 
     fn store_selected_layers(&self, stack: &LayerStack) -> Result<()> {
@@ -304,11 +348,9 @@ impl LayerSets {
             .context("storing user layer stack")
     }
 
-    fn add_to_selection(&self) -> Result<LayerSet> {
-        let _selection = self
-            .selected_layers()
-            .unwrap_or_default()
-            .unwrap_or_default();
+    fn add_to_stack(&self) -> Result<LayerSet> {
+        let selection = self.available_layers().unwrap_or_default();
+
         todo!("impl");
     }
 }
@@ -477,7 +519,7 @@ mod tests {
         std::fs::write(&random_file_path, b"{}").context("writing random file")?;
 
         let builtins_layer = layer_set();
-        let builtins_path = project_dir.join("builtins.layer.json");
+        let builtins_path = project_dir.join("builtins.layers.json");
         LayerSet::store(&builtins_path, &builtins_layer).context("storing builtins_layer")?;
 
         Ok((dir, t))
@@ -490,7 +532,7 @@ mod tests {
         let (_tdir, t) = repo_fixture().context("building repo fixture")?;
         let project_dir = t.project_directory();
 
-        let my_project_path = project_dir.join("my_project.layer.json");
+        let my_project_path = project_dir.join("my_project.layers.json");
         let my_project = project_fixture("my_project");
         LayerSet::store(&my_project_path, &my_project).context("storing my_project")?;
 
