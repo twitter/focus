@@ -11,7 +11,7 @@ mod working_tree_synchronizer;
 #[macro_use]
 extern crate lazy_static;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use env_logger::{self, Env};
 use sandbox::Sandbox;
 use std::{path::PathBuf, str::FromStr, sync::Arc};

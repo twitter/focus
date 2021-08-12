@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Error, Result};
-use futures::SinkExt;
+
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
@@ -450,7 +450,7 @@ impl LayerSets {
 
     pub fn remove(&self, names: Vec<String>) -> Result<LayerSet> {
         // TODO: Locking
-        let mut user_layers = self
+        let user_layers = self
             .user_layers()
             .context("loading user layers")?
             .unwrap_or_default();
@@ -471,7 +471,6 @@ impl LayerSets {
                 }
             })
             .collect::<_>();
-
 
         if removals == 0 {
             eprintln!("No layers matched; nothing removed!");

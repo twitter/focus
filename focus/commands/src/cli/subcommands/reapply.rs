@@ -1,10 +1,8 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::model;
-
-pub fn run(repo: &Path) -> Result<()> {
+pub fn run(_repo: &Path) -> Result<()> {
     // Apply the layer set to the sparse profile
     Ok(())
 }
