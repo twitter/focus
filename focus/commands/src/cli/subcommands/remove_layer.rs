@@ -5,12 +5,10 @@ use anyhow::{Context, Result};
 use crate::model;
 
 pub fn run(repo: &Path, names: Vec<String>) -> Result<()> {
-    // Push a layer
+    // Remove a layer
 
     let sets = model::LayerSets::new(&repo);
-
-    let new_selection = sets.push_as_selection(names).context("pushing layer")?;
-
+    let new_selection = sets.remove(names).context("removing layers")?;
     if new_selection.layers().is_empty() {
         eprintln!("The layer stack is empty!");
     } else {

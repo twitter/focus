@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::OsString,
     fmt::Display,
     os::unix::prelude::OsStrExt,
@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Error, Result};
+use futures::SinkExt;
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
@@ -204,10 +205,18 @@ impl<'a> RichLayerSet {
         Ok(())
     }
 
-    pub fn get(&self, name: &str) -> Option<&Layer> {
+    pub fn find_index(&self, name: &str) -> Option<usize> {
         let index_on_name = self.index_on_name.borrow();
         if let Some(ix) = index_on_name.get(name) {
-            let layer: &Layer = &self.underlying.layers[*ix];
+            return Some(*ix);
+        }
+
+        None
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Layer> {
+        if let Some(ix) = self.find_index(&name) {
+            let layer: &Layer = &self.underlying.layers[ix];
             return Some(layer);
         }
 
@@ -388,7 +397,7 @@ impl LayerSets {
             .context("storing user layer stack")
     }
 
-    pub fn push_as_selection(&self, names: &Vec<String>) -> Result<LayerSet> {
+    pub fn push_as_selection(&self, names: Vec<String>) -> Result<LayerSet> {
         // TODO: Locking
         let mut user_layers = self
             .user_layers()
@@ -405,9 +414,7 @@ impl LayerSets {
             } else {
                 if let Some(layer) = available.get(&name) {
                     // let name_clone = name.to_owned().to_owned();
-                    user_layers
-                        .selected_layer_names
-                        .push(name.clone());
+                    user_layers.selected_layer_names.push(name.clone());
                     selected.layers.push(layer.clone());
                 } else {
                     eprintln!("{}: Not found", &name);
@@ -439,6 +446,48 @@ impl LayerSets {
             .context("storing the modified user layer stack")?;
 
         Ok(selected)
+    }
+
+    pub fn remove(&self, names: Vec<String>) -> Result<LayerSet> {
+        // TODO: Locking
+        let mut user_layers = self
+            .user_layers()
+            .context("loading user layers")?
+            .unwrap_or_default();
+
+        let mut name_set = HashSet::<String>::new();
+        // let names_refs: Vec<&String> = names.iter().map(|name| name.to_owned()).collect();
+        name_set.extend(names);
+        let mut removals: usize = 0;
+        let retained: Vec<String> = user_layers
+            .selected_layer_names
+            .iter()
+            .filter_map(|name| {
+                if name_set.contains(name) {
+                    removals += 1;
+                    None
+                } else {
+                    Some(name.clone())
+                }
+            })
+            .collect::<_>();
+
+
+        if removals == 0 {
+            eprintln!("No layers matched; nothing removed!");
+        }
+
+        let new_layers = LayerStack {
+            selected_layer_names: retained,
+        };
+
+        self.store_selected_layers(&new_layers)
+            .context("storing the modified user layer stack")?;
+
+        Ok(self
+            .selected_layers()
+            .context("loading selected layers")?
+            .unwrap_or_default())
     }
 }
 

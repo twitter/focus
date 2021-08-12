@@ -82,11 +82,10 @@ enum Subcommand {
     },
 
     RemoveLayer {
-        #[structopt(long, parse(from_os_str))]
+        #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        #[structopt(long)]
-        name: String,
+        names: Vec<String>,
     },
 }
 
@@ -131,10 +130,10 @@ fn main() -> Result<()> {
 
         Subcommand::SelectedLayers { repo } => subcommands::selected_layers::run(&repo),
 
-        Subcommand::PushLayer { repo, names } => subcommands::push_layer::run(&repo, &names),
+        Subcommand::PushLayer { repo, names } => subcommands::push_layer::run(&repo, names),
 
         Subcommand::PopLayer { repo, count } => subcommands::pop_layer::run(&repo, count),
 
-        Subcommand::RemoveLayer { repo, name } => todo!("Not implemented"),
+        Subcommand::RemoveLayer { repo, names } => subcommands::remove_layer::run(&repo, names),
     }
 }
