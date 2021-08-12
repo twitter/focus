@@ -1,4 +1,4 @@
-use crate::util::TemporaryWorkingDirectory;
+use crate::temporary_working_directory::TemporaryWorkingDirectory;
 use anyhow::{bail, Context, Result};
 use git2::Repository;
 use std::ffi::OsString;

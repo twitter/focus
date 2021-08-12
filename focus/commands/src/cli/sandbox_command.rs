@@ -35,6 +35,7 @@ pub enum SandboxCommandOutput {
     All,
     Stdout,
     Stderr,
+    Ignore,
 }
 
 impl SandboxCommand {
@@ -117,6 +118,10 @@ impl SandboxCommand {
                     title(SandboxCommandOutput::Stderr),
                     self.stderr_path.as_path(),
                 )]
+            }
+
+            SandboxCommandOutput::Ignore => {
+                vec![]
             }
         };
 

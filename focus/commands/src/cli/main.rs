@@ -5,9 +5,8 @@ mod sandbox_command;
 mod sparse_repos;
 mod subcommands;
 mod testing;
-mod util;
+mod temporary_working_directory;
 mod working_tree_synchronizer;
-
 #[macro_use]
 extern crate lazy_static;
 
@@ -51,9 +50,12 @@ enum Subcommand {
         filter_sparse: bool,
     },
 
-    Reapply {
-        #[structopt(long, parse(from_os_str))]
-        repo: PathBuf,
+    Sync {
+        #[structopt(long, parse(from_os_str), default_value = ".dense")]
+        dense_repo: PathBuf,
+
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
     },
 
     AvailableLayers {
@@ -124,7 +126,10 @@ fn main() -> Result<()> {
             sandbox,
         ),
 
-        Subcommand::Reapply { repo } => subcommands::reapply::run(&repo),
+        Subcommand::Sync {
+            dense_repo,
+            sparse_repo,
+        } => subcommands::sync::run(&sandbox, &dense_repo, &sparse_repo),
 
         Subcommand::AvailableLayers { repo } => subcommands::available_layers::run(&repo),
 

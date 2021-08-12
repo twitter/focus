@@ -1,7 +1,12 @@
+use anyhow::{Context, Error, Result};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
 use git2::{Repository, RepositoryState};
+
+use crate::{
+    sandbox::Sandbox,
+    sandbox_command::{SandboxCommand, SandboxCommandOutput},
+};
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum SyncError {
@@ -11,19 +16,20 @@ pub(crate) enum SyncError {
     #[error("Working tree cannot be dirty")]
     DirtyWorkingTree,
 }
-
-pub(crate) struct Synchronizer {
+pub struct WorkingTreeSynchronizer<'this> {
     path: PathBuf,
+    sandbox: &'this Sandbox,
 }
 
-impl Synchronizer {
-    pub(crate) fn new(path: &Path) -> Result<Self, SyncError> {
+impl<'this> WorkingTreeSynchronizer<'this> {
+    pub(crate) fn new(path: &Path, sandbox: &'this Sandbox) -> Result<Self> {
         if !path.is_dir() {
-            return Err(SyncError::RepoPath);
+            return Err(Error::new(SyncError::RepoPath));
         }
 
         Ok(Self {
             path: path.to_path_buf(),
+            sandbox,
         })
     }
 
@@ -41,8 +47,24 @@ impl Synchronizer {
         Ok(128)
     }
 
+    pub fn is_working_tree_clean(&self) -> Result<bool> {
+        let (mut cmd, scmd) = SandboxCommand::new("bash", &self.sandbox)?;
+
+        let result = scmd
+            .ensure_success_or_log(
+                cmd.arg("-c")
+                    .arg("[[ -z $(git --no-optional-locks status --porcelain) ]]")
+                    .current_dir(&self.path),
+                SandboxCommandOutput::Ignore,
+                "determining work tree status",
+            )
+            .context("determining work tree status")?;
+
+        Ok(result.success())
+    }
+
     pub(crate) fn get_head(&self) -> Result<Vec<u8>> {
-        use crate::util::TemporaryWorkingDirectory;
+        use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
 
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
@@ -64,7 +86,7 @@ impl Synchronizer {
     }
 
     pub(crate) fn get_merge_base(&self, reference: &str) -> Result<Vec<u8>> {
-        use crate::util::TemporaryWorkingDirectory;
+        use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
 
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
@@ -109,12 +131,13 @@ mod tests {
 
     #[test]
     fn test_get_merge_base() {
+        let sandbox = Sandbox::new(false).unwrap();
         let containing_dir = tempdir().unwrap();
         let original = ScratchGitRepo::new_fixture(&containing_dir.path()).unwrap();
         let cloned = original.make_clone().unwrap();
 
-        let original_sync = Synchronizer::new(&original.path()).unwrap();
-        let clone_sync = Synchronizer::new(&cloned.path()).unwrap();
+        let original_sync = WorkingTreeSynchronizer::new(&original.path(), &sandbox).unwrap();
+        let clone_sync = WorkingTreeSynchronizer::new(&cloned.path(), &sandbox).unwrap();
         cloned
             .commit(
                 Path::new("quotes.txt"),
