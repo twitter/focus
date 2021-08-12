@@ -142,8 +142,8 @@ impl LayerSet {
 }
 
 // Selections are stacks of pointers to layers.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
-pub(crate) struct LayerStack {
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub struct LayerStack {
     selected_layer_names: Vec<String>,
 }
 
@@ -179,7 +179,7 @@ impl<'a> RichLayerSet {
             index_on_name: RefCell::new(HashMap::new()),
         };
 
-        Self::index(&instance.underlying, instance.index_on_name.get_mut());
+        Self::index(&instance.underlying, instance.index_on_name.get_mut())?;
 
         Ok(instance)
     }
@@ -212,6 +212,10 @@ impl<'a> RichLayerSet {
         }
 
         None
+    }
+
+    pub fn contains_key(&self, name: &str) -> bool {
+        self.index_on_name.borrow().contains_key(name)
     }
 }
 
@@ -330,14 +334,26 @@ impl LayerSets {
         Ok(layers)
     }
 
-    // Return a layer_set containing the layers a user has selected
-    pub fn selected_layers(&self) -> Result<Option<LayerSet>> {
+    pub fn user_layers(&self) -> Result<Option<LayerStack>> {
         let path = self.selected_layer_stack_path();
         if !path.exists() {
             return Ok(None);
         }
 
-        let layer_stack = LayerStack::load(&path).context("loading user layer stack")?;
+        Ok(Some(
+            LayerStack::load(&path).context("loading user layer stack")?,
+        ))
+    }
+
+    // Return a layer_set containing the layers a user has selected
+    pub fn selected_layers(&self) -> Result<Option<LayerSet>> {
+        let layer_stack: LayerStack;
+        if let Ok(Some(stack)) = self.user_layers() {
+            layer_stack = stack;
+        } else {
+            return Ok(None);
+        }
+
         let indexed_available_layers = RichLayerSet::new(
             self.available_layers()
                 .context("loading available layers")?,
@@ -372,10 +388,57 @@ impl LayerSets {
             .context("storing user layer stack")
     }
 
-    fn add_to_stack(&self) -> Result<LayerSet> {
-        let selection = self.available_layers().unwrap_or_default();
+    pub fn push_as_selection(&self, names: &Vec<String>) -> Result<LayerSet> {
+        // TODO: Locking
+        let mut user_layers = self
+            .user_layers()
+            .context("loading user layers")?
+            .unwrap_or_default();
+        let mut selected = self.selected_layers()?.unwrap_or_default();
+        let selected_indexed = RichLayerSet::new(selected.clone())?;
+        let available = RichLayerSet::new(self.available_layers()?)?;
 
-        todo!("impl");
+        for name in names {
+            if selected_indexed.contains_key(&name) {
+                // Already have this one
+                eprintln!("{}: Skipped (already selected)", &name)
+            } else {
+                if let Some(layer) = available.get(&name) {
+                    // let name_clone = name.to_owned().to_owned();
+                    user_layers
+                        .selected_layer_names
+                        .push(name.clone());
+                    selected.layers.push(layer.clone());
+                } else {
+                    eprintln!("{}: Not found", &name);
+                    bail!("One of the requested layers was not found");
+                }
+            }
+        }
+
+        self.store_selected_layers(&user_layers)
+            .context("storing the modified user layer stack")?;
+
+        Ok(selected)
+    }
+
+    pub fn pop(&self, count: usize) -> Result<LayerSet> {
+        // TODO: Locking
+        let mut user_layers = self
+            .user_layers()
+            .context("loading user layers")?
+            .unwrap_or_default();
+        let mut selected = self.selected_layers()?.unwrap_or_default();
+
+        for _ in 0..count {
+            user_layers.selected_layer_names.pop();
+            selected.layers.pop();
+        }
+
+        self.store_selected_layers(&user_layers)
+            .context("storing the modified user layer stack")?;
+
+        Ok(selected)
     }
 }
 

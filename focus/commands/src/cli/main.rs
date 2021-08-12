@@ -67,16 +67,25 @@ enum Subcommand {
     },
 
     PushLayer {
-        #[structopt(long, parse(from_os_str))]
+        #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        name: String,
+        names: Vec<String>,
     },
 
     PopLayer {
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+
+        #[structopt(long, default_value = "1")]
+        count: usize,
+    },
+
+    RemoveLayer {
         #[structopt(long, parse(from_os_str))]
         repo: PathBuf,
 
+        #[structopt(long)]
         name: String,
     },
 }
@@ -122,8 +131,10 @@ fn main() -> Result<()> {
 
         Subcommand::SelectedLayers { repo } => subcommands::selected_layers::run(&repo),
 
-        Subcommand::PushLayer { repo, name } => subcommands::push_layer::run(&repo, &name),
+        Subcommand::PushLayer { repo, names } => subcommands::push_layer::run(&repo, &names),
 
-        Subcommand::PopLayer { repo, name } => subcommands::pop_layer::run(&repo, &name),
+        Subcommand::PopLayer { repo, count } => subcommands::pop_layer::run(&repo, count),
+
+        Subcommand::RemoveLayer { repo, name } => todo!("Not implemented"),
     }
 }
