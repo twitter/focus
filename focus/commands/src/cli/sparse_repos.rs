@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
+use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::thread;
 use std::{
@@ -49,9 +50,20 @@ pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<(
     git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
 }
 
-pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
+pub fn configure_sparse_repo_initial(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
     // TODO: Consider enabling the fsmonitor after it can be bundled.
     // git_config(sparse_repo, "core.fsmonitor", "rs-git-fsmonitor", sandbox)?;
+
+    Ok(())
+}
+
+fn set_up_alternate(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
+    // use std::os::unix::ffi::OsStrExt;
+    let alternates_path = sparse_repo.join(".git").join("info").join("alternates");
+    let mut buf = Vec::from(dense_repo.as_os_str().as_bytes());
+    buf.push(b'\n');
+    std::fs::write(alternates_path, buf)?;
+
     Ok(())
 }
 
@@ -234,6 +246,9 @@ pub fn create_sparse_clone(
         .join()
         .expect("clone thread exited abnormally");
 
+    // N.B. We set up an alternate because it allows for journaled fetches
+    set_up_alternate(&sparse_repo, &dense_repo).context("setting up an alternate")?;
+
     if !filter_sparse {
         // If we haven't awaited the profile generation thread, we we must now.
         profile_generation_barrier.wait();
@@ -292,9 +307,13 @@ pub fn set_sparse_checkout(
     }
 
     {
+        let sparse_profile_destination = sparse_repo
+            .join(".git")
+            .join("info")
+            .join("sparse-checkout");
+        // std::fs::copy(&sparse_profile, &sparse_profile_destination).context("copying the sparse-checkout file into place")?;
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-
-        // Start a sparse-checkout with the sparse profile file as input.
+        log::info!("Setting sparse from {}", &sparse_profile.display());
         let sparse_profile_file = File::open(&sparse_profile).context("opening sparse profile")?;
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
             git_binary(),
@@ -306,9 +325,10 @@ pub fn set_sparse_checkout(
         scmd.ensure_success_or_log(
             cmd.current_dir(sparse_repo)
                 .arg("sparse-checkout")
-                .arg("set"),
+                .arg("add")
+                .arg("--stdin"),
             SandboxCommandOutput::Stderr,
-            "sparse-checkout set",
+            "sparse-checkout add",
         )
         .map(|_| ())
         .context("initializing sparse checkout")?;
@@ -366,7 +386,7 @@ pub fn create_empty_sparse_clone(
             .arg("--no-tags")
             .arg("--single-branch")
             .arg("--depth")
-            .arg("64")
+            .arg("1")
             .arg("-b")
             .arg(branch.as_str())
             .arg(filter_arg)

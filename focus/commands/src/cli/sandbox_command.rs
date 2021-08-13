@@ -1,12 +1,6 @@
 use crate::sandbox::Sandbox;
 use anyhow::{bail, Context, Result};
-use std::{
-    ffi::OsStr,
-    fs::File,
-    io::BufReader,
-    path::{Path, PathBuf},
-    process::{Command, ExitStatus, Stdio},
-};
+use std::{ffi::OsStr, fs::File, io::{BufReader, Write}, path::{Path, PathBuf}, process::{Command, ExitStatus, Stdio}};
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
     use std::io::{self, BufRead};
@@ -71,6 +65,9 @@ impl SandboxCommand {
     ) -> Result<Self> {
         let output_file = |extension: &str| -> Result<(Stdio, PathBuf)> {
             let (file, path) = sandbox.create_file(Some("sandboxed_command"), Some(extension))?;
+            let mut description_path = path.clone();
+            description_path.set_extension("script");
+            std::fs::write(&description_path, format!("{:?}", &command).as_bytes()).context("writing script description")?;
             Ok((Stdio::from(file), path))
         };
         let stdin = stdin.unwrap_or(Stdio::null());
