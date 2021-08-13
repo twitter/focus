@@ -171,7 +171,7 @@ impl SandboxCommand {
             .status()
             .with_context(|| format!("launching command {}", description))?;
 
-        log::info!("Command {:?} exited with status {}", cmd, &status);
+        log::debug!("Command {:?} exited with status {}", cmd, &status);
 
         if !status.success() {
             self.log(output, description).context("logging output")?;

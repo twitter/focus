@@ -63,7 +63,7 @@ impl<'this> WorkingTreeSynchronizer<'this> {
         Ok(result.success())
     }
 
-    pub(crate) fn get_head(&self) -> Result<Vec<u8>> {
+    pub(crate) fn read_head(&self) -> Result<Vec<u8>> {
         use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
 
@@ -83,6 +83,25 @@ impl<'this> WorkingTreeSynchronizer<'this> {
                 .expect("expected output")
                 .as_bytes(),
         ))
+    }
+
+    pub fn read_branch(&self) -> Result<String> {
+        use std::process;
+
+        let output = process::Command::new("git")
+            .arg("branch")
+            .arg("--show-current")
+            .current_dir(&self.path)
+            .output()
+            .context("running `git branch`")?;
+        if !output.status.success() {}
+        let output_str = String::from_utf8(output.stdout).context("parsing output as UTF-8")?;
+
+        Ok(output_str
+            .split_whitespace()
+            .next()
+            .expect("expected output")
+            .to_owned())
     }
 
     pub(crate) fn get_merge_base(&self, reference: &str) -> Result<Vec<u8>> {
@@ -107,6 +126,87 @@ impl<'this> WorkingTreeSynchronizer<'this> {
                 .as_bytes(),
         ))
     }
+
+    pub fn checkout_orphaned(&self, commit_identifier: &str) -> Result<()> {
+        let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
+
+        scmd.ensure_success_or_log(
+            cmd.arg("checkout")
+                .arg("--orphaned")
+                .arg(commit_identifier)
+                .current_dir(&self.path),
+            SandboxCommandOutput::Ignore,
+            "checking out orphaned commit",
+        )
+        .context("checking out orphaned commit")?;
+
+        Ok(())
+    }
+
+    // pub fn add_remote(&self, name: &str, url: &str) -> Result<()> {
+    //     let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
+
+    //     scmd.ensure_success_or_log(
+    //         cmd.arg("remote")
+    //             .arg("add")
+    //             .arg(name)
+    //             .arg(url)
+    //             .current_dir(&self.path),
+    //         SandboxCommandOutput::Ignore,
+    //         "adding a remote",
+    //     )
+    //     .context("adding a remote")?;
+
+    //     Ok(())
+    // }
+
+    // pub fn remove_remote(&self, name: &str) -> Result<()> {
+    //     let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
+
+    //     scmd.ensure_success_or_log(
+    //         cmd.arg("remote")
+    //             .arg("remove")
+    //             .arg(name)
+    //             .current_dir(&self.path),
+    //         SandboxCommandOutput::Ignore,
+    //         "removing a remote",
+    //     )
+    //     .context("removing a remote")?;
+
+    //     Ok(())
+    // }
+
+    pub fn push_to_remote(&self, remote: &str, name: &str) -> Result<()> {
+        let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
+
+        scmd.ensure_success_or_log(
+            cmd.arg("push")
+                .arg(remote)
+                .arg(name)
+                .current_dir(&self.path),
+            SandboxCommandOutput::Ignore,
+            "push to remote",
+        )
+        .context("push to remote")?;
+
+        Ok(())
+    }
+
+    // pub fn push_temp(&self, commit_identifier: &str) -> Result<()> {
+    //     let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
+
+    //     scmd.ensure_success_or_log(
+    //         cmd.arg("checkout")
+    //             .arg("--orphaned")
+    //             .arg(commit_identifier)
+    //             .current_dir(&self.path),
+    //         SandboxCommandOutput::Ignore,
+    //         "checking out orphaned commit",
+    //     )
+    //     .context("checking out orphaned commit")?;
+
+    //     Ok(())
+    // }
 
     #[allow(dead_code)]
     pub(crate) fn create_snapshot(&self) -> Result<()> {
@@ -148,7 +248,7 @@ mod tests {
 
         assert_eq!(
             clone_sync.get_merge_base("origin/main").unwrap(),
-            original_sync.get_head().unwrap()
+            original_sync.read_head().unwrap()
         );
     }
 }

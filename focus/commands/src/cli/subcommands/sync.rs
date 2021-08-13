@@ -1,4 +1,4 @@
-use std::{fmt::format, path::Path};
+use std::path::Path;
 
 use anyhow::{bail, Context, Error, Result};
 
@@ -8,20 +8,28 @@ pub fn perform<F, J>(description: &str, f: F) -> Result<J>
 where
     F: FnOnce() -> Result<J>,
 {
-    eprint!("{} ... ", description);
+    log::debug!("Task started: {}", description);
     let result = f();
     if let Err(e) = result {
-        eprintln!("FAILED!");
-        bail!("Task {} failed: {}", description, e);
+        log::error!("Task failed: {}: {}", description, e);
+        bail!(e);
     }
-    eprintln!("OK");
-    log::info!("Task {} succeeded", description);
+    log::info!("Task succeded: {}", description);
 
     result
 }
 
 pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<()> {
     let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, &sandbox)?;
+    let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, &sandbox)?;
+
+    if let Ok(clean) = perform("Checking that sparse repo is in a clean state", || {
+        sparse_sync.is_working_tree_clean()
+    }) {
+        if !clean {
+            bail!("The dense repo is not clean");
+        }
+    }
 
     if let Ok(clean) = perform("Checking that dense repo is in a clean state", || {
         dense_sync.is_working_tree_clean()
@@ -31,11 +39,22 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         }
     }
 
-    // let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, &sandbox)?;
-    // Check that the dense repo is a clean state.
-    // Check that the dense repo is at the same ref as the sparse repo
-    // Otherwise push to it
+    let sparse_commit = perform("Getting the sparse repo branch name", || {
+        sparse_sync.read_head()
+    })?;
 
-    // Apply the layer set to the sparse profile
+    let sparse_branch = perform("Getting the sparse repo branch name", || {
+        sparse_sync.read_branch()
+    })?;
+
+    perform("Push from the sparse repo to the dense repo", || {
+        sparse_sync.push_to_remote("dense", &sparse_branch)
+    })?;
+
+    perform("Checkout orphaned in the dense repo", || {
+        let commit_id = String::from_utf8(sparse_commit)?;
+        sparse_sync.checkout_orphaned(&commit_id)
+    })?;
+
     Ok(())
 }
