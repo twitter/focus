@@ -27,7 +27,7 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         sparse_sync.is_working_tree_clean()
     }) {
         if !clean {
-            bail!("The dense repo is not clean");
+            bail!("The sparse repo is not clean");
         }
     }
 
@@ -51,9 +51,13 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         sparse_sync.push_to_remote("dense", &sparse_branch)
     })?;
 
-    perform("Checkout orphaned in the dense repo", || {
+    perform("Check out the current sparse repo commit in the dense repo", || {
         let commit_id = String::from_utf8(sparse_commit)?;
-        sparse_sync.checkout_orphaned(&commit_id)
+        dense_sync.checkout_orphaned(&commit_id)
+    })?;
+
+    perform("Determine the directories for the sparse checkout in the dense repo", || {
+        todo!("implement this");
     })?;
 
     Ok(())
