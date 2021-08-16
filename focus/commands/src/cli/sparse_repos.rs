@@ -149,12 +149,6 @@ pub fn create_sparse_clone(
         sandbox.path().join(project_view_name)
     };
 
-    let computed_coordinates = {
-        let mut coordinates = coordinates.clone();
-        add_implicit_coordinates(&mut coordinates);
-        coordinates
-    };
-
     configure_dense_repo(&dense_repo, sandbox.as_ref())
         .context("setting configuration options in the dense repo")?;
 
@@ -166,7 +160,7 @@ pub fn create_sparse_clone(
         let cloned_sandbox = sandbox.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
-        let cloned_coordinates = computed_coordinates.to_vec().clone();
+        let cloned_coordinates = coordinates.clone();
         let cloned_profile_generation_barrier = profile_generation_barrier.clone();
 
         thread::Builder::new()
@@ -189,7 +183,7 @@ pub fn create_sparse_clone(
         let cloned_sandbox = sandbox.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_project_view_output = project_view_output.clone();
-        let cloned_coordinates = computed_coordinates.to_vec().clone();
+        let cloned_coordinates = coordinates.clone();
 
         thread::Builder::new()
             .name("ProjectViewGeneration".to_owned())
