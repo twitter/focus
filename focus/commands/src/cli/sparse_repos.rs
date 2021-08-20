@@ -1,8 +1,11 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Context, Error, Result};
+use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
+use std::os::unix::fs::symlink;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::thread;
@@ -13,6 +16,7 @@ use std::{
     sync::{Arc, Barrier},
 };
 
+use crate::model::{self, Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::sandbox::Sandbox;
 use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
@@ -67,7 +71,7 @@ fn set_up_alternate(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn configure_sparse_repo_final(
+fn configure_sparse_repo_final(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     sandbox: &Sandbox,
@@ -111,8 +115,12 @@ pub fn configure_sparse_repo_final(
     Ok(())
 }
 
+fn create_dense_link(dense_repo: &PathBuf, sparse_repo: &PathBuf) -> Result<()> {
+    let link_path = sparse_repo.join(".dense");
+    symlink(dense_repo, link_path).map_err(|e| Error::new(e))
+}
 // Write an object to a repo returning its identity.
-pub fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<String> {
+fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<String> {
     let (mut cmd, scmd) = git_command(&sandbox)?;
     if let Err(e) = cmd
         .current_dir(repo)
@@ -132,16 +140,123 @@ pub fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Res
     Ok(stdout_contents.trim().to_owned())
 }
 
+pub fn coordinates_from_layers(
+    repo: &PathBuf,
+    layer_names: Vec<&str>,
+    sandbox: &Sandbox,
+) -> Result<Vec<String>> {
+    let layer_sets = LayerSets::new(&repo);
+    let rich_layer_set = RichLayerSet::new(
+        layer_sets
+            .available_layers()
+            .context("getting available layers")?,
+    )?;
+    let mut coordinates = HashSet::<String>::new();
+    for layer_name in layer_names {
+        if let Some(layer) = rich_layer_set.get(layer_name) {
+            for coordinate in layer.coordinates() {
+                coordinates.insert(coordinate.to_owned());
+            }
+        } else {
+            bail!("Layer named '{}' not found", &layer_name)
+        }
+    }
+
+    Ok(coordinates.into())
+}
+
+pub fn write_adhoc_layer_set(sparse_repo: &PathBuf, layer_set: &LayerSet) -> Result<()> {
+    let layer_sets = LayerSets::new(sparse_repo);
+    layer_sets.store_adhoc_layers(layer_set)
+}
+
+pub enum Spec {
+    Coordinates(Vec<String>),
+    Layers(Vec<String>),
+}
+
 pub fn create_sparse_clone(
+    name: &String,
+    dense_repo: &PathBuf,
+    sparse_repo: &PathBuf,
+    branch: &String,
+    spec: &Spec,
+    filter_sparse: bool,
+    sandbox: Arc<Sandbox>,
+) -> Result<()> {
+    let layer_set = match spec {
+        Spec::Coordinates(coordinates) => {
+            // Put coordinates them into the "ad hoc" layer.
+            LayerSet {
+                layers: vec![Layer::new("adhoc", "Ad hoc layer", false, coordinates)],
+                content_hash: None,
+            }
+        }
+
+        Spec::Layers(layers) => {
+            // TODO: Refactor this. We need a plural retrieval function on LayerSet or something.
+            let layer_sets = model::LayerSets::new(&dense_repo);
+            let available_layers = RichLayerSet::new(layer_sets.available_layers()?)?;
+            let mut missing: bool;
+            let found_layers = Vec::<Layer>::new();
+
+            for layer_name in layers {
+                if let Some(layer) = available_layers.get(name) {
+                    found_layers.push(layer.to_owned());
+                } else {
+                    bail!("Layer {} not found", layer_name);
+                }
+            }
+
+            LayerSet {
+                layers: found_layers,
+                content_hash: None,
+            }
+        }
+    };
+
+    let coordinates = Vec::<String>::new();
+    for layer in layer_set.layers() {
+        coordinates.extend(layer.coordinates().borrow());
+    }
+
+    create_or_update_sparse_clone(
+        &name,
+        &dense_repo,
+        &sparse_repo,
+        &branch,
+        &coordinates,
+        filter_sparse,
+        true,
+        sandbox,
+    )?;
+
+    if !adhoc_layer_set.layers().is_empty() {
+        write_adhoc_layer_set(&sparse_repo, adhoc_layer_set)?;
+    }
+
+    Ok(())
+}
+
+pub fn create_or_update_sparse_clone(
     name: &String,
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
     coordinates: &Vec<String>,
     filter_sparse: bool,
+    create: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
     // TODO: Crash harder in threads to prevent extra work.
+
+    if create {
+        if sparse_repo.is_dir() {
+            bail!("Sparse repo already exists and creation was requested")
+        }
+    } else if !sparse_repo.is_dir() {
+        bail!("Sparse repo does not exist and creation is not allowed")
+    }
 
     let sparse_profile_output = sandbox.path().join("sparse-checkout");
     let project_view_output = {
@@ -152,7 +267,7 @@ pub fn create_sparse_clone(
     configure_dense_repo(&dense_repo, sandbox.as_ref())
         .context("setting configuration options in the dense repo")?;
 
-    // Being on the right branch in the dense repsitory is a prerequisite for any work.
+    // Being on the right branch in the dense repository is a prerequisite for any work.
     switch_to_detached_branch_discarding_changes(&dense_repo, &branch, sandbox.as_ref())?;
 
     let profile_generation_barrier = Arc::new(Barrier::new(2));
@@ -212,6 +327,10 @@ pub fn create_sparse_clone(
     }
 
     let clone_thread = {
+        if !create {
+            return Ok(());
+        }
+
         let cloned_sandbox = sandbox.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_repo = sparse_repo.to_owned();
@@ -261,8 +380,12 @@ pub fn create_sparse_clone(
             .context("setting up sparse checkout options")?;
 
         log::info!("Finalizing configuration");
-        configure_sparse_repo_final(&cloned_dense_repo, &cloned_sparse_repo, &cloned_sandbox)
-            .context("failed to perform final configuration in the sparse repo")?;
+        if create {
+            configure_sparse_repo_final(&cloned_dense_repo, &cloned_sparse_repo, &cloned_sandbox)
+                .context("failed to perform final configuration in the sparse repo")?;
+            create_dense_link(&cloned_dense_repo, &cloned_sparse_repo)
+                .context("failed to create a link to the dense repo in the sparse repo")?;
+        }
 
         log::info!("Checking out the working copy");
         checkout_working_copy(&cloned_sparse_repo, &cloned_sandbox)
@@ -512,7 +635,7 @@ pub fn switch_to_detached_branch_discarding_changes(
     Ok(())
 }
 
-pub fn generate_sparse_profile(
+fn generate_sparse_profile(
     dense_repo: &Path,
     sparse_profile_output: &Path,
     coordinates: &Vec<String>,

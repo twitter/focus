@@ -4,27 +4,29 @@ mod sandbox;
 mod sandbox_command;
 mod sparse_repos;
 mod subcommands;
-mod testing;
 mod temporary_working_directory;
+mod testing;
 mod working_tree_synchronizer;
 #[macro_use]
 extern crate lazy_static;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
+use model::{Layer, LayerSet};
 use sandbox::Sandbox;
+use sparse_repos::{coordinates_from_layers, create_sparse_clone};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 use structopt::StructOpt;
 
 #[derive(Debug)]
-struct Coordinates(Vec<String>);
+struct CommaSeparatedStrings(Vec<String>);
 
-impl FromStr for Coordinates {
+impl FromStr for CommaSeparatedStrings {
     type Err = std::string::ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let splayed: Vec<_> = s.split(",").map(|s| s.to_owned()).collect();
-        Ok(Coordinates(splayed))
+        Ok(CommaSeparatedStrings(splayed))
     }
 }
 
@@ -44,7 +46,10 @@ enum Subcommand {
         branch: String,
 
         #[structopt(long)]
-        coordinates: Coordinates,
+        coordinates: CommaSeparatedStrings,
+
+        #[structopt(long)]
+        layers: CommaSeparatedStrings,
 
         #[structopt(long)]
         filter_sparse: bool,
@@ -114,17 +119,32 @@ fn main() -> Result<()> {
             dense_repo,
             sparse_repo,
             branch,
+            layers,
             coordinates,
             filter_sparse,
-        } => sparse_repos::create_sparse_clone(
-            &name,
-            &dense_repo,
-            &sparse_repo,
-            &branch,
-            &coordinates.0,
-            filter_sparse,
-            sandbox,
-        ),
+        } => {
+            if !(coordinates.0.is_empty() ^ layers.0.is_empty()) {
+                bail!("Either layers or coordinates must be specified");
+            }
+
+            let spec = if !coordinates.0.is_empty() {
+                sparse_repos::Spec::Coordinates(coordinates.0.to_vec())
+            } else if !layers.0.is_empty() {
+                sparse_repos::Spec::Layers(layers.0.to_vec())
+            } else {
+                unreachable!()
+            };
+
+            create_sparse_clone(
+                &name,
+                &dense_repo,
+                &sparse_repo,
+                &branch,
+                &spec,
+                filter_sparse,
+                sandbox,
+            )
+        }
 
         Subcommand::Sync {
             dense_repo,

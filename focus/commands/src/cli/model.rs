@@ -52,6 +52,26 @@ impl Display for Layer {
     }
 }
 
+impl Layer {
+    pub fn new(
+        name: &str,
+        description: &str,
+        mandatory: bool,
+        coordinates: &Vec<String>,
+    ) -> Self {
+        Self {
+            name: name.to_owned(),
+            description: description.to_owned(),
+            mandatory,
+            coordinates: coordinates.to_owned(),
+        }
+    }
+
+    pub fn coordinates(&self) -> &Vec<String> {
+        self.coordinates()
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub struct LayerSet {
     layers: Vec<Layer>,
@@ -248,6 +268,10 @@ impl LayerSets {
         self.user_directory().join("user.stack.json")
     }
 
+    pub fn adhoc_layer_path(&self) -> PathBuf {
+        self.user_directory().join("adhoc.layers.json")
+    }
+
     // The directory containing project-oriented layers. All .layers.json will be scanned.
     pub fn project_directory(&self) -> PathBuf {
         self.repo_path.join("focus").join("projects")
@@ -302,6 +326,21 @@ impl LayerSets {
     // Return a layer_set containing all mandatory layers
     pub fn mandatory_layers(&self) -> Result<LayerSet> {
         LayerSet::load(&self.mandatory_layer_path()).context("loading mandatory layer set")
+    }
+
+    pub fn adhoc_layers(&self) -> Result<Option<LayerSet>> {
+        if !self.adhoc_layer_path().is_file() {
+            return Ok(None);
+        }
+
+        Ok(Some(
+            LayerSet::load(&self.adhoc_layer_path()).context("loading adhoc layer set")?,
+        ))
+    }
+
+    pub fn store_adhoc_layers(&self, layer_set: &LayerSet) -> Result<()> {
+        LayerSet::store(self.adhoc_layer_path().as_path(), layer_set)
+            .context("storing ad hoc layer set")
     }
 
     // Return a layer_set cataloging all available layers
@@ -382,6 +421,9 @@ impl LayerSets {
         let mut layers = self
             .mandatory_layers()
             .context("loading mandatory layers")?;
+        if let Some(adhoc_layers) = self.adhoc_layers().context("loading ad hoc layers")? {
+            layers.extend(&adhoc_layers);
+        }
         if let Some(selected_layers) = self.selected_layers().context("loading selected layers")? {
             layers.extend(&selected_layers);
         } else {
