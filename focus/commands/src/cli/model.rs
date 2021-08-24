@@ -86,6 +86,13 @@ enum RemoveResult {
 }
 
 impl LayerSet {
+    pub fn new(layers: Vec<Layer>) -> Self {
+        Self {
+            layers,
+            content_hash: None,
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         // Find duplicate names
         let mut visited_names = HashMap::<String, usize>::new();

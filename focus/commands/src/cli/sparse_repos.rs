@@ -151,6 +151,7 @@ pub fn coordinates_from_layers(
             .available_layers()
             .context("getting available layers")?,
     )?;
+
     let mut coordinates = HashSet::<String>::new();
     for layer_name in layer_names {
         if let Some(layer) = rich_layer_set.get(layer_name) {
@@ -162,7 +163,7 @@ pub fn coordinates_from_layers(
         }
     }
 
-    Ok(coordinates.into())
+    Ok(coordinates.into_iter().collect())
 }
 
 pub fn write_adhoc_layer_set(sparse_repo: &PathBuf, layer_set: &LayerSet) -> Result<()> {
@@ -184,21 +185,23 @@ pub fn create_sparse_clone(
     filter_sparse: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
+    let mut adhoc_layer_set: Option<LayerSet> = None;
+
     let layer_set = match spec {
         Spec::Coordinates(coordinates) => {
             // Put coordinates them into the "ad hoc" layer.
-            LayerSet {
-                layers: vec![Layer::new("adhoc", "Ad hoc layer", false, coordinates)],
-                content_hash: None,
-            }
+            let set = LayerSet::new(
+                vec![Layer::new("adhoc", "Ad hoc layer", false, coordinates)],
+            );
+            adhoc_layer_set = Some(set.clone());
+            set
         }
 
         Spec::Layers(layers) => {
             // TODO: Refactor this. We need a plural retrieval function on LayerSet or something.
             let layer_sets = model::LayerSets::new(&dense_repo);
             let available_layers = RichLayerSet::new(layer_sets.available_layers()?)?;
-            let mut missing: bool;
-            let found_layers = Vec::<Layer>::new();
+            let mut found_layers = Vec::<Layer>::new();
 
             for layer_name in layers {
                 if let Some(layer) = available_layers.get(name) {
@@ -208,16 +211,14 @@ pub fn create_sparse_clone(
                 }
             }
 
-            LayerSet {
-                layers: found_layers,
-                content_hash: None,
-            }
+            LayerSet::new(found_layers)
         }
     };
 
-    let coordinates = Vec::<String>::new();
+    let mut coordinates = Vec::<String>::new();
     for layer in layer_set.layers() {
-        coordinates.extend(layer.coordinates().borrow());
+        let layer_coordinates = layer.coordinates().clone();
+        coordinates.extend(layer_coordinates);
     }
 
     create_or_update_sparse_clone(
@@ -231,8 +232,8 @@ pub fn create_sparse_clone(
         sandbox,
     )?;
 
-    if !adhoc_layer_set.layers().is_empty() {
-        write_adhoc_layer_set(&sparse_repo, adhoc_layer_set)?;
+    if let Some(set) = &adhoc_layer_set {
+        write_adhoc_layer_set(&sparse_repo, set)?;
     }
 
     Ok(())
