@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Error, Result};
-use std::borrow::Borrow;
+
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
@@ -54,7 +54,7 @@ pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<(
     git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
 }
 
-pub fn configure_sparse_repo_initial(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
+pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
     // TODO: Consider enabling the fsmonitor after it can be bundled.
     // git_config(sparse_repo, "core.fsmonitor", "rs-git-fsmonitor", sandbox)?;
 
@@ -143,7 +143,7 @@ fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<
 pub fn coordinates_from_layers(
     repo: &PathBuf,
     layer_names: Vec<&str>,
-    sandbox: &Sandbox,
+    _sandbox: &Sandbox,
 ) -> Result<Vec<String>> {
     let layer_sets = LayerSets::new(&repo);
     let rich_layer_set = RichLayerSet::new(
@@ -428,7 +428,7 @@ pub fn set_sparse_checkout(
     }
 
     {
-        let sparse_profile_destination = sparse_repo
+        let _sparse_profile_destination = sparse_repo
             .join(".git")
             .join("info")
             .join("sparse-checkout");

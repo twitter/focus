@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{bail, Result};
 
 use crate::{sandbox::Sandbox, working_tree_synchronizer::WorkingTreeSynchronizer};
 
@@ -39,7 +39,7 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         }
     }
 
-    let sparse_commit = perform("Getting the sparse repo branch name", || {
+    let _sparse_commit = perform("Getting the sparse repo branch name", || {
         sparse_sync.read_head()
     })?;
 

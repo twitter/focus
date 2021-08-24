@@ -12,9 +12,9 @@ extern crate lazy_static;
 
 use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
-use model::{Layer, LayerSet};
+
 use sandbox::Sandbox;
-use sparse_repos::{coordinates_from_layers, create_sparse_clone};
+use sparse_repos::{create_sparse_clone};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 use structopt::StructOpt;
 
