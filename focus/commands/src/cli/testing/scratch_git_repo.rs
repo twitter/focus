@@ -37,7 +37,6 @@ impl ScratchGitRepo {
 
     #[allow(dead_code)]
     pub(crate) fn create_fixture_repo(containing_dir: &Path) -> Result<PathBuf> {
-        // std::env::set_current_dir(containing_dir)?;
         let name = format!("repo_{}", Uuid::new_v4().to_string());
         Command::new("git")
             .arg("init")
