@@ -53,12 +53,7 @@ impl Display for Layer {
 }
 
 impl Layer {
-    pub fn new(
-        name: &str,
-        description: &str,
-        mandatory: bool,
-        coordinates: &Vec<String>,
-    ) -> Self {
+    pub fn new(name: &str, description: &str, mandatory: bool, coordinates: &Vec<String>) -> Self {
         Self {
             name: name.to_owned(),
             description: description.to_owned(),

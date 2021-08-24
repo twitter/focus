@@ -190,9 +190,12 @@ pub fn create_sparse_clone(
     let layer_set = match spec {
         Spec::Coordinates(coordinates) => {
             // Put coordinates them into the "ad hoc" layer.
-            let set = LayerSet::new(
-                vec![Layer::new("adhoc", "Ad hoc layer", false, coordinates)],
-            );
+            let set = LayerSet::new(vec![Layer::new(
+                "adhoc",
+                "Ad hoc layer",
+                false,
+                coordinates,
+            )]);
             adhoc_layer_set = Some(set.clone());
             set
         }

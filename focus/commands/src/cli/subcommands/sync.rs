@@ -56,11 +56,13 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
     //     dense_sync.checkout_orphaned(&commit_id)
     // })?;
 
-    perform("Determine the directories for the sparse checkout in the dense repo", || {
-        // Use the sparse commit here
-        todo!("implement this");
-
-    })?;
+    perform(
+        "Determine the directories for the sparse checkout in the dense repo",
+        || {
+            // Use the sparse commit here
+            todo!("implement this");
+        },
+    )?;
 
     Ok(())
 }
