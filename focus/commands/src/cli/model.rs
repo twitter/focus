@@ -63,7 +63,7 @@ impl Layer {
     }
 
     pub fn coordinates(&self) -> &Vec<String> {
-        self.coordinates()
+        &self.coordinates
     }
 }
 

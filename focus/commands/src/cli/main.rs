@@ -14,8 +14,8 @@ use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
 use sandbox::Sandbox;
-use sparse_repos::{create_sparse_clone};
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use sparse_repos::create_sparse_clone;
+use std::{iter::empty, path::PathBuf, str::FromStr, sync::Arc};
 use structopt::StructOpt;
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl FromStr for CommaSeparatedStrings {
 
 #[derive(StructOpt, Debug)]
 enum Subcommand {
-    CreateSparseClone {
+    Clone {
         #[structopt(long)]
         name: String,
 
@@ -45,10 +45,10 @@ enum Subcommand {
         #[structopt(long)]
         branch: String,
 
-        #[structopt(long)]
+        #[structopt(long, default_value = "")]
         coordinates: CommaSeparatedStrings,
 
-        #[structopt(long)]
+        #[structopt(long, default_value = "")]
         layers: CommaSeparatedStrings,
 
         #[structopt(long)]
@@ -106,6 +106,19 @@ struct ParachuteOpts {
     cmd: Subcommand,
 }
 
+fn filter_empty_strings(string_list: Vec<String>) -> Vec<String> {
+    string_list
+        .iter()
+        .filter_map(|s| {
+            if !s.is_empty() {
+                Some(s.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -114,7 +127,7 @@ fn main() -> Result<()> {
     let sandbox = Arc::new(Sandbox::new(opt.preserve_sandbox).context("Creating a sandbox")?);
 
     match opt.cmd {
-        Subcommand::CreateSparseClone {
+        Subcommand::Clone {
             name,
             dense_repo,
             sparse_repo,
@@ -123,19 +136,25 @@ fn main() -> Result<()> {
             coordinates,
             filter_sparse,
         } => {
-            if !(coordinates.0.is_empty() ^ layers.0.is_empty()) {
+            let layers = filter_empty_strings(layers.0);
+            let coordinates = filter_empty_strings(coordinates.0);
+
+            log::info!("Coordinates= {:?}", coordinates);
+            log::info!("Layers = {:?}", layers);
+
+            if !(coordinates.is_empty() ^ layers.is_empty()) {
                 bail!("Either layers or coordinates must be specified");
             }
 
-            let spec = if !coordinates.0.is_empty() {
-                sparse_repos::Spec::Coordinates(coordinates.0.to_vec())
-            } else if !layers.0.is_empty() {
-                sparse_repos::Spec::Layers(layers.0.to_vec())
+            let spec = if !coordinates.is_empty() {
+                sparse_repos::Spec::Coordinates(coordinates.to_vec())
+            } else if !layers.is_empty() {
+                sparse_repos::Spec::Layers(layers.to_vec())
             } else {
                 unreachable!()
             };
 
-            create_sparse_clone(
+            subcommands::clone::run(
                 &name,
                 &dense_repo,
                 &sparse_repo,
