@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Error, Result};
 
-use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
@@ -21,16 +20,9 @@ use crate::sandbox::Sandbox;
 use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
 
-const SPARSE_PROFILE_PRELUDE: &str = "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n";
-
-fn add_implicit_coordinates(v: &mut Vec<String>) {
-    let implicit_coordinates: Vec<String> = vec![
-        String::from("//tools/implicit_deps:thrift-implicit-deps-impl"),
-        String::from("//scrooge-internal/..."),
-        String::from("//loglens/loglens-logging/..."),
-    ];
-    v.extend(implicit_coordinates)
-}
+// TODO: Revisit this...
+const SPARSE_PROFILE_PRELUDE: &str =
+    "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n/focus/\n";
 
 fn git_binary() -> OsString {
     OsString::from("git")
@@ -62,7 +54,6 @@ pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox)
 }
 
 fn set_up_alternate(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
-    // use std::os::unix::ffi::OsStrExt;
     let alternates_path = sparse_repo.join(".git").join("info").join("alternates");
     let mut buf = Vec::from(dense_repo.as_os_str().as_bytes());
     buf.push(b'\n');
@@ -140,11 +131,7 @@ fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<
     Ok(stdout_contents.trim().to_owned())
 }
 
-pub fn coordinates_from_layers(
-    repo: &PathBuf,
-    layer_names: Vec<&str>,
-    _sandbox: &Sandbox,
-) -> Result<Vec<String>> {
+pub fn set_containing_layers(repo: &PathBuf, layer_names: &Vec<String>) -> Result<LayerSet> {
     let layer_sets = LayerSets::new(&repo);
     let rich_layer_set = RichLayerSet::new(
         layer_sets
@@ -152,18 +139,16 @@ pub fn coordinates_from_layers(
             .context("getting available layers")?,
     )?;
 
-    let mut coordinates = HashSet::<String>::new();
+    let mut layers = Vec::<Layer>::new();
     for layer_name in layer_names {
         if let Some(layer) = rich_layer_set.get(layer_name) {
-            for coordinate in layer.coordinates() {
-                coordinates.insert(coordinate.to_owned());
-            }
+            layers.push(layer.clone());
         } else {
             bail!("Layer named '{}' not found", &layer_name)
         }
     }
 
-    Ok(coordinates.into_iter().collect())
+    Ok(LayerSet::new(layers.into_iter().collect()))
 }
 
 pub fn write_adhoc_layer_set(sparse_repo: &PathBuf, layer_set: &LayerSet) -> Result<()> {
@@ -187,7 +172,12 @@ pub fn create_sparse_clone(
 ) -> Result<()> {
     let mut adhoc_layer_set: Option<LayerSet> = None;
 
-    let layer_set = match spec {
+    let dense_sets = model::LayerSets::new(&dense_repo);
+    let mut layer_set = dense_sets
+        .mandatory_layers()
+        .context("resolving mandatory layers")?;
+
+    let user_selected_set = match spec {
         Spec::Coordinates(coordinates) => {
             // Put coordinates them into the "ad hoc" layer.
             let set = LayerSet::new(vec![Layer::new(
@@ -201,22 +191,19 @@ pub fn create_sparse_clone(
         }
 
         Spec::Layers(layers) => {
-            // TODO: Refactor this. We need a plural retrieval function on LayerSet or something.
-            let layer_sets = model::LayerSets::new(&dense_repo);
-            let available_layers = RichLayerSet::new(layer_sets.available_layers()?)?;
-            let mut found_layers = Vec::<Layer>::new();
-
-            for layer_name in layers {
-                if let Some(layer) = available_layers.get(name) {
-                    found_layers.push(layer.to_owned());
-                } else {
-                    bail!("Layer {} not found", layer_name);
-                }
-            }
-
-            LayerSet::new(found_layers)
+            set_containing_layers(&dense_repo, layers).context("resolving user-selected layers")?
         }
     };
+
+    // Check that the user selected set is valid
+    user_selected_set
+        .validate()
+        .context("validating user-selected layers")?;
+
+    // Add the user selected set to the overall set
+    layer_set.extend(&user_selected_set);
+
+    // Use coordinates_from_layers(repo, layer_names, sandbox)?
 
     let mut coordinates = Vec::<String>::new();
     for layer in layer_set.layers() {
@@ -236,7 +223,20 @@ pub fn create_sparse_clone(
     )?;
 
     if let Some(set) = &adhoc_layer_set {
-        write_adhoc_layer_set(&sparse_repo, set)?;
+        log::info!("Writing the adhoc layer set");
+        write_adhoc_layer_set(&sparse_repo, set).context("writing the adhoc layer set")?;
+    } else {
+        // We know that layers were specified since there's no adhoc layer set.
+        log::info!("Pushing the selected layers");
+        let names = user_selected_set
+            .layers()
+            .iter()
+            .map(|layer| layer.name().to_owned())
+            .collect();
+        let sparse_sets = LayerSets::new(&sparse_repo);
+        sparse_sets
+            .push_as_selection(names)
+            .context("pushing the selected layers")?;
     }
 
     Ok(())

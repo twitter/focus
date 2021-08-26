@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use std::{
     ffi::OsStr,
     fs::File,
-    io::{BufReader},
+    io::BufReader,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
 };

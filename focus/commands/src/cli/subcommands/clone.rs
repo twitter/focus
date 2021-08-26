@@ -13,5 +13,13 @@ pub fn run(
     filter_sparse: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
-    crate::sparse_repos::create_sparse_clone(name, dense_repo, sparse_repo, branch, spec, filter_sparse, sandbox)
+    crate::sparse_repos::create_sparse_clone(
+        name,
+        dense_repo,
+        sparse_repo,
+        branch,
+        spec,
+        filter_sparse,
+        sandbox,
+    )
 }

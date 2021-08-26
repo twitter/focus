@@ -139,9 +139,6 @@ fn main() -> Result<()> {
             let layers = filter_empty_strings(layers.0);
             let coordinates = filter_empty_strings(coordinates.0);
 
-            log::info!("Coordinates= {:?}", coordinates);
-            log::info!("Layers = {:?}", layers);
-
             if !(coordinates.is_empty() ^ layers.is_empty()) {
                 bail!("Either layers or coordinates must be specified");
             }

@@ -62,6 +62,10 @@ impl Layer {
         }
     }
 
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
     pub fn coordinates(&self) -> &Vec<String> {
         &self.coordinates
     }
