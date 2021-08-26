@@ -14,8 +14,8 @@ use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
 use sandbox::Sandbox;
-use sparse_repos::create_sparse_clone;
-use std::{iter::empty, path::PathBuf, str::FromStr, sync::Arc};
+
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use structopt::StructOpt;
 
 #[derive(Debug)]
