@@ -158,6 +158,16 @@ impl LayerSet {
     }
 
     fn store(path: &Path, t: &LayerSet) -> Result<()> {
+        let parent = path.parent().context("determining parent directory")?;
+        if !parent.is_dir() {
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!(
+                    "creating the directory ({}) to to store the layer set in",
+                    parent.display()
+                )
+            })?;
+        }
+
         std::fs::write(
             &path,
             &serde_json::to_vec(&t).context("opening file for write")?,
