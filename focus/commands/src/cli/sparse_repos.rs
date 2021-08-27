@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Error, Result};
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
@@ -65,43 +65,69 @@ fn set_up_alternate(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
 fn configure_sparse_repo_final(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
+    branch: &str,
     sandbox: &Sandbox,
 ) -> Result<()> {
-    let dense_git_dir = dense_repo.join(".git");
-    let sparse_git_dir = sparse_repo.join(".git");
-    let dense_config = dense_git_dir.join("config");
-    let sparse_config = sparse_git_dir.join("config");
-    std::fs::copy(dense_config, sparse_config)
-        .context("copying repo configuration the dense repo to the sparse repo")?;
+    // TODO: Figure out the remote based on the branch fetch/push config rather than assuming 'origin'. Kinda pedantic, but correct.
 
-    let paths_to_copy = vec!["config", "hooks", "hooks_multi", "repo.d"];
-    for name in paths_to_copy {
-        let from = dense_git_dir.join(name);
-        if !from.exists() {
-            log::warn!("Dense path {} does not exist!", &from.display());
-            continue;
-        }
-        let to = sparse_git_dir.join(name);
-        let (mut cmd, scmd) = SandboxCommand::new("cp", sandbox)?;
-        scmd.ensure_success_or_log(
-            cmd.arg("-v").arg("-r").arg(&from).arg(&to),
-            SandboxCommandOutput::Stderr,
-            &format!("Copying {} -> {}", &from.display(), &to.display()),
-        )?;
-    }
+    // Get the current push URL
+    let push_url = git_remote_get_url(dense_repo, "origin", sandbox)?;
+    let dense_url = git_remote_get_url(sparse_repo, "origin", sandbox)?;
 
-    // Add a URL to the dense repo
-    let dense_url = format!("file://{}", dense_repo.to_str().unwrap());
+    // // Rename origin to dense
     let (mut cmd, scmd) = git_command(sandbox)?;
     scmd.ensure_success_or_log(
         cmd.arg("remote")
             .arg("add")
             .arg("dense")
-            .arg(&dense_url)
+            .arg(dense_url)
             .current_dir(&sparse_repo),
         SandboxCommandOutput::Stderr,
-        &format!("adding dense remote ({})", &dense_url),
+        "adding dense remote",
     )?;
+
+    // Pull from dense repo using the `git-remote-focus` helper
+    let dense_repo_str = dense_repo.as_os_str().to_str();
+    if dense_repo_str.is_none() {
+        bail!("Dense repo path contains non-UTF-8 characters");
+    }
+
+    let fetch_url = format!("focus::file://{}", dense_repo_str.unwrap());
+    let (mut cmd, scmd) = git_command(sandbox)?;
+    scmd.ensure_success_or_log(
+        cmd.arg("remote")
+            .arg("set-url")
+            .arg("origin")
+            .arg(&fetch_url)
+            .current_dir(&sparse_repo),
+        SandboxCommandOutput::Stderr,
+        &format!("updating remote to fetch from {}", &fetch_url),
+    )?;
+
+    // Push directly to dense origin
+    let (mut cmd, scmd) = git_command(sandbox)?;
+    scmd.ensure_success_or_log(
+        cmd.arg("remote")
+            .arg("set-url")
+            .arg("--push")
+            .arg("origin")
+            .arg(&push_url)
+            .current_dir(&sparse_repo),
+        SandboxCommandOutput::Stderr,
+        &format!("updating remote to push to {}", &push_url),
+    )?;
+
+    // // Set branches since rename moved them
+    // let (mut cmd, scmd) = git_command(sandbox)?;
+    // scmd.ensure_success_or_log(
+    //     cmd.arg("remote")
+    //         .arg("set-branches")
+    //         .arg("origin")
+    //         .arg(&branch)
+    //         .current_dir(&sparse_repo),
+    //     SandboxCommandOutput::Stderr,
+    //     &format!("setting branches for origin"),
+    // )?;
 
     Ok(())
 }
@@ -112,19 +138,45 @@ fn create_dense_link(dense_repo: &PathBuf, sparse_repo: &PathBuf) -> Result<()> 
 }
 // Write an object to a repo returning its identity.
 fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<String> {
+    run_git_command_consuming_stdout(
+        repo,
+        vec![
+            OsString::from("hash-object"),
+            OsString::from("-w"),
+            file.as_os_str().to_owned(),
+        ],
+        sandbox,
+    )
+}
+
+fn git_remote_get_url(repo: &PathBuf, name: &str, sandbox: &Sandbox) -> Result<String> {
+    run_git_command_consuming_stdout(
+        repo,
+        vec![
+            OsString::from("remote"),
+            OsString::from("get-url"),
+            OsString::from(name),
+        ],
+        sandbox,
+    )
+}
+
+fn run_git_command_consuming_stdout<I, S>(
+    repo: &PathBuf,
+    args: I,
+    sandbox: &Sandbox,
+) -> Result<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let (mut cmd, scmd) = git_command(&sandbox)?;
-    if let Err(e) = cmd
-        .current_dir(repo)
-        .arg("hash-object")
-        .arg("-w")
-        .arg(file)
-        .status()
-    {
+    if let Err(e) = cmd.current_dir(repo).args(args).status() {
         scmd.log(
             crate::sandbox_command::SandboxCommandOutput::Stderr,
             &"failed 'git hash-object' command",
         )?;
-        bail!("git hash-object failed: {}", e);
+        bail!("git failed: {}", e);
     }
     let mut stdout_contents = String::new();
     scmd.read_to_string(SandboxCommandOutput::Stdout, &mut stdout_contents)?;
@@ -378,6 +430,7 @@ pub fn create_or_update_sparse_clone(
         let cloned_sandbox = sandbox.clone();
         let cloned_sparse_repo = sparse_repo.clone();
         let cloned_dense_repo = dense_repo.clone();
+        let cloned_branch = branch.clone();
 
         log::info!("Configuring visible paths");
         set_sparse_checkout(sparse_repo, &sparse_profile_output, &cloned_sandbox)
@@ -385,8 +438,13 @@ pub fn create_or_update_sparse_clone(
 
         log::info!("Finalizing configuration");
         if create {
-            configure_sparse_repo_final(&cloned_dense_repo, &cloned_sparse_repo, &cloned_sandbox)
-                .context("failed to perform final configuration in the sparse repo")?;
+            configure_sparse_repo_final(
+                &cloned_dense_repo,
+                &cloned_sparse_repo,
+                &cloned_branch,
+                &cloned_sandbox,
+            )
+            .context("failed to perform final configuration in the sparse repo")?;
             create_dense_link(&cloned_dense_repo, &cloned_sparse_repo)
                 .context("failed to create a link to the dense repo in the sparse repo")?;
         }

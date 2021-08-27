@@ -170,7 +170,7 @@ impl LayerSet {
 
         std::fs::write(
             &path,
-            &serde_json::to_vec(&t).context("opening file for write")?,
+            &serde_json::to_vec_pretty(&t).context("opening file for write")?,
         )
         .context("storing layer_set")?;
 
