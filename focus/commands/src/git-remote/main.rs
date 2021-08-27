@@ -150,19 +150,12 @@ impl Helper {
             let line = line.context("reading output of for-each-ref")?;
             let mut tokens = line.split_ascii_whitespace();
 
-            let object_name = tokens.next();
-            if object_name.is_none() {
-                bail!("missing token for content hash");
-            }
-
-            let ref_name = tokens.next();
-            if ref_name.is_none() {
-                bail!("missing token for ref name");
-            }
+            let object_name = unwrap_or_bail(tokens.next()).context("expected object name token")?;
+            let ref_name = unwrap_or_bail(tokens.next()).context("expected ref name token")?;
 
             results.insert(
-                ref_name.unwrap().to_owned(),
-                object_name.unwrap().to_owned(),
+                ref_name.to_owned(),
+                object_name.to_owned(),
             );
         }
 
@@ -199,7 +192,8 @@ impl Helper {
         Ok(())
     }
 
-    fn fetch(&self) -> Result<()> {
+    fn fetch(&self, oid: &str, ref_name: &str) -> Result<()> {
+        
         todo!("implement me");
     }
 
@@ -212,9 +206,9 @@ impl Helper {
                 "list" => self.list_refs()?,
 
                 "fetch" => {
-                    let oid = unwrap_or_bail(tokens.next());
-                    let ref_name = unwrap_or_bail(tokens.next());
-                    self.fetch(oid, ref_name)?
+                    let oid = unwrap_or_bail(tokens.next()).context("reading oid token")?;
+                    let ref_name = unwrap_or_bail(tokens.next()).context("reading ref name token")?;
+                    self.fetch(oid, ref_name)?;
                 },
 
                 "" => {
