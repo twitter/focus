@@ -1,11 +1,13 @@
 use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
+use futures::io::empty;
 use std::{
+    cell::Cell,
     collections::HashMap,
     convert::TryInto,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{exit, Command, Stdio},
 };
 use structopt::StructOpt;
 use url::Url;
@@ -46,18 +48,21 @@ impl Flags {
 
 struct Helper {
     flags: Flags,
+    branch: String,
 }
 
 impl Helper {
     pub(crate) fn new(flags: Flags) -> Result<Self> {
-        Ok(Self { flags })
+        let branch =
+            Self::current_branch(&flags.sparse_repo).context("determining the current branch")?;
+        Ok(Self { flags, branch })
     }
 
-    pub(crate) fn current_branch(&self) -> Result<String> {
+    pub(crate) fn current_branch(dir: &Path) -> Result<String> {
         let output = Command::new("git")
             .arg("branch")
             .arg("--show-current")
-            .current_dir(&self.flags.sparse_repo)
+            .current_dir(dir)
             .output()
             .context("running git-branch")?;
 
@@ -67,73 +72,169 @@ impl Helper {
             .to_owned())
     }
 
-    pub(crate) fn fetch_and_update_refs_in_dense_repo(&self) -> Result<()> {
-        let branch = self
-            .current_branch()
-            .context("getting the current branch")?;
-
-        let opt = Flags::from_args();
-        if !opt.url.scheme().eq_ignore_ascii_case("file") {
-            bail!("This helper only supports the 'file' scheme");
-        }
-        let dense_path = PathBuf::from(opt.url.path());
-        if !dense_path.is_dir() {
-            bail!(
-                "The specified path ({}) is not a directory",
-                dense_path.display()
-            );
-        }
-
+    pub(crate) fn fetch_from_upstream(&self) -> Result<()> {
         // Run a fetch in the remote repository
+        let dense_path = self.flags.remote_path()?;
         log::info!("Fetching in the dense repository");
         let dense_fetch_result = Command::new("git")
             .current_dir(&dense_path)
             .arg("fetch")
-            .arg(opt.remote)
-            .arg(&branch)
+            .arg(&self.flags.remote)
+            .arg(&self.branch)
+            .stdout(Stdio::null())
             .status()
             .context("running git-fetch in the dense repo")?;
         if !dense_fetch_result.success() {
             bail!("Fetching in the dense repo failed");
         }
 
-        // Switch to the current ref, discarding work
-        let dense_switch_result = Command::new("git")
-            .current_dir(&dense_path)
-            .arg("switch")
-            .arg(&branch)
-            .arg("--discard-changes")
+        // // Switch to the current ref, discarding work
+        // let dense_switch_result = Command::new("git")
+        //     .current_dir(&dense_path)
+        //     .arg("switch")
+        //     .arg(&branch)
+        //     .arg("--discard-changes")
+        //     .status()
+        //     .context("running git-switch")?;
+        // if !dense_switch_result.success() {
+        //     bail!("Switching in the dense repo failed");
+        // }
+
+        Ok(())
+    }
+
+    pub(crate) fn fetch_from_dense(&self) -> Result<()> {
+        let dense_path = self.flags.remote_path()?;
+        // let mut prefixed_branch = String::from("refs/remotes/origin/");
+        // prefixed_branch.push_str(&self.branch);
+        log::info!(
+            "Fetching in the sparse repository",
+            // prefixed_branch
+        );
+        // Redirect stdout
+        let sparse_fetch_result = Command::new("git")
+            .arg("fetch")
+            .arg("--no-tags")
+            .arg("dense")
+            .arg(&self.branch)
+            .stdout(Stdio::null())
             .status()
-            .context("running git-switch")?;
-        if !dense_switch_result.success() {
-            bail!("Switching in the dense repo failed");
+            .context("running git-fetch in the sparse repo")?;
+
+        if !sparse_fetch_result.success() {
+            bail!("Fetching in the sparse repo failed");
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn run_upload_pack(&self) -> Result<()> {
+        let remote_path = self.flags.remote_path()?;
+        log::info!("Fetching from the dense repository");
+        let status = Command::new("git")
+            .arg("upload-pack")
+            .arg(remote_path)
+            // .env("GIT_PROTOCOL", "version=1")
+            // .env("GIT_PREFIX", "")
+            .stdin(Stdio::inherit())
+            .status()
+            .context("running git-upload-pack")?;
+
+        if status.success() {
+            bail!("upload-pack failed");
         }
 
         Ok(())
     }
 
     pub(crate) fn run_event_loop(&self) -> Result<()> {
-        log::info!("Processing events");
-
         let buffered_stdin = BufReader::new(std::io::stdin());
-        let mut line_number: usize = 0;
-        for line in buffered_stdin.lines() {
-            line_number += 1;
-            let line = line.with_context(|| format!("reading stdin (line {})", line_number))?;
-            log::info!("stdin:{}: '{}'", line_number, &line);
-            self.handle_command(&line);
+        let mut lines = buffered_stdin.lines();
+
+        loop {
+            if let Some(line) = lines.next() {
+                let line = line.context("reading stdin")?;
+                log::info!("[primary] {}", line);
+                if line.is_empty() {
+                    log::info!("Client signalled end of event stream");
+                    break;
+                }
+
+                let mut tokens = line.split_ascii_whitespace();
+                let verb = unwrap_or_bail(tokens.next()).context("reading verb")?;
+                match verb {
+                    "capabilities" => self.describe_capabilities()?,
+
+                    "list" => self.list_refs()?,
+
+                    "option" => {
+                        let key = unwrap_or_bail(tokens.next()).context("reading option key")?;
+                        let value = unwrap_or_bail(tokens.next()).context("reading option value")?;
+                        log::info!("option: {}={}", &key, &value);
+                        println!("unsupported"); // Whatever ;-)
+                    }
+
+                    "fetch" => {
+                        // Accumulate fetch requests
+                        let mut wanted_oids = Vec::<String>::new();
+                        let oid = unwrap_or_bail(tokens.next()).context("reading oid")?;
+                        let _ref_name =
+                            unwrap_or_bail(tokens.next()).context("reading ref name")?;
+                        wanted_oids.push(oid.to_owned());
+
+                        let mut accumulating = true;
+                        while accumulating {
+                            let line = lines.next().unwrap();
+                            let line = line.context("reading fetch request lines")?;
+                            log::info!("[fetch request] '{}'", line);
+                            if !line.is_empty() {
+                                let mut tokens = line.split_ascii_whitespace();
+                                let cmd =
+                                    unwrap_or_bail(tokens.next()).context("reading command")?;
+                                if !cmd.eq_ignore_ascii_case("fetch") {
+                                    bail!("unexpected command {}", &cmd);
+                                }
+                                let oid = unwrap_or_bail(tokens.next()).context("reading oid")?;
+                                let _ref_name =
+                                    unwrap_or_bail(tokens.next()).context("reading ref name")?;
+                                wanted_oids.push(oid.to_owned());
+                            } else {
+                                log::info!("Got last fetch request");
+                                accumulating = false;
+                            }
+                        }
+
+                        // Fetch the requested objects
+                        // TODO: Fix this jank.
+                        for oid in wanted_oids {
+                            self.fetch_pack_from_dense(&oid)
+                                .with_context(|| format!("fetching a pack for {}", &oid))?;
+                        }
+                        exit(0);
+                    }
+
+                    "" => {
+                        log::info!("end of stream");
+                        exit(0);
+                    }
+
+                    _ => {
+                        bail!("unsupported command '{}'", verb);
+                    }
+                }
+            }
         }
 
         Ok(())
     }
 
     fn describe_capabilities(&self) -> Result<()> {
+        // println!("option");
         println!("fetch");
         println!("");
         Ok(())
     }
 
-    // TODO: Consider limiting refs we exhibit...
     fn remote_refs_to_objects(&self) -> Result<HashMap<String, String>> {
         let mut results = HashMap::<String, String>::new();
 
@@ -141,7 +242,7 @@ impl Helper {
             .current_dir(&self.flags.remote_path()?)
             .arg("for-each-ref")
             .arg("--format=%(objectname) %(refname)")
-            .arg("refs/heads/")
+            .arg(format!("refs/heads/{}", &self.branch))
             .stderr(Stdio::inherit())
             .output()
             .context("running git for-each-ref")?;
@@ -150,28 +251,27 @@ impl Helper {
             let line = line.context("reading output of for-each-ref")?;
             let mut tokens = line.split_ascii_whitespace();
 
-            let object_name = unwrap_or_bail(tokens.next()).context("expected object name token")?;
+            let object_name =
+                unwrap_or_bail(tokens.next()).context("expected object name token")?;
             let ref_name = unwrap_or_bail(tokens.next()).context("expected ref name token")?;
 
-            results.insert(
-                ref_name.to_owned(),
-                object_name.to_owned(),
-            );
+            results.insert(ref_name.to_owned(), object_name.to_owned());
         }
 
         Ok(results)
     }
 
     fn remote_symbolic_ref(&self, ref_name: &str) -> Result<String> {
-        let output = Command::new("git")
-            .current_dir(&self.flags.remote_path()?)
-            .arg("symbolic-ref")
-            .arg(&ref_name)
-            .stderr(Stdio::inherit())
-            .output()
-            .context("running git symbolic-ref")?;
+        // let output = Command::new("git")
+        //     .current_dir(&self.flags.remote_path()?)
+        //     .arg("rev-parse")
+        //     .arg(&ref_name)
+        //     .stderr(Stdio::inherit())
+        //     .output()
+        //     .context("running git symbolic-ref")?;
 
-        Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+        // Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+        Ok(format!("refs/heads/{}", &self.branch))
     }
 
     fn list_refs(&self) -> Result<()> {
@@ -192,44 +292,28 @@ impl Helper {
         Ok(())
     }
 
-    fn fetch(&self, oid: &str, ref_name: &str) -> Result<()> {
-        
-        todo!("implement me");
-    }
-
-    fn handle_command(&self, line: &String) -> Result<()> {
-        let mut tokens = line.split_ascii_whitespace();
-        if let Some(command) = tokens.next().take() {
-            match command {
-                "capabilities" => self.describe_capabilities()?,
-
-                "list" => self.list_refs()?,
-
-                "fetch" => {
-                    let oid = unwrap_or_bail(tokens.next()).context("reading oid token")?;
-                    let ref_name = unwrap_or_bail(tokens.next()).context("reading ref name token")?;
-                    self.fetch(oid, ref_name)?;
-                },
-
-                "" => {
-                    log::info!("Client terminated event stream normally");
-                    return Ok(());
-                }
-
-                _ => {
-                    bail!("unsupported command '{}'", command);
-                }
-            }
-
-        } else {
-            bail!("could not read command token");
+    fn fetch_pack_from_dense(&self, oid: &str) -> Result<()> {
+        log::info!("Running fetch {}", oid);
+        let status = Command::new("git")
+            .current_dir(&self.flags.sparse_repo)
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::null())
+            .arg("fetch-pack")
+            .arg("-v")
+            .arg("--check-self-contained-and-connected")
+            .arg(self.flags.url.to_string())
+            .arg(oid)
+            .status()
+            .context("running git fetch-pack")?;
+        if !status.success() {
+            bail!("Fetching from the dense repo failed");
         }
 
         Ok(())
     }
 }
 
-fn unwrap_or_bail<I>(option: Option<I>) -> Result<I> {
+pub fn unwrap_or_bail<I>(option: Option<I>) -> Result<I> {
     if option.is_none() {
         bail!("expected something")
     }
@@ -243,5 +327,15 @@ fn main() -> Result<()> {
     flags.validate().context("validating flags")?;
 
     let helper = Helper::new(flags)?;
-    helper.run_event_loop()
+
+    helper.fetch_from_upstream().context("fetching from upstream into dense")?;
+
+    // helper.fetch_from_dense().context("fetching from dense into sparse")?;
+    
+    // let refname = format!("refs/heads/{}", &helper.branch);
+    // helper.fetch_pack_from_dense(&refname).context("fetching pack from dense")?;
+
+    helper.run_event_loop().context("running the helper")?;
+
+    Ok(())
 }
