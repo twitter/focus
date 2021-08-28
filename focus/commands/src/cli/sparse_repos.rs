@@ -75,7 +75,7 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
 fn configure_sparse_repo_final(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
-    branch: &str,
+    _branch: &str,
     sandbox: &Sandbox,
 ) -> Result<()> {
     // TODO: Figure out the remote based on the branch fetch/push config rather than assuming 'origin'. Kinda pedantic, but correct.
@@ -87,7 +87,7 @@ fn configure_sparse_repo_final(
         .join("journals")
         .join("origin");
     let journal_state_lock_path = origin_journal_path.join("state.bin.lock");
-    let journal_state_lock =
+    let _journal_state_lock =
         LockFile::new(&journal_state_lock_path).context("acquiring a lock on journal state")?;
     let sparse_journal_state_lock_path = sparse_git_dir
         .join("objects")

@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
-use futures::io::empty;
+
 use std::{
     cell::Cell,
     collections::HashMap,
@@ -104,7 +104,7 @@ impl Helper {
     }
 
     pub(crate) fn fetch_from_dense(&self) -> Result<()> {
-        let dense_path = self.flags.remote_path()?;
+        let _dense_path = self.flags.remote_path()?;
         // let mut prefixed_branch = String::from("refs/remotes/origin/");
         // prefixed_branch.push_str(&self.branch);
         log::info!(
@@ -262,7 +262,7 @@ impl Helper {
         Ok(results)
     }
 
-    fn remote_symbolic_ref(&self, ref_name: &str) -> Result<String> {
+    fn remote_symbolic_ref(&self, _ref_name: &str) -> Result<String> {
         // let output = Command::new("git")
         //     .current_dir(&self.flags.remote_path()?)
         //     .arg("rev-parse")
