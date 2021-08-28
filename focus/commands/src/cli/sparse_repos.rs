@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Error, Result};
+use internals::util::lock_file::LockFile;
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -53,9 +54,18 @@ pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox)
     Ok(())
 }
 
-fn set_up_alternate(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
+fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
     let alternates_path = sparse_repo.join(".git").join("info").join("alternates");
+    let dense_pruned_odb = dense_repo.join(".git").join("pruned-odb").join("objects");
+    let sparse_pruned_odb = sparse_repo.join(".git").join("pruned-odb").join("objects");
+
+    std::fs::create_dir_all(&sparse_pruned_odb).context("creating sparse pruned-odb")?;
+
     let mut buf = Vec::from(dense_repo.as_os_str().as_bytes());
+    buf.push(b'\n');
+    buf.extend(dense_pruned_odb.as_os_str().as_bytes());
+    buf.push(b'\n');
+    buf.extend(sparse_pruned_odb.as_os_str().as_bytes());
     buf.push(b'\n');
     std::fs::write(alternates_path, buf)?;
 
@@ -69,65 +79,47 @@ fn configure_sparse_repo_final(
     sandbox: &Sandbox,
 ) -> Result<()> {
     // TODO: Figure out the remote based on the branch fetch/push config rather than assuming 'origin'. Kinda pedantic, but correct.
+    let dense_git_dir = dense_repo.join(".git");
+    let sparse_git_dir = sparse_repo.join(".git");
 
-    // Get the current push URL
-    let push_url = git_remote_get_url(dense_repo, "origin", sandbox)?;
-    let dense_url = git_remote_get_url(sparse_repo, "origin", sandbox)?;
+    let origin_journal_path = dense_git_dir
+        .join("objects")
+        .join("journals")
+        .join("origin");
+    let journal_state_lock_path = origin_journal_path.join("state.bin.lock");
+    let journal_state_lock =
+        LockFile::new(&journal_state_lock_path).context("acquiring a lock on journal state")?;
+    let sparse_journal_state_lock_path = sparse_git_dir
+        .join("objects")
+        .join("journals")
+        .join("origin")
+        .join("state.bin.lock");
 
-    // // Rename origin to dense
-    let (mut cmd, scmd) = git_command(sandbox)?;
-    scmd.ensure_success_or_log(
-        cmd.arg("remote")
-            .arg("add")
-            .arg("dense")
-            .arg(dense_url)
-            .current_dir(&sparse_repo),
-        SandboxCommandOutput::Stderr,
-        "adding dense remote",
-    )?;
-
-    // Pull from dense repo using the `git-remote-focus` helper
-    let dense_repo_str = dense_repo.as_os_str().to_str();
-    if dense_repo_str.is_none() {
-        bail!("Dense repo path contains non-UTF-8 characters");
+    let paths_to_copy = vec![
+        "config",
+        "hooks",
+        "hooks_multi",
+        "repo.d",
+        "objects/journals",
+    ];
+    for name in paths_to_copy {
+        let from = dense_git_dir.join(name);
+        if !from.exists() {
+            log::warn!("Dense path {} does not exist!", &from.display());
+            continue;
+        }
+        let to = sparse_git_dir.join(name);
+        let (mut cmd, scmd) = SandboxCommand::new("cp", sandbox)?;
+        scmd.ensure_success_or_log(
+            cmd.arg("-v").arg("-r").arg(&from).arg(&to),
+            SandboxCommandOutput::Stderr,
+            &format!("Copying {} -> {}", &from.display(), &to.display()),
+        )?;
     }
 
-    let fetch_url = format!("focus::file://{}", dense_repo_str.unwrap());
-    let (mut cmd, scmd) = git_command(sandbox)?;
-    scmd.ensure_success_or_log(
-        cmd.arg("remote")
-            .arg("set-url")
-            .arg("origin")
-            .arg(&fetch_url)
-            .current_dir(&sparse_repo),
-        SandboxCommandOutput::Stderr,
-        &format!("updating remote to fetch from {}", &fetch_url),
-    )?;
-
-    // Push directly to dense origin
-    let (mut cmd, scmd) = git_command(sandbox)?;
-    scmd.ensure_success_or_log(
-        cmd.arg("remote")
-            .arg("set-url")
-            .arg("--push")
-            .arg("origin")
-            .arg(&push_url)
-            .current_dir(&sparse_repo),
-        SandboxCommandOutput::Stderr,
-        &format!("updating remote to push to {}", &push_url),
-    )?;
-
-    // // Set branches since rename moved them
-    // let (mut cmd, scmd) = git_command(sandbox)?;
-    // scmd.ensure_success_or_log(
-    //     cmd.arg("remote")
-    //         .arg("set-branches")
-    //         .arg("origin")
-    //         .arg(&branch)
-    //         .current_dir(&sparse_repo),
-    //     SandboxCommandOutput::Stderr,
-    //     &format!("setting branches for origin"),
-    // )?;
+    if sparse_journal_state_lock_path.exists() {
+        std::fs::remove_file(sparse_journal_state_lock_path)?;
+    }
 
     Ok(())
 }
@@ -416,7 +408,7 @@ pub fn create_or_update_sparse_clone(
         .expect("clone thread exited abnormally");
 
     // N.B. We set up an alternate because it allows for journaled fetches
-    set_up_alternate(&sparse_repo, &dense_repo).context("setting up an alternate")?;
+    set_up_alternates(&sparse_repo, &dense_repo).context("setting up an alternate")?;
 
     if !filter_sparse {
         // If we haven't awaited the profile generation thread, we we must now.
@@ -490,7 +482,6 @@ pub fn set_sparse_checkout(
             .join(".git")
             .join("info")
             .join("sparse-checkout");
-        // std::fs::copy(&sparse_profile, &sparse_profile_destination).context("copying the sparse-checkout file into place")?;
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
         log::info!("Setting sparse from {}", &sparse_profile.display());
         let sparse_profile_file = File::open(&sparse_profile).context("opening sparse profile")?;

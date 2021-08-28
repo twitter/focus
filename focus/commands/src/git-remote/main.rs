@@ -169,7 +169,8 @@ impl Helper {
 
                     "option" => {
                         let key = unwrap_or_bail(tokens.next()).context("reading option key")?;
-                        let value = unwrap_or_bail(tokens.next()).context("reading option value")?;
+                        let value =
+                            unwrap_or_bail(tokens.next()).context("reading option value")?;
                         log::info!("option: {}={}", &key, &value);
                         println!("unsupported"); // Whatever ;-)
                     }
@@ -328,10 +329,12 @@ fn main() -> Result<()> {
 
     let helper = Helper::new(flags)?;
 
-    helper.fetch_from_upstream().context("fetching from upstream into dense")?;
+    helper
+        .fetch_from_upstream()
+        .context("fetching from upstream into dense")?;
 
     // helper.fetch_from_dense().context("fetching from dense into sparse")?;
-    
+
     // let refname = format!("refs/heads/{}", &helper.branch);
     // helper.fetch_pack_from_dense(&refname).context("fetching pack from dense")?;
 

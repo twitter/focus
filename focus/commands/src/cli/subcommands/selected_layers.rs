@@ -27,6 +27,5 @@ pub fn run(repo: &Path) -> Result<()> {
         }
     }
 
-
     Ok(())
 }
