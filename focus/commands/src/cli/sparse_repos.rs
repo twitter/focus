@@ -206,12 +206,12 @@ pub enum Spec {
 }
 
 pub fn create_sparse_clone(
-    name: &String,
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
     spec: &Spec,
     filter_sparse: bool,
+    generate_project_view: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
     let mut adhoc_layer_set: Option<LayerSet> = None;
@@ -256,12 +256,12 @@ pub fn create_sparse_clone(
     }
 
     create_or_update_sparse_clone(
-        &name,
         &dense_repo,
         &sparse_repo,
         &branch,
         &coordinates,
         filter_sparse,
+        generate_project_view,
         true,
         sandbox,
     )?;
@@ -287,12 +287,12 @@ pub fn create_sparse_clone(
 }
 
 pub fn create_or_update_sparse_clone(
-    name: &String,
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
     coordinates: &Vec<String>,
     filter_sparse: bool,
+    generate_project_view: bool,
     create: bool,
     sandbox: Arc<Sandbox>,
 ) -> Result<()> {
@@ -305,6 +305,13 @@ pub fn create_or_update_sparse_clone(
     } else if !sparse_repo.is_dir() {
         bail!("Sparse repo does not exist and creation is not allowed")
     }
+
+    let name: String = 
+    if let Some(name) = sparse_repo.file_name() {
+        name.to_string_lossy().into()
+    } else {
+        bail!("unable to determine file stem for sparse repo directory");
+    };
 
     let sparse_profile_output = sandbox.path().join("sparse-checkout");
     let project_view_output = {
@@ -351,6 +358,11 @@ pub fn create_or_update_sparse_clone(
         thread::Builder::new()
             .name("ProjectViewGeneration".to_owned())
             .spawn(move || {
+                if !generate_project_view {
+                    log::info!("Skipping generation of project view");
+                    return;
+                }
+
                 log::info!("Generating project view");
                 write_project_view_file(
                     &cloned_dense_repo,

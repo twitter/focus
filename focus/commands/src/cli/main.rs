@@ -33,9 +33,6 @@ impl FromStr for CommaSeparatedStrings {
 #[derive(StructOpt, Debug)]
 enum Subcommand {
     Clone {
-        #[structopt(long)]
-        name: String,
-
         #[structopt(long, parse(from_os_str))]
         dense_repo: PathBuf,
 
@@ -53,6 +50,9 @@ enum Subcommand {
 
         #[structopt(long)]
         filter_sparse: bool,
+
+        #[structopt(long)]
+        generate_project_view: bool,
     },
 
     Sync {
@@ -128,13 +128,13 @@ fn main() -> Result<()> {
 
     match opt.cmd {
         Subcommand::Clone {
-            name,
             dense_repo,
             sparse_repo,
             branch,
             layers,
             coordinates,
             filter_sparse,
+            generate_project_view
         } => {
             let layers = filter_empty_strings(layers.0);
             let coordinates = filter_empty_strings(coordinates.0);
@@ -152,12 +152,12 @@ fn main() -> Result<()> {
             };
 
             subcommands::clone::run(
-                &name,
                 &dense_repo,
                 &sparse_repo,
                 &branch,
                 &spec,
                 filter_sparse,
+                generate_project_view,
                 sandbox,
             )
         }
