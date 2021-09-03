@@ -20,6 +20,7 @@ use crate::model::{self, Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::sandbox::Sandbox;
 use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
+use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 
 // TODO: Revisit this...
 const SPARSE_PROFILE_PRELUDE: &str =
@@ -306,8 +307,7 @@ pub fn create_or_update_sparse_clone(
         bail!("Sparse repo does not exist and creation is not allowed")
     }
 
-    let name: String = 
-    if let Some(name) = sparse_repo.file_name() {
+    let name: String = if let Some(name) = sparse_repo.file_name() {
         name.to_string_lossy().into()
     } else {
         bail!("unable to determine file stem for sparse repo directory");
@@ -321,6 +321,20 @@ pub fn create_or_update_sparse_clone(
 
     configure_dense_repo(&dense_repo, sandbox.as_ref())
         .context("setting configuration options in the dense repo")?;
+
+    // Make sure that the dense repo is in a clean state
+    {
+        let cloned_sandbox = sandbox.clone();
+        let dense_sync =
+            WorkingTreeSynchronizer::new(&dense_repo, cloned_sandbox.as_ref())
+                .context("creating working tree synchronizer for dense repository")?;
+        if !dense_sync
+            .is_working_tree_clean()
+            .context("determining dense repo working tree state")?
+        {
+            bail!("Dense repo has uncommitted changes");
+        }
+    }
 
     // Being on the right branch in the dense repository is a prerequisite for any work.
     switch_to_detached_branch_discarding_changes(&dense_repo, &branch, sandbox.as_ref())?;
@@ -462,8 +476,10 @@ pub fn create_or_update_sparse_clone(
             .file_name()
             .context("getting the file name failed")?;
         let project_view_destination = &cloned_sparse_repo.join(&project_view_file_name);
-        std::fs::rename(project_view_output, project_view_destination)
+        if project_view_output.is_file() {
+            std::fs::rename(project_view_output, project_view_destination)
             .context("copying in the project view")?;
+        }
     }
 
     Ok(())
