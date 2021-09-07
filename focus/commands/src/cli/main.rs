@@ -1,4 +1,5 @@
 mod detail;
+mod manager;
 mod model;
 mod sandbox;
 mod sandbox_command;
