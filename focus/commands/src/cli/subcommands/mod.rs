@@ -1,5 +1,6 @@
 pub mod available_layers;
 pub mod clone;
+pub mod invalidate;
 pub mod manager;
 pub mod pop_layer;
 pub mod push_layer;

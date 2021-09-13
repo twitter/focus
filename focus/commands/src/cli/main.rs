@@ -1,6 +1,7 @@
 mod detail;
 mod manager;
 mod model;
+mod tracker;
 mod sandbox;
 mod sandbox_command;
 mod sparse_repos;
@@ -8,6 +9,7 @@ mod subcommands;
 mod temporary_working_directory;
 mod testing;
 mod working_tree_synchronizer;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -57,6 +59,14 @@ enum Subcommand {
     },
 
     Sync {
+        #[structopt(long, parse(from_os_str), default_value = ".dense")]
+        dense_repo: PathBuf,
+
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
+
+    Invalidate {
         #[structopt(long, parse(from_os_str), default_value = ".dense")]
         dense_repo: PathBuf,
 
@@ -135,7 +145,7 @@ fn main() -> Result<()> {
             layers,
             coordinates,
             filter_sparse,
-            generate_project_view
+            generate_project_view,
         } => {
             let layers = filter_empty_strings(layers.0);
             let coordinates = filter_empty_strings(coordinates.0);
@@ -162,6 +172,11 @@ fn main() -> Result<()> {
                 sandbox,
             )
         }
+
+        Subcommand::Invalidate {
+            dense_repo,
+            sparse_repo,
+        } => subcommands::invalidate::run(&sandbox, &dense_repo, &sparse_repo),
 
         Subcommand::Sync {
             dense_repo,

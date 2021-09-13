@@ -325,9 +325,8 @@ pub fn create_or_update_sparse_clone(
     // Make sure that the dense repo is in a clean state
     {
         let cloned_sandbox = sandbox.clone();
-        let dense_sync =
-            WorkingTreeSynchronizer::new(&dense_repo, cloned_sandbox.as_ref())
-                .context("creating working tree synchronizer for dense repository")?;
+        let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, cloned_sandbox.as_ref())
+            .context("creating working tree synchronizer for dense repository")?;
         if !dense_sync
             .is_working_tree_clean()
             .context("determining dense repo working tree state")?
@@ -478,7 +477,7 @@ pub fn create_or_update_sparse_clone(
         let project_view_destination = &cloned_sparse_repo.join(&project_view_file_name);
         if project_view_output.is_file() {
             std::fs::rename(project_view_output, project_view_destination)
-            .context("copying in the project view")?;
+                .context("copying in the project view")?;
         }
     }
 
