@@ -1,15 +1,15 @@
 mod detail;
+mod git_helper;
 mod manager;
 mod model;
-mod tracker;
 mod sandbox;
 mod sandbox_command;
 mod sparse_repos;
 mod subcommands;
 mod temporary_working_directory;
 mod testing;
+mod tracker;
 mod working_tree_synchronizer;
-mod git_helper;
 #[macro_use]
 extern crate lazy_static;
 
@@ -17,6 +17,7 @@ use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
 use sandbox::Sandbox;
+use tracker::Tracker;
 
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 use structopt::StructOpt;
@@ -105,6 +106,8 @@ enum Subcommand {
 
         names: Vec<String>,
     },
+
+    ListRepos {},
 }
 
 #[derive(StructOpt, Debug)]
@@ -130,12 +133,22 @@ fn filter_empty_strings(string_list: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+fn ensure_directories_exist() -> Result<()> {
+    Tracker::default()
+        .ensure_directories_exist()
+        .context("creating directories for the tracker")?;
+    
+    Ok(())
+}
+
 fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    ensure_directories_exist().context("ensuring directories exist")?;
 
     let opt = ParachuteOpts::from_args();
 
     let sandbox = Arc::new(Sandbox::new(opt.preserve_sandbox).context("Creating a sandbox")?);
+
 
     match opt.cmd {
         Subcommand::Clone {
@@ -192,5 +205,7 @@ fn main() -> Result<()> {
         Subcommand::PopLayer { repo, count } => subcommands::pop_layer::run(&repo, count),
 
         Subcommand::RemoveLayer { repo, names } => subcommands::remove_layer::run(&repo, names),
+
+        Subcommand::ListRepos {} => subcommands::list_repos::run(),
     }
 }

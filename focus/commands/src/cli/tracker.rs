@@ -1,6 +1,7 @@
 use std::{
     borrow::Borrow,
     collections::HashMap,
+    fmt::Display,
     fs::canonicalize,
     hash::Hash,
     os::unix::prelude::OsStrExt,
@@ -71,6 +72,24 @@ impl TrackedRepo {
         Self::read_uuid(repo_path, sandbox)
             .or_else(|_e| Self::write_generated_uuid(repo_path, sandbox))
     }
+
+    pub fn identifier(&self) -> &Uuid {
+        self.identifier.borrow()
+    }
+
+    pub fn location(&self) -> &PathBuf {
+        self.location.borrow()
+    }
+
+    pub fn link_path(&self) -> &PathBuf {
+        self.link_path.borrow()
+    }
+}
+
+impl Display for TrackedRepo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.location().display(), self.identifier())
+    }
 }
 
 pub struct Snapshot {
@@ -95,6 +114,16 @@ impl Snapshot {
             index_by_identifier,
         }
     }
+
+    pub fn repos(&self) -> &Vec<TrackedRepo> {
+        self.repos.borrow()
+    }
+
+    pub fn find_repo_by_id(&self, id: &Vec<u8>) -> Option<&TrackedRepo> {
+        self.index_by_identifier
+            .get(id)
+            .and_then(|&index| self.repos.get(index))
+    }
 }
 
 pub struct Tracker {
@@ -109,6 +138,12 @@ impl Tracker {
         Ok(Self {
             directory: directory.to_owned(),
         })
+    }
+
+    pub fn ensure_directories_exist(&self) -> Result<()> {
+        std::fs::create_dir_all(self.repos_by_uuid_dir()).context("create by-uuid repo dir")?;
+        log::info!("Repo dir '{}'", self.repos_by_uuid_dir().display());
+        Ok(())
     }
 
     pub fn ensure_registered(&self, repo_directory: &Path, sandbox: &Sandbox) -> Result<()> {
@@ -159,7 +194,7 @@ impl Tracker {
                                 }
 
                                 Err(e) => {
-                                    bail!("unable to canonicalize path {}", entry.path().display());
+                                    bail!("unable to canonicalize path {}: {}", entry.path().display(), e);
                                 }
                             }
                         } else {
