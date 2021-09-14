@@ -9,7 +9,7 @@ mod subcommands;
 mod temporary_working_directory;
 mod testing;
 mod working_tree_synchronizer;
-
+mod git_helper;
 #[macro_use]
 extern crate lazy_static;
 

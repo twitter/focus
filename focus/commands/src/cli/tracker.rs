@@ -1,12 +1,22 @@
 use std::{
+    borrow::Borrow,
     collections::HashMap,
+    fs::canonicalize,
     hash::Hash,
+    os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
-use anyhow::{Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use serde_json::map::Iter;
 use uuid::Uuid;
+
+use crate::{
+    git_helper,
+    sandbox::{self, Sandbox},
+    sandbox_command::SandboxCommand,
+};
 
 fn focus_config_dir() -> PathBuf {
     dirs::config_dir()
@@ -14,13 +24,13 @@ fn focus_config_dir() -> PathBuf {
         .join("focus")
 }
 
-pub struct RegisteredRepo {
+pub struct TrackedRepo {
     identifier: Uuid,
     location: PathBuf,
     link_path: PathBuf,
 }
 
-impl RegisteredRepo {
+impl TrackedRepo {
     pub fn new(identifier: Uuid, location: &Path, link_path: &Path) -> Result<Self> {
         Ok(Self {
             identifier,
@@ -28,15 +38,48 @@ impl RegisteredRepo {
             link_path: link_path.to_owned(),
         })
     }
+
+    fn read_uuid(repo_path: &Path, sandbox: &Sandbox) -> Result<Uuid> {
+        let uuid = git_helper::read_config(repo_path, "twitter.focus.uuid", sandbox)?;
+        let uuid = Uuid::from_str(uuid.as_str()).context("parsing uuid")?;
+        log::info!(
+            "Read existing UUID {} for repo at path {}",
+            uuid.borrow(),
+            repo_path.display()
+        );
+        Ok(uuid)
+    }
+
+    fn write_generated_uuid(repo_path: &Path, sandbox: &Sandbox) -> Result<Uuid> {
+        let uuid = Uuid::new_v4();
+        log::info!(
+            "Assigning new UUID {} for repo at path {}",
+            uuid.borrow(),
+            repo_path.display()
+        );
+        git_helper::write_config(
+            repo_path,
+            "twitter.focus.uuid",
+            uuid.to_string().as_str(),
+            sandbox,
+        )
+        .context("writing generated uuid")?;
+        Ok(uuid)
+    }
+
+    pub fn get_or_generate_uuid(repo_path: &Path, sandbox: &Sandbox) -> Result<Uuid> {
+        Self::read_uuid(repo_path, sandbox)
+            .or_else(|_e| Self::write_generated_uuid(repo_path, sandbox))
+    }
 }
 
 pub struct Snapshot {
-    repos: Vec<RegisteredRepo>,
+    repos: Vec<TrackedRepo>,
     index_by_identifier: HashMap<Vec<u8>, usize>,
 }
 
 impl Snapshot {
-    pub fn new(repos: Vec<RegisteredRepo>) -> Self {
+    pub fn new(repos: Vec<TrackedRepo>) -> Self {
         let index_by_identifier = repos.iter().enumerate().fold(
             HashMap::<Vec<u8>, usize>::new(),
             |mut index_by_identifier, (index, repo)| {
@@ -54,30 +97,6 @@ impl Snapshot {
     }
 }
 
-// struct IndexedModelRepository<Key, Item> {
-//     items: Vec<Item>,
-//     index: HashMap<Key, usize>,
-// }
-
-// impl<Key, Item> IndexedModelRepository<Key, Item> {
-//     pub fn from_items<I, Input>(items: I) -> Self
-//     where
-//         Key: Eq + Hash,
-//         I: Iterator<Item = Input>,
-//     {
-//         let items = Vec::<Item>::new();
-//         let index = HashMap::<Key, usize>::new();
-//         for i in items {
-//             // let (key, item) = i;
-//             // let index = items.len();
-//             // items.push(i);
-//             // index.insert(k, items.len());
-//         }
-
-//         Self { items, index }
-//     }
-// }
-
 pub struct Tracker {
     directory: PathBuf,
 }
@@ -92,25 +111,73 @@ impl Tracker {
         })
     }
 
+    pub fn ensure_registered(&self, repo_directory: &Path, sandbox: &Sandbox) -> Result<()> {
+        let uuid = TrackedRepo::get_or_generate_uuid(repo_directory, sandbox)?;
+        let link_path = self.repos_by_uuid_dir().join(uuid.to_string());
+        std::os::unix::fs::symlink(repo_directory, link_path.as_path()).with_context(|| {
+            format!(
+                "creating symlink from {} to {}",
+                link_path.display(),
+                repo_directory.display()
+            )
+        })?;
+        Ok(())
+    }
+
+    // Scan the directory containing repos labeled by UUID.
     pub fn scan(&self) -> Result<Snapshot> {
         let reader = self
             .repos_by_uuid_dir()
             .read_dir()
             .with_context(|| format!("Failed reading directory {}", self.directory.display()))?;
+        let mut repos = Vec::<TrackedRepo>::new();
 
-        // for entry in reader {
-        //     match entry {
-        //         Ok(entry) => {
+        for entry in reader {
+            match entry {
+                Ok(entry) => {
+                    if let Ok(file_type) = entry.file_type() {
+                        if file_type.is_symlink() {
+                            match canonicalize(entry.path()) {
+                                Ok(canonical_path) => {
+                                    let file_name = entry.file_name();
+                                    let utf_file_name = file_name.to_str();
+                                    if utf_file_name.is_none() {
+                                        bail!(
+                                            "unable to interpret path {} as utf8",
+                                            entry.path().display()
+                                        );
+                                    }
+                                    let uuid = Uuid::parse_str(utf_file_name.unwrap())
+                                        .context("parsing file name as a uuid")?;
+                                    let repo = TrackedRepo::new(
+                                        uuid,
+                                        canonical_path.as_path(),
+                                        entry.path().borrow(),
+                                    )
+                                    .context("instantiating tracked repo")?;
+                                    repos.push(repo);
+                                }
 
-        //         }, 
-        //         Err(e) => {
-        //             return Err(Error::new(e).with_context(|| format!("Failed reading directory {}", self.directory.display()))
-        //         },
-        //     }
-        // }
+                                Err(e) => {
+                                    bail!("unable to canonicalize path {}", entry.path().display());
+                                }
+                            }
+                        } else {
+                            log::info!("ignoring {} (not a symlink)", entry.path().display());
+                        }
+                        println!("{:?}: {:?}", entry.path(), file_type);
+                    } else {
+                        bail!("unable to determine file type for {:?}", entry.path());
+                    }
+                }
 
-        // Ok()
-        todo!("implement");
+                Err(e) => {
+                    bail!("failed reading directory entry: {}", e);
+                }
+            }
+        }
+
+        Ok(Snapshot::new(repos))
     }
 
     fn repos_dir(&self) -> PathBuf {

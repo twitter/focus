@@ -16,36 +16,20 @@ use std::{
     sync::{Arc, Barrier},
 };
 
+use crate::git_helper::{self, git_binary, git_command};
 use crate::model::{self, Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::sandbox::Sandbox;
 use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
+use crate::tracker::Tracker;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 
 // TODO: Revisit this...
 const SPARSE_PROFILE_PRELUDE: &str =
     "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n/focus/\n";
 
-fn git_binary() -> OsString {
-    OsString::from("git")
-}
-
-fn git_command(sandbox: &Sandbox) -> Result<(Command, SandboxCommand)> {
-    SandboxCommand::new(git_binary(), sandbox)
-}
-
-fn git_config<P: AsRef<Path>>(repo_path: P, key: &str, val: &str, sandbox: &Sandbox) -> Result<()> {
-    let (mut cmd, scmd) = git_command(&sandbox)?;
-    scmd.ensure_success_or_log(
-        cmd.current_dir(repo_path).arg("config").arg(key).arg(val),
-        SandboxCommandOutput::Stderr,
-        "git config",
-    )
-    .map(|_| ())
-}
-
 pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
-    git_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
+    git_helper::write_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
 }
 
 pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
@@ -480,6 +464,10 @@ pub fn create_or_update_sparse_clone(
                 .context("copying in the project view")?;
         }
     }
+
+    Tracker::default()
+        .ensure_registered(&sparse_repo, sandbox.as_ref())
+        .context("adding sparse repo to the list of tracked repos")?;
 
     Ok(())
 }
