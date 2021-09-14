@@ -57,6 +57,13 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
     Ok(())
 }
 
+// Set git config key twitter.focus.sync_point to HEAD
+fn configure_sparse_sync_point(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+    let sync = WorkingTreeSynchronizer::new(sparse_repo.as_path(), sandbox)?;
+    let head_str = String::from_utf8(sync.read_head()?)?;
+    git_helper::write_config(sparse_repo, "twitter.focus.sync_point", head_str.as_str(), sandbox)
+}
+
 fn configure_sparse_repo_final(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
@@ -106,6 +113,8 @@ fn configure_sparse_repo_final(
         std::fs::remove_file(sparse_journal_state_lock_path)?;
     }
 
+    configure_sparse_sync_point(sparse_repo, sandbox).context("configuring the sync point")?;
+
     Ok(())
 }
 
@@ -115,7 +124,7 @@ fn create_dense_link(dense_repo: &PathBuf, sparse_repo: &PathBuf) -> Result<()> 
 }
 // Write an object to a repo returning its identity.
 fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<String> {
-    run_git_command_consuming_stdout(
+    git_helper::run_git_command_consuming_stdout(
         repo,
         vec![
             OsString::from("hash-object"),
@@ -127,7 +136,7 @@ fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<
 }
 
 fn git_remote_get_url(repo: &PathBuf, name: &str, sandbox: &Sandbox) -> Result<String> {
-    run_git_command_consuming_stdout(
+    git_helper::run_git_command_consuming_stdout(
         repo,
         vec![
             OsString::from("remote"),
@@ -138,27 +147,6 @@ fn git_remote_get_url(repo: &PathBuf, name: &str, sandbox: &Sandbox) -> Result<S
     )
 }
 
-fn run_git_command_consuming_stdout<I, S>(
-    repo: &PathBuf,
-    args: I,
-    sandbox: &Sandbox,
-) -> Result<String>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    let (mut cmd, scmd) = git_command(&sandbox)?;
-    if let Err(e) = cmd.current_dir(repo).args(args).status() {
-        scmd.log(
-            crate::sandbox_command::SandboxCommandOutput::Stderr,
-            &"failed 'git hash-object' command",
-        )?;
-        bail!("git failed: {}", e);
-    }
-    let mut stdout_contents = String::new();
-    scmd.read_to_string(SandboxCommandOutput::Stdout, &mut stdout_contents)?;
-    Ok(stdout_contents.trim().to_owned())
-}
 
 pub fn set_containing_layers(repo: &PathBuf, layer_names: &Vec<String>) -> Result<LayerSet> {
     let layer_sets = LayerSets::new(&repo);

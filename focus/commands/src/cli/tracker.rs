@@ -200,7 +200,6 @@ impl Tracker {
                         } else {
                             log::info!("ignoring {} (not a symlink)", entry.path().display());
                         }
-                        println!("{:?}: {:?}", entry.path(), file_type);
                     } else {
                         bail!("unable to determine file type for {:?}", entry.path());
                     }

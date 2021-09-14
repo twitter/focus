@@ -10,6 +10,7 @@ mod temporary_working_directory;
 mod testing;
 mod tracker;
 mod working_tree_synchronizer;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -108,6 +109,11 @@ enum Subcommand {
     },
 
     ListRepos {},
+
+    SummarizeState {
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -207,5 +213,7 @@ fn main() -> Result<()> {
         Subcommand::RemoveLayer { repo, names } => subcommands::remove_layer::run(&repo, names),
 
         Subcommand::ListRepos {} => subcommands::list_repos::run(),
+
+        Subcommand::SummarizeState { repo } => subcommands::summarize_state::run(&sandbox, &repo),
     }
 }
