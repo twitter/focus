@@ -67,7 +67,7 @@ fn configure_sparse_sync_point(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Resu
 }
 
 // Set git config key twitter.focus.sync-point to HEAD
-fn setup_bazel_preflight_script(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
     let sparse_focus_dir = sparse_repo.join(".focus");
     let preflight_script_path = sparse_focus_dir.join("preflight");
 
