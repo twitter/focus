@@ -26,7 +26,7 @@ use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 
 // TODO: Revisit this...
 const SPARSE_PROFILE_PRELUDE: &str =
-    "/tools/\n/pants-plugins/\n/pants-support/\n/3rdparty/\n/focus/\n";
+    "/tools\n/pants-plugins/\n/pants-support/\n/3rdparty/\n/focus/\n";
 
 pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
     git_helper::write_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
@@ -37,7 +37,11 @@ pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox)
 }
 
 fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
-    let alternates_path = sparse_repo.join(".git").join("objects").join("info").join("alternates");
+    let alternates_path = sparse_repo
+        .join(".git")
+        .join("objects")
+        .join("info")
+        .join("alternates");
     let dense_odb = dense_repo.join(".git").join("objects");
     let dense_pruned_odb = dense_repo.join(".git").join("pruned-odb").join("objects");
     let sparse_pruned_odb = sparse_repo.join(".git").join("pruned-odb").join("objects");
@@ -55,19 +59,18 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
     Ok(())
 }
 
-// Set git config key twitter.focus.sync-point to HEAD
+// Set git config key focus.sync-point to HEAD
 pub fn configure_sparse_sync_point(sparse_repo: &Path, sandbox: &Sandbox) -> Result<()> {
-    let sync = WorkingTreeSynchronizer::new(sparse_repo, sandbox)?;
-    let head_str = String::from_utf8(sync.read_head()?)?;
-    git_helper::write_config(
-        sparse_repo,
-        "twitter.focus.sync-point",
-        head_str.as_str(),
+    let head_str = git_helper::run_git_command_consuming_stdout(
+        &sparse_repo,
+        vec!["rev-parse", "HEAD"],
         sandbox,
-    )
+    )?;
+
+    git_helper::write_config(sparse_repo, "focus.sync-point", head_str.as_str(), sandbox)
 }
 
-// Set git config key twitter.focus.sync-point to HEAD
+// Set git config key focus.sync-point to HEAD
 fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
     use std::io::Write;
 
@@ -129,9 +132,10 @@ fn configure_sparse_repo_final(
             continue;
         }
         let to = sparse_git_dir.join(name);
+        log::debug!("Copying {} -> {}", &from.display(), &to.display());
         let (mut cmd, scmd) = SandboxCommand::new("cp", sandbox)?;
         scmd.ensure_success_or_log(
-            cmd.arg("-v").arg("-r").arg(&from).arg(&to),
+            cmd.arg("-r").arg(&from).arg(&to),
             SandboxCommandOutput::Stderr,
             &format!("Copying {} -> {}", &from.display(), &to.display()),
         )?;
@@ -450,11 +454,7 @@ pub fn create_or_update_sparse_clone(
         let cloned_dense_repo = dense_repo.clone();
         let cloned_branch = branch.clone();
 
-        log::info!("Configuring visible paths");
-        set_sparse_checkout(sparse_repo, &sparse_profile_output, &cloned_sandbox)
-            .context("setting up sparse checkout options")?;
-
-        log::info!("Finalizing configuration");
+        log::info!("Copying configuration");
         if create {
             configure_sparse_repo_final(
                 &cloned_dense_repo,
@@ -466,6 +466,10 @@ pub fn create_or_update_sparse_clone(
             create_dense_link(&cloned_dense_repo, &cloned_sparse_repo)
                 .context("failed to create a link to the dense repo in the sparse repo")?;
         }
+
+        log::info!("Configuring visible paths");
+        set_sparse_checkout(sparse_repo, &sparse_profile_output, &cloned_sandbox)
+            .context("setting up sparse checkout options")?;
 
         log::info!("Checking out the working copy");
         checkout_working_copy(&cloned_sparse_repo, &cloned_sandbox)
@@ -489,11 +493,18 @@ pub fn create_or_update_sparse_clone(
     Ok(())
 }
 
+pub fn set_sparse_config(sparse_repo: &Path, sandbox: &Sandbox) -> Result<()> {
+    git_helper::write_config(&sparse_repo, "core.sparseCheckout", "true", &sandbox)?;
+    git_helper::write_config(&sparse_repo, "core.sparseCheckoutCone", "true", &sandbox)?;
+    Ok(())
+}
+
 pub fn set_sparse_checkout(
     sparse_repo: &PathBuf,
     sparse_profile: &PathBuf,
     sandbox: &Sandbox,
 ) -> Result<()> {
+    set_sparse_config(&sparse_repo, &sandbox)?;
     {
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
         let (mut cmd, scmd) = git_command(&sandbox)?;

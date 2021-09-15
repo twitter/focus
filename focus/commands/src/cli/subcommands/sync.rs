@@ -17,13 +17,12 @@ pub fn perform<F, J>(description: &str, f: F) -> Result<J>
 where
     F: FnOnce() -> Result<J>,
 {
-    log::debug!("Task started: {}", description);
+    log::info!("{}", description);
     let result = f();
     if let Err(e) = result {
-        log::error!("Task failed: {}: {}", description, e);
+        log::error!("Failed {}: {}", description, e);
         bail!(e);
     }
-    log::info!("Task succeeded: {}", description);
 
     result
 }
@@ -122,40 +121,14 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         path
     };
 
-    perform("Converting the new sparse profile to cone patterns", || {
-        use std::io::BufRead;
-        use std::io::Write;
-
-        // Merge everything together in the way that Git likes it for cone patterns because we can't use add/init.
-        {
-            let mut merged_output_file =
-                File::create(&merged_output_path).context("opening merged output file")?;
-            writeln!(merged_output_file, "/*")?;
-            writeln!(merged_output_file, "!/*/")?;
-            let sparse_profile_output_file =
-                BufReader::new(File::open(sparse_profile_output_path)?);
-            for line in sparse_profile_output_file.lines() {
-                if let Ok(line) = line {
-                    let trimmed = line.trim();
-                    if trimmed.eq("") || trimmed.eq("/") || trimmed.eq("//") {
-                        continue;
-                    }
-
-                    writeln!(merged_output_file, "{}*", &line)?;
-                    writeln!(merged_output_file, "!{}", &line)?;
-                }
-            }
-        }
-
-        Ok(())
-    })?;
-
     if let Err(_e) = perform("Applying the sparse profile", || {
-        let merged_output_file =
-            File::open(&merged_output_path).context("opening new sparse profile")?;
+        sparse_repos::set_sparse_config(&repo, &sandbox)?;
+
+        let sparse_profile_output_file =
+            File::open(&sparse_profile_output_path).context("opening new sparse profile")?;
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
             git_helper::git_binary(),
-            Some(Stdio::from(merged_output_file)),
+            Some(Stdio::from(sparse_profile_output_file)),
             None,
             None,
             &sandbox,
@@ -166,7 +139,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
                 .arg("set")
                 .arg("--stdin"),
             SandboxCommandOutput::Stderr,
-            "sparse-checkout add",
+            "sparse-checkout set",
         )
         .map(|_| ())
         .context("setting sparse checkout from new profile")
@@ -190,7 +163,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
                     .arg("--cone")
                     .arg("--stdin"),
                 SandboxCommandOutput::Stderr,
-                "sparse-checkout add",
+                "sparse-checkout set",
             )
             .map(|_| ())
         })?;

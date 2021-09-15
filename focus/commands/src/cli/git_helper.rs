@@ -45,12 +45,13 @@ pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, sandbox: &Sandbox) -
     Ok(output_string)
 }
 
-pub fn run_git_command_consuming_stdout<I, S>(
-    repo: &PathBuf,
+pub fn run_git_command_consuming_stdout<P, I, S>(
+    repo: P,
     args: I,
     sandbox: &Sandbox,
 ) -> Result<String>
 where
+    P: AsRef<Path>,
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {

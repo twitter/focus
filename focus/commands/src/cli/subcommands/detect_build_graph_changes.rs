@@ -21,7 +21,7 @@ fn build_graph_involved_filename_predicate(name: &Path) -> bool {
 }
 
 fn find_committed_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
-    let sync_state = git_helper::read_config(repo.as_path(), "twitter.focus.sync-point", sandbox)
+    let sync_state = git_helper::read_config(repo.as_path(), "focus.sync-point", sandbox)
         .context("reading sync state")?;
 
     let revspec = format!("{}..HEAD", &sync_state.trim());

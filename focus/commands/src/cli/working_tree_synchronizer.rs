@@ -73,7 +73,9 @@ impl<'this> WorkingTreeSynchronizer<'this> {
             .arg("HEAD")
             .output()
             .context("running `git rev-parse`")?;
-        if !output.status.success() {}
+        if !output.status.success() {
+            bail!("git rev-parse failed");
+        }
         let output_str = String::from_utf8(output.stdout).context("parsing output as UTF-8")?;
 
         Ok(Vec::from(
