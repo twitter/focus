@@ -1,4 +1,4 @@
-use anyhow::{Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use std::path::{Path, PathBuf};
 
 use git2::{Repository, RepositoryState};
@@ -48,19 +48,19 @@ impl<'this> WorkingTreeSynchronizer<'this> {
     }
 
     pub fn is_working_tree_clean(&self) -> Result<bool> {
-        let (mut cmd, scmd) = SandboxCommand::new("bash", &self.sandbox)?;
+        use std::process;
 
-        let result = scmd
-            .ensure_success_or_log(
-                cmd.arg("-c")
-                    .arg("[[ -z $(git --no-optional-locks status --porcelain) ]]")
-                    .current_dir(&self.path),
-                SandboxCommandOutput::Ignore,
-                "determining work tree status",
-            )
-            .context("determining work tree status")?;
-
-        Ok(result.success())
+        let output = process::Command::new("git")
+            .arg("status")
+            .arg("--porcelain")
+            .current_dir(&self.path)
+            .output()
+            .context("running `git status`")?;
+        if !output.status.success() {
+            bail!("git status failed");
+        }
+        let output_str = String::from_utf8(output.stdout).context("parsing output as UTF-8")?;
+        Ok(output_str.trim().is_empty())
     }
 
     pub(crate) fn read_head(&self) -> Result<Vec<u8>> {

@@ -55,8 +55,8 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
 }
 
 // Set git config key twitter.focus.sync-point to HEAD
-fn configure_sparse_sync_point(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
-    let sync = WorkingTreeSynchronizer::new(sparse_repo.as_path(), sandbox)?;
+pub fn configure_sparse_sync_point(sparse_repo: &Path, sandbox: &Sandbox) -> Result<()> {
+    let sync = WorkingTreeSynchronizer::new(sparse_repo, sandbox)?;
     let head_str = String::from_utf8(sync.read_head()?)?;
     git_helper::write_config(
         sparse_repo,
@@ -731,7 +731,7 @@ pub fn generate_sparse_profile(
         .involved_directories_query(&coordinates, None, false, sandbox)
         .with_context(|| format!("Determining involved directories for {:?}", &coordinates))?;
     log::info!(
-        "Dependency query: {:?} yielded {} directories",
+        "Dependency query {:?} yielded {} directories",
         &coordinates,
         &directories_for_coordinate.len()
     );
@@ -834,7 +834,6 @@ impl BazelRepo {
             .collect();
 
         let query = clauses.join(" union ");
-        log::info!("Running Bazel query [{}]", &query);
 
         // Run Bazel query
         let (mut cmd, scmd) = SandboxCommand::new("./bazel", sandbox)?;

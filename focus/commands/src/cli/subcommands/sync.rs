@@ -196,5 +196,9 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         })?;
     }
 
+    perform("Updating the sync point", || {
+        sparse_repos::configure_sparse_sync_point(&repo, &sandbox)
+    })?;
+
     Ok(())
 }
