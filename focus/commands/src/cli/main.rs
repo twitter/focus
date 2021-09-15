@@ -1,6 +1,5 @@
 mod detail;
 mod git_helper;
-mod manager;
 mod model;
 mod sandbox;
 mod sandbox_command;
