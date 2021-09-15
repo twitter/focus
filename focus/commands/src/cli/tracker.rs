@@ -3,7 +3,6 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs::canonicalize,
-    os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
     str::FromStr,
 };
