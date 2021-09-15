@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tempfile::TempDir;
 
 pub struct Sandbox {
-    #[allow(unreachable_code)]
+    #[allow(dead_code)]
     temp_dir: Option<tempfile::TempDir>,
     path: PathBuf,
     serial_sequence: AtomicUsize,
@@ -74,7 +74,7 @@ impl Clone for Sandbox {
         let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
         let label = format!("subsandbox-{}", serial);
         let path = self.path.join(label);
-        if let Err(_e) = std::fs::create_dir(path.as_path()) {
+        if let Err(e) = std::fs::create_dir(path.as_path()) {
             panic!(
                 "creating directory for cloned sandbox ({}) failed",
                 &path.display()
