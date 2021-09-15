@@ -13,13 +13,11 @@ fn exhibit_file(file: &Path, title: &str) -> Result<()> {
 
     let file = File::open(file)?;
     let lines = io::BufReader::new(file).lines();
-    log::info!("--- Begin {} ---", title);
     for line in lines {
         if let Ok(line) = line {
-            log::info!("`[{}]: {}", title, line);
+            log::info!("[{}]: {}", title, line);
         }
     }
-    log::info!("--- End {} ---", title);
 
     Ok(())
 }
