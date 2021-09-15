@@ -3,13 +3,12 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs::canonicalize,
-    hash::Hash,
     os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{bail, Context, Result};
 use uuid::Uuid;
 
 use crate::{git_helper, sandbox::Sandbox};

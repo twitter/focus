@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path, time::SystemTime};
+use std::{path::Path, time::SystemTime};
 
 use anyhow::{bail, Context, Result};
 
@@ -11,7 +11,7 @@ fn unix_epoch_timestamp() -> Result<u64> {
     }
 }
 
-pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<()> {
+pub fn run(_sandbox: &Sandbox, _dense_repo: &Path, sparse_repo: &Path) -> Result<()> {
     let invalidation_file_path = sparse_repo.join(".focus").join("invalidated");
     std::fs::write(
         invalidation_file_path.as_path(),

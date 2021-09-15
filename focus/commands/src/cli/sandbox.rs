@@ -74,7 +74,7 @@ impl Clone for Sandbox {
         let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
         let label = format!("subsandbox-{}", serial);
         let path = self.path.join(label);
-        if let Err(e) = std::fs::create_dir(path.as_path()) {
+        if let Err(_e) = std::fs::create_dir(path.as_path()) {
             panic!(
                 "creating directory for cloned sandbox ({}) failed",
                 &path.display()
