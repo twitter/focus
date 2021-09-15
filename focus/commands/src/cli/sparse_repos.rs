@@ -54,7 +54,7 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
     Ok(())
 }
 
-// Set git config key twitter.focus.sync_point to HEAD
+// Set git config key twitter.focus.sync-point to HEAD
 fn configure_sparse_sync_point(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
     let sync = WorkingTreeSynchronizer::new(sparse_repo.as_path(), sandbox)?;
     let head_str = String::from_utf8(sync.read_head()?)?;
@@ -64,6 +64,24 @@ fn configure_sparse_sync_point(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Resu
         head_str.as_str(),
         sandbox,
     )
+}
+
+// Set git config key twitter.focus.sync-point to HEAD
+fn setup_bazel_preflight_script(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+    let sparse_focus_dir = sparse_repo.join(".focus");
+    let preflight_script_path = sparse_focus_dir.join("preflight");
+
+    let script_contents = r###"
+    #!/bin/sh
+    
+    exec focus detect-build-graph-changes
+"###;
+    std::fs::write(&preflight_script_path, script_contents).with_context(|| {
+        format!(
+            "writing the preflight script to {}",
+            &preflight_script_path.display()
+        )
+    })
 }
 
 fn configure_sparse_repo_final(
@@ -116,6 +134,8 @@ fn configure_sparse_repo_final(
     }
 
     configure_sparse_sync_point(sparse_repo, sandbox).context("configuring the sync point")?;
+
+    setup_bazel_preflight_script(sparse_repo, sandbox).context("setting up build hooks")?;
 
     Ok(())
 }
