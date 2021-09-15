@@ -37,80 +37,99 @@ impl FromStr for CommaSeparatedStrings {
 
 #[derive(StructOpt, Debug)]
 enum Subcommand {
+    /// Create a sparse clone from named layers or ad-hoc build coordinates
     Clone {
+        /// Path to the existing dense repository that the sparse clone shall be based upon.
         #[structopt(long, parse(from_os_str))]
         dense_repo: PathBuf,
 
+        /// Path where the new sparse repository should be created.
         #[structopt(long, parse(from_os_str))]
         sparse_repo: PathBuf,
 
+        /// The name of the branch to clone.
         #[structopt(long)]
         branch: String,
 
+        /// Bazel build coordinates to include as an ad-hoc layer set, cannot be specified in combination with 'layers'.
         #[structopt(long, default_value = "")]
         coordinates: CommaSeparatedStrings,
 
+        /// Named layers to include. Comma separated, loaded from the dense repository's `focus/projects` directory), cannot be specified in combination with 'coordinates'.
         #[structopt(long, default_value = "")]
         layers: CommaSeparatedStrings,
 
+        /// Experimental, NOT RECOMMENDED: use sparse filtering (`--filter:oid:...`) when cloning.
         #[structopt(long)]
         filter_sparse: bool,
 
+        /// When specified a Bazel project view will be written to `focus-<repo-name>.bazelproject` in the sparse repository.
         #[structopt(long)]
         generate_project_view: bool,
     },
 
+    /// Update the sparse checkout to reflect changes to the build graph.
     Sync {
-        #[structopt(long, parse(from_os_str), default_value = ".dense")]
+        /// Path to the dense repository.
+        #[structopt(parse(from_os_str), default_value = ".dense")]
         dense_repo: PathBuf,
 
-        #[structopt(long, parse(from_os_str), default_value = ".")]
+        /// Path to the sparse repository.
+        #[structopt(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
     },
 
-    Invalidate {
-        #[structopt(long, parse(from_os_str), default_value = ".dense")]
-        dense_repo: PathBuf,
-
-        #[structopt(long, parse(from_os_str), default_value = ".")]
-        sparse_repo: PathBuf,
-    },
-
+    /// List available layers
     AvailableLayers {
+        /// Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
 
+    /// List currently selected layers
     SelectedLayers {
+        /// Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
 
+    /// Push a layer onto the top of the stack of currently selected layers
     PushLayer {
+        /// Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
+        /// Names of layers to push.
         names: Vec<String>,
     },
 
+    /// Pop one or more layer(s) from the top of the stack of current selected layers
     PopLayer {
+        /// Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
+        /// The number of layers to pop.
         #[structopt(long, default_value = "1")]
         count: usize,
     },
 
+    /// Filter out one or more layer(s) from the stack of currently selected layers
     RemoveLayer {
+        /// Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
+        /// Names of the layers to be removed.
         names: Vec<String>,
     },
 
+    /// List focused repositories
     ListRepos {},
 
+    /// Detect whether there are changes to the build graph (used internally)
     DetectBuildGraphChanges {
+        // Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
@@ -191,11 +210,6 @@ fn main() -> Result<()> {
             )
         }
 
-        Subcommand::Invalidate {
-            dense_repo,
-            sparse_repo,
-        } => subcommands::invalidate::run(&sandbox, &dense_repo, &sparse_repo),
-
         Subcommand::Sync {
             dense_repo,
             sparse_repo,
@@ -213,6 +227,8 @@ fn main() -> Result<()> {
 
         Subcommand::ListRepos {} => subcommands::list_repos::run(),
 
-        Subcommand::DetectBuildGraphChanges { repo } => subcommands::detect_build_graph_changes::run(&sandbox, &repo),
+        Subcommand::DetectBuildGraphChanges { repo } => {
+            subcommands::detect_build_graph_changes::run(&sandbox, &repo)
+        }
     }
 }
