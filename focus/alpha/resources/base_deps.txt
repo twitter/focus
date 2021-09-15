@@ -1,1 +1,0 @@
-: src/python/twitter/devprod/ci/ci_job_builder/:: 3rdparty/jvm/com/twitter/thriftstore/:: featureswitches/dynmap/src/main/scala/com/twitter/dynmap/thrift/:: src/python/twitter/ee/benchmark_tool/::
