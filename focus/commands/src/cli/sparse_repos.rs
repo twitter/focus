@@ -33,9 +33,6 @@ pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<(
 }
 
 pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
-    // TODO: Consider enabling the fsmonitor after it can be bundled.
-    // git_config(sparse_repo, "core.fsmonitor", "rs-git-fsmonitor", sandbox)?;
-
     Ok(())
 }
 
