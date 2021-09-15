@@ -152,7 +152,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         Ok(())
     })?;
 
-    if let Err(e) = perform("Applying the sparse profile", || {
+    if let Err(_e) = perform("Applying the sparse profile", || {
         let merged_output_file =
             File::open(&merged_output_path).context("opening new sparse profile")?;
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
