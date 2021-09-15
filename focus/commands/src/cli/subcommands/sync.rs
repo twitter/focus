@@ -119,15 +119,10 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
     let merged_output_path = {
         let mut path = sparse_profile_output_path.clone();
         path.set_extension("merged");
-        log::info!(
-            "{} merging to {}",
-            sparse_profile_output_path.display(),
-            path.display()
-        );
         path
     };
 
-    perform("Merging the new sparse profile", || {
+    perform("Converting the new sparse profile to cone patterns", || {
         use std::io::BufRead;
         use std::io::Write;
 
@@ -135,16 +130,19 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         {
             let mut merged_output_file =
                 File::create(&merged_output_path).context("opening merged output file")?;
-            // writeln!(merged_output_file, "/")?;
             writeln!(merged_output_file, "/*")?;
             writeln!(merged_output_file, "!/*/")?;
             let sparse_profile_output_file =
                 BufReader::new(File::open(sparse_profile_output_path)?);
             for line in sparse_profile_output_file.lines() {
                 if let Ok(line) = line {
-                    // writeln!(merged_output_file, "{}", &line);
-                    writeln!(merged_output_file, "{}*", &line);
-                    writeln!(merged_output_file, "!{}", &line);
+                    let trimmed = line.trim();
+                    if trimmed.eq("") || trimmed.eq("/") || trimmed.eq("//") {
+                        continue;
+                    }
+
+                    writeln!(merged_output_file, "{}*", &line)?;
+                    writeln!(merged_output_file, "!{}", &line)?;
                 }
             }
         }
@@ -173,7 +171,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         .map(|_| ())
         .context("setting sparse checkout from new profile")
     }) {
-        perform("Restoring the backup sparse checkout file", || {
+        perform("Restoring and reapplying the backup profile", || {
             // std::fs::copy(&sparse_profile_path, &sparse_checkout_backup_path)
             //     .context("restoring the backup file")?;
             let backup_file = File::open(&sparse_checkout_backup_path)
