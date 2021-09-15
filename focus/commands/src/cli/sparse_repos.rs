@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Error, Result};
 use internals::util::lock_file::LockFile;
 
-use std::ffi::{OsString};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
@@ -12,7 +12,7 @@ use std::thread;
 use std::{
     collections::BTreeSet,
     path::PathBuf,
-    process::{Stdio},
+    process::Stdio,
     sync::{Arc, Barrier},
 };
 

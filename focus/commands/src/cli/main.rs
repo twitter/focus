@@ -143,7 +143,7 @@ fn ensure_directories_exist() -> Result<()> {
     Tracker::default()
         .ensure_directories_exist()
         .context("creating directories for the tracker")?;
-    
+
     Ok(())
 }
 
@@ -154,7 +154,6 @@ fn main() -> Result<()> {
     let opt = ParachuteOpts::from_args();
 
     let sandbox = Arc::new(Sandbox::new(opt.preserve_sandbox).context("Creating a sandbox")?);
-
 
     match opt.cmd {
         Subcommand::Clone {

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use crate::git_helper;
-use crate::{sandbox::Sandbox};
+use crate::sandbox::Sandbox;
 
 fn build_graph_involved_filename_predicate(name: &Path) -> bool {
     if let Some(extension) = name.extension() {
