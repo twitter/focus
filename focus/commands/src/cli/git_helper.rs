@@ -58,9 +58,9 @@ where
     if let Err(e) = cmd.current_dir(repo).args(args).status() {
         scmd.log(
             crate::sandbox_command::SandboxCommandOutput::Stderr,
-            &"failed 'git hash-object' command",
+            &"git command",
         )?;
-        bail!("git failed: {}", e);
+        bail!("git command failed: {}", e);
     }
     let mut stdout_contents = String::new();
     scmd.read_to_string(SandboxCommandOutput::Stdout, &mut stdout_contents)?;
