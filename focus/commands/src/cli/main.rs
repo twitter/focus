@@ -110,7 +110,7 @@ enum Subcommand {
 
     ListRepos {},
 
-    SummarizeState {
+    DetectBuildGraphChanges {
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
@@ -213,6 +213,6 @@ fn main() -> Result<()> {
 
         Subcommand::ListRepos {} => subcommands::list_repos::run(),
 
-        Subcommand::SummarizeState { repo } => subcommands::summarize_state::run(&sandbox, &repo),
+        Subcommand::DetectBuildGraphChanges { repo } => subcommands::detect_build_graph_changes::run(&sandbox, &repo),
     }
 }
