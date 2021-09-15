@@ -69,6 +69,11 @@ fn configure_sparse_sync_point(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Resu
 // Set git config key twitter.focus.sync-point to HEAD
 fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
     let sparse_focus_dir = sparse_repo.join(".focus");
+    if !sparse_focus_dir.is_dir() {
+        std::fs::create_dir(sparse_focus_dir.as_path()).with_context(|| {
+            format!("failed to create directory {}", sparse_focus_dir.display())
+        })?;
+    }
     let preflight_script_path = sparse_focus_dir.join("preflight");
 
     let script_contents = r###"
