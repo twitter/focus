@@ -507,12 +507,8 @@ pub fn set_sparse_checkout(
     }
 
     {
-        let _sparse_profile_destination = sparse_repo
-            .join(".git")
-            .join("info")
-            .join("sparse-checkout");
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-        log::info!("Setting sparse from {}", &sparse_profile.display());
+        log::info!("Adding directories");
         let sparse_profile_file = File::open(&sparse_profile).context("opening sparse profile")?;
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
             git_binary(),
@@ -717,17 +713,17 @@ pub fn switch_to_detached_branch_discarding_changes(
     Ok(())
 }
 
-fn generate_sparse_profile(
-    dense_repo: &Path,
+pub fn generate_sparse_profile(
+    repo: &Path,
     sparse_profile_output: &Path,
     coordinates: &Vec<String>,
     sandbox: &Sandbox,
 ) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
-    let client = BazelRepo::new(dense_repo, coordinates.clone())?;
+    let client = BazelRepo::new(repo, coordinates.clone())?;
 
-    let repo_component_count = dense_repo.components().count();
+    let repo_component_count = repo.components().count();
 
     let mut query_dirs = BTreeSet::<PathBuf>::new();
 
@@ -739,8 +735,9 @@ fn generate_sparse_profile(
         &coordinates,
         &directories_for_coordinate.len()
     );
+
     for dir in directories_for_coordinate {
-        let absolute_path = dense_repo.join(dir);
+        let absolute_path = repo.join(dir);
         query_dirs.insert(absolute_path);
     }
 
@@ -749,6 +746,7 @@ fn generate_sparse_profile(
         .context("writing sparse profile prelude")?;
     for dir in &query_dirs {
         let mut line = Vec::<u8>::new();
+        
         line.extend(b"/"); // Paths have a '/' prefix
         {
             let mut relative_path = PathBuf::new();
