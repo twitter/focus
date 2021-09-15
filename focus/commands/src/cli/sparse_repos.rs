@@ -746,7 +746,7 @@ pub fn generate_sparse_profile(
         .context("writing sparse profile prelude")?;
     for dir in &query_dirs {
         let mut line = Vec::<u8>::new();
-        
+
         line.extend(b"/"); // Paths have a '/' prefix
         {
             let mut relative_path = PathBuf::new();
