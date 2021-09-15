@@ -10,14 +10,9 @@ use std::{
 };
 
 use anyhow::{bail, Context, Error, Result};
-use serde_json::map::Iter;
 use uuid::Uuid;
 
-use crate::{
-    git_helper,
-    sandbox::{self, Sandbox},
-    sandbox_command::SandboxCommand,
-};
+use crate::{git_helper, sandbox::Sandbox};
 
 fn focus_config_dir() -> PathBuf {
     dirs::config_dir()
@@ -142,7 +137,6 @@ impl Tracker {
 
     pub fn ensure_directories_exist(&self) -> Result<()> {
         std::fs::create_dir_all(self.repos_by_uuid_dir()).context("create by-uuid repo dir")?;
-        log::info!("Repo dir '{}'", self.repos_by_uuid_dir().display());
         Ok(())
     }
 
@@ -194,7 +188,11 @@ impl Tracker {
                                 }
 
                                 Err(e) => {
-                                    bail!("unable to canonicalize path {}: {}", entry.path().display(), e);
+                                    bail!(
+                                        "unable to canonicalize path {}: {}",
+                                        entry.path().display(),
+                                        e
+                                    );
                                 }
                             }
                         } else {

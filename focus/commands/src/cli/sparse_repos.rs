@@ -61,7 +61,12 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
 fn configure_sparse_sync_point(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
     let sync = WorkingTreeSynchronizer::new(sparse_repo.as_path(), sandbox)?;
     let head_str = String::from_utf8(sync.read_head()?)?;
-    git_helper::write_config(sparse_repo, "twitter.focus.sync_point", head_str.as_str(), sandbox)
+    git_helper::write_config(
+        sparse_repo,
+        "twitter.focus.sync-point",
+        head_str.as_str(),
+        sandbox,
+    )
 }
 
 fn configure_sparse_repo_final(
@@ -146,7 +151,6 @@ fn git_remote_get_url(repo: &PathBuf, name: &str, sandbox: &Sandbox) -> Result<S
         sandbox,
     )
 }
-
 
 pub fn set_containing_layers(repo: &PathBuf, layer_names: &Vec<String>) -> Result<LayerSet> {
     let layer_sets = LayerSets::new(&repo);
