@@ -69,6 +69,26 @@ impl Sandbox {
     }
 }
 
+impl Clone for Sandbox {
+    fn clone(&self) -> Self {
+        let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
+        let label = format!("subsandbox-{}", serial);
+        let path = self.path.join(label);
+        if let Err(e) = std::fs::create_dir(path.as_path()) {
+            panic!(
+                "creating directory for cloned sandbox ({}) failed",
+                &path.display()
+            );
+        }
+
+        Self {
+            temp_dir: None,
+            path,
+            serial_sequence: AtomicUsize::new(0),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

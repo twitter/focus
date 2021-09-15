@@ -2,6 +2,8 @@ use anyhow::{bail, Context, Result};
 
 use std::path::{Path, PathBuf};
 
+use std::sync::mpsc;
+
 use crate::git_helper;
 use crate::{sandbox::Sandbox, sparse_repos::Spec};
 
@@ -22,7 +24,7 @@ fn find_committed_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
     let sync_state = git_helper::read_config(repo.as_path(), "twitter.focus.sync-point", sandbox)
         .context("reading sync state")?;
 
-    let revspec = format!("{}..HEAD", &sync_state.as_str());
+    let revspec = format!("{}..HEAD", &sync_state.trim());
     let output = git_helper::run_git_command_consuming_stdout(
         repo,
         vec!["diff", "--name-only", revspec.as_str()],
@@ -31,7 +33,6 @@ fn find_committed_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
     let changed_paths: Vec<&str> = output.lines().collect::<_>();
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
     for line in &changed_paths {
-        log::info!("line:{}", line);
         let parsed = PathBuf::from(line);
         if build_graph_involved_filename_predicate(parsed.as_path()) {
             log::info!("Committed {}", parsed.display());
@@ -70,13 +71,60 @@ fn find_uncommitted_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
 }
 
 pub fn run(sandbox: &Sandbox, repo: &PathBuf) -> Result<()> {
-    if find_uncommitted_changes(sandbox, repo).context("detecting uncommitted changes")? {
-        eprintln!("Uncommitted changes affect the build graph, you must run `focus sync` to synchronized the sparse checkout!");
+    let (uncommitted_tx, uncommitted_rx) = mpsc::channel();
+    let uncommited_finder_thread = {
+        let cloned_repo = repo.clone();
+        let cloned_sandbox = sandbox.clone();
+
+        std::thread::spawn(move || {
+            uncommitted_tx
+                .send(
+                    find_uncommitted_changes(&cloned_sandbox, &cloned_repo)
+                        .expect("error detecting uncommitted changes"),
+                )
+                .expect("send failed");
+        })
+    };
+
+    let (committed_tx, committed_rx) = mpsc::channel();
+    let committed_finder_thread = {
+        let cloned_repo = repo.clone();
+        let cloned_sandbox = sandbox.clone();
+
+        std::thread::spawn(move || {
+            committed_tx
+                .send(
+                    find_committed_changes(&cloned_sandbox, &cloned_repo)
+                        .expect("error detecting committed changes"),
+                )
+                .expect("send failed");
+        })
+    };
+
+    let has_uncommitted_changes = uncommitted_rx
+        .recv()
+        .expect("could not receive whether there were uncommitted changes");
+    let has_committed_changes = committed_rx
+        .recv()
+        .expect("could not receive whether there were committed changes");
+
+    uncommited_finder_thread
+        .join()
+        .expect("thread crashed detecting uncommitted changes");
+    committed_finder_thread
+        .join()
+        .expect("thread crashed detecting uncommitted changes");
+
+    if has_committed_changes && has_uncommitted_changes {
+        eprintln!("Committed and uncommitted changes affect the build graph, you must run `focus sync` to synchronized the sparse checkout!");
         std::process::exit(1);
-    } else if find_committed_changes(sandbox, repo).context("detecting committed changes")? {
+    } else if has_committed_changes {
         eprintln!("Committed changes affect the build graph, you must run `focus sync` to synchronized the sparse checkout!");
         std::process::exit(1);
+    } else if has_uncommitted_changes {
+        eprintln!("Uncommitted changes affect the build graph, you must run `focus sync` to synchronized the sparse checkout!");
+        std::process::exit(1);
     }
-
+    log::info!("No changes to files affecting the build graph were detected");
     Ok(())
 }
