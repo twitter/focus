@@ -37,13 +37,14 @@ pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox)
 }
 
 fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
-    let alternates_path = sparse_repo.join(".git").join("info").join("alternates");
+    let alternates_path = sparse_repo.join(".git").join("objects").join("info").join("alternates");
+    let dense_odb = dense_repo.join(".git").join("objects");
     let dense_pruned_odb = dense_repo.join(".git").join("pruned-odb").join("objects");
     let sparse_pruned_odb = sparse_repo.join(".git").join("pruned-odb").join("objects");
 
     std::fs::create_dir_all(&sparse_pruned_odb).context("creating sparse pruned-odb")?;
 
-    let mut buf = Vec::from(dense_repo.as_os_str().as_bytes());
+    let mut buf = Vec::from(dense_odb.as_os_str().as_bytes());
     buf.push(b'\n');
     buf.extend(dense_pruned_odb.as_os_str().as_bytes());
     buf.push(b'\n');
@@ -68,6 +69,8 @@ pub fn configure_sparse_sync_point(sparse_repo: &Path, sandbox: &Sandbox) -> Res
 
 // Set git config key twitter.focus.sync-point to HEAD
 fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
+    use std::io::Write;
+
     let sparse_focus_dir = sparse_repo.join(".focus");
     if !sparse_focus_dir.is_dir() {
         std::fs::create_dir(sparse_focus_dir.as_path()).with_context(|| {
@@ -75,18 +78,18 @@ fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Re
         })?;
     }
     let preflight_script_path = sparse_focus_dir.join("preflight");
+    let mut preflight_script_file = BufWriter::new(
+        File::create(preflight_script_path).context("writing the build preflight script")?,
+    );
 
-    let script_contents = r###"
-    #!/bin/sh
-    
-    exec focus detect-build-graph-changes
-"###;
-    std::fs::write(&preflight_script_path, script_contents).with_context(|| {
-        format!(
-            "writing the preflight script to {}",
-            &preflight_script_path.display()
-        )
-    })
+    writeln!(preflight_script_file, "#!/bin/sh")?;
+    writeln!(preflight_script_file, "")?;
+    writeln!(
+        preflight_script_file,
+        "exec focus detect-build-graph-changes"
+    )?;
+
+    Ok(())
 }
 
 fn configure_sparse_repo_final(
