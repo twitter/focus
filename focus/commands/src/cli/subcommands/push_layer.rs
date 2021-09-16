@@ -6,7 +6,6 @@ use crate::model;
 
 pub fn run(repo: &Path, names: Vec<String>) -> Result<()> {
     // Push a layer
-
     let sets = model::LayerSets::new(&repo);
 
     let new_selection = sets.push_as_selection(names).context("pushing layer")?;
