@@ -1,9 +1,7 @@
 pub mod available_layers;
 pub mod clone;
 pub mod detect_build_graph_changes;
-pub mod invalidate;
 pub mod list_repos;
-pub mod manager;
 pub mod pop_layer;
 pub mod push_layer;
 pub mod remove_layer;
