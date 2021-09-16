@@ -72,14 +72,14 @@ ENV PATH "${PYENV_ROOT}/shims:${PATH}"
 RUN pip3 install meson
 
 ##
-## Rust nightly toolchain
+## Rust toolchain
 ##
-# From https://github.com/linkerd/rustup-nightly-docker/blob/master/Dockerfile
+# Loosely from https://github.com/linkerd/rustup-nightly-docker/blob/master/Dockerfile (we use stable, though)
 ENV RUSTUP_HOME=/rust
 ENV CARGO_HOME=/cargo 
 ENV PATH=/cargo/bin:/rust/bin:$PATH
 
-RUN echo "(curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly --no-modify-path) && rustup default nightly" > /install-rust.sh && chmod 755 /install-rust.sh
+RUN echo "(curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable --no-modify-path) && rustup default stable" > /install-rust.sh && chmod 755 /install-rust.sh
 RUN /usr/bin/scl enable $toolset_base -- /install-rust.sh
 
 ##
