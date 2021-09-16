@@ -1,7 +1,7 @@
 use std::ffi::{OsStr, OsString};
 
 use anyhow::{bail, Context, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use crate::{
@@ -15,6 +15,25 @@ pub fn git_binary() -> OsString {
 
 pub fn git_command(sandbox: &Sandbox) -> Result<(Command, SandboxCommand)> {
     SandboxCommand::new(git_binary(), sandbox)
+}
+
+pub fn remote_add<P: AsRef<Path>>(
+    repo_path: P,
+    name: &str,
+    url: &OsStr,
+    sandbox: &Sandbox,
+) -> Result<()> {
+    let (mut cmd, scmd) = git_command(&sandbox)?;
+    scmd.ensure_success_or_log(
+        cmd.current_dir(repo_path)
+            .arg("remote")
+            .arg("add")
+            .arg(name)
+            .arg(url),
+        SandboxCommandOutput::Stderr,
+        "git remote_add",
+    )
+    .map(|_| ())
 }
 
 pub fn write_config<P: AsRef<Path>>(

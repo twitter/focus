@@ -1,3 +1,4 @@
+mod backed_up_file;
 mod detail;
 mod git_helper;
 mod model;
@@ -69,9 +70,13 @@ enum Subcommand {
 
     /// Update the sparse checkout to reflect changes to the build graph.
     Sync {
+        /// Path to the dense repository. Build graph queries are always run in the dense repository.
+        #[structopt(long, parse(from_os_str), default_value = ".dense")]
+        dense_repo: PathBuf,
+
         /// Path to the sparse repository.
         #[structopt(parse(from_os_str), default_value = ".")]
-        repo: PathBuf,
+        sparse_repo: PathBuf,
     },
 
     /// List available layers
@@ -205,7 +210,10 @@ fn main() -> Result<()> {
             )
         }
 
-        Subcommand::Sync { repo } => subcommands::sync::run(&sandbox, &repo),
+        Subcommand::Sync {
+            dense_repo,
+            sparse_repo,
+        } => subcommands::sync::run(&sandbox, &dense_repo, &sparse_repo),
 
         Subcommand::AvailableLayers { repo } => subcommands::available_layers::run(&repo),
 

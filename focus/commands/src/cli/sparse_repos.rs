@@ -141,6 +141,15 @@ fn configure_sparse_repo_final(
         )?;
     }
 
+    let dense_url: OsString = {
+        let mut url = OsString::from("file://");
+        url.push(dense_repo.as_os_str());
+        url
+    };
+
+    git_helper::remote_add(&sparse_repo, "dense", dense_url.as_os_str(), &sandbox)
+        .context("adding dense remote")?;
+
     if sparse_journal_state_lock_path.exists() {
         std::fs::remove_file(sparse_journal_state_lock_path)?;
     }
@@ -341,7 +350,7 @@ pub fn create_or_update_sparse_clone(
     }
 
     // Being on the right branch in the dense repository is a prerequisite for any work.
-    switch_to_detached_branch_discarding_changes(&dense_repo, &branch, sandbox.as_ref())?;
+    switch_to_detached_branch_discarding_changes(&dense_repo, &branch, None, sandbox.as_ref())?;
 
     let profile_generation_barrier = Arc::new(Barrier::new(2));
     let profile_generation_thread = {
@@ -710,16 +719,25 @@ fn write_project_view_file(
 pub fn switch_to_detached_branch_discarding_changes(
     repo: &Path,
     refname: &str,
+    alternate: Option<&Path>,
     sandbox: &Sandbox,
 ) -> Result<()> {
     let (mut cmd, scmd) = git_command(sandbox)?;
+    let mut cmd = cmd
+        .arg("switch")
+        .arg(refname)
+        .arg("--quiet")
+        .arg("--detach")
+        .arg("--discard-changes")
+        .current_dir(&repo);
+    if let Some(alternate_path) = alternate {
+        cmd.env(
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            alternate_path.as_os_str(),
+        );
+    }
     scmd.ensure_success_or_log(
-        cmd.arg("switch")
-            .arg(refname)
-            .arg("--quiet")
-            .arg("--detach")
-            .arg("--discard-changes")
-            .current_dir(&repo),
+        cmd,
         SandboxCommandOutput::Stderr,
         &format!("switching to ref '{}' in repo {}", refname, &repo.display()),
     )?;
@@ -764,11 +782,11 @@ pub fn generate_sparse_profile(
         line.extend(b"/"); // Paths have a '/' prefix
         {
             let mut relative_path = PathBuf::new();
-            // aquery returns explicit paths. relativize them.
+            // These queries return explicit paths. relativize them.
             for component in dir.components().skip(repo_component_count) {
                 relative_path.push(component);
             }
-
+            log::debug!("+ {}", &relative_path.display());
             line.extend(relative_path.as_os_str().as_bytes());
         }
         line.extend(b"/\n"); // Paths have a '/' suffix

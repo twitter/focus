@@ -1,8 +1,10 @@
+use crate::backed_up_file::BackedUpFile;
 use crate::model::Layer;
 use crate::model::LayerSets;
 use crate::sandbox_command::SandboxCommand;
 use std::fs::File;
-use std::io::BufReader;
+use std::fs::OpenOptions;
+
 use std::path::Path;
 use std::process::Stdio;
 
@@ -20,19 +22,27 @@ where
     log::info!("{}", description);
     let result = f();
     if let Err(e) = result {
-        log::error!("Failed {}: {}", description, e);
+        log::error!("Failed {}: {}", description.to_ascii_lowercase(), e);
         bail!(e);
     }
 
     result
 }
 
-pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
+pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<()> {
     use crate::git_helper;
     use crate::sparse_repos;
+    use std::io::Write;
+    use std::os::unix::ffi::OsStrExt;
 
-    let sparse_sync = WorkingTreeSynchronizer::new(&repo, &sandbox)?;
-    let sparse_profile_path = repo.join(".git").join("info").join("sparse-checkout");
+    let dense_repo = std::fs::canonicalize(dense_repo).context("canonicalizing dense repo path")?;
+    let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, &sandbox)?;
+    let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, &sandbox)?;
+
+    let sparse_profile_path = sparse_repo
+        .join(".git")
+        .join("info")
+        .join("sparse-checkout");
 
     let (sparse_profile_output_file, sparse_profile_output_path) =
         sandbox.create_file(Some("sparse-profile"), None)?;
@@ -44,13 +54,26 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         path
     };
 
+    if let Ok(clean) = perform("Checking that dense repo is in a clean state", || {
+        dense_sync.is_working_tree_clean()
+    }) {
+        if !clean {
+            eprintln!("The working tree in the dense repo must be in a clean state. Commit or stash changes and try to run the sync again.");
+            bail!("Dense repo working tree is not in a clean state");
+        }
+    } else {
+        bail!("Could not determine whether the dense repo is in a clean state");
+    }
+
     if let Ok(clean) = perform("Checking that sparse repo is in a clean state", || {
         sparse_sync.is_working_tree_clean()
     }) {
         if !clean {
-            eprintln!("The working tree must be in a clean state. Commit or stash changes and try to run the sync again.");
-            bail!("Working tree is not clean");
+            eprintln!("The working tree in the sparse repo must be in a clean state. Commit or stash changes and try to run the sync again.");
+            bail!("Sparse repo working tree is not in a clean state");
         }
+    } else {
+        bail!("Could not determine whether the sparse repo is in a clean state");
     }
 
     // Figure out all of the coordinates we will be resolving
@@ -66,7 +89,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         };
 
         // Add mandatory layers
-        let sets = LayerSets::new(&repo);
+        let sets = LayerSets::new(&sparse_repo);
         let layer_set = sets
             .mandatory_layers()
             .context("resolving mandatory layers")?;
@@ -85,7 +108,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
             }
         } else {
             // Add ad-hoc layer coordinates
-            if let Ok(Some(adhoc_layers)) = sets.adhoc_layers() {
+            if let Some(adhoc_layers) = sets.adhoc_layers().context("reading adhoc layers")? {
                 for layer in adhoc_layers.layers() {
                     merge_coordinates_from_layer(layer);
                 }
@@ -99,6 +122,22 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         Ok(coordinates)
     })?;
 
+    let dense_revision = perform("Determining the current commit in the dense repo", || {
+        git_helper::run_git_command_consuming_stdout(
+            &dense_repo,
+            vec!["rev-parse", "HEAD"],
+            &sandbox,
+        )
+    })?;
+
+    let sparse_revision = perform("Determining the current commit in the sparse repo", || {
+        git_helper::run_git_command_consuming_stdout(
+            &sparse_repo,
+            vec!["rev-parse", "HEAD"],
+            &sandbox,
+        )
+    })?;
+
     perform("Backing up the current sparse checkout file", || {
         std::fs::copy(&sparse_profile_path, &sparse_checkout_backup_path)
             .context("copying to the backup file")?;
@@ -106,23 +145,40 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
         Ok(())
     })?;
 
+    let sparse_objects_directory = std::fs::canonicalize(&sparse_repo)
+        .context("canonicalizing sparse path")?
+        .join(".git")
+        .join("objects");
+
+    perform("Switching in the dense repo", || {
+        // When checking out in the dense repo, we make the sparse repo objects available as an alternate so as to not need to push to the dense repo.
+        sparse_repos::switch_to_detached_branch_discarding_changes(
+            &dense_repo,
+            &sparse_revision.as_str(),
+            Some(sparse_objects_directory.as_ref()),
+            &sandbox,
+        )
+    })?;
+
     perform("Computing the new sparse profile", || {
         sparse_repos::generate_sparse_profile(
-            &repo,
+            &dense_repo,
             &sparse_profile_output_path,
             &coordinates,
             &sandbox,
         )
     })?;
 
-    let merged_output_path = {
-        let mut path = sparse_profile_output_path.clone();
-        path.set_extension("merged");
-        path
-    };
+    perform("Resetting in the dense repo", || {
+        git_helper::run_git_command_consuming_stdout(
+            &dense_repo,
+            vec!["reset", "--hard", &dense_revision],
+            &sandbox,
+        )
+    })?;
 
     if let Err(_e) = perform("Applying the sparse profile", || {
-        sparse_repos::set_sparse_config(&repo, &sandbox)?;
+        sparse_repos::set_sparse_config(&sparse_repo, &sandbox)?;
 
         let sparse_profile_output_file =
             File::open(&sparse_profile_output_path).context("opening new sparse profile")?;
@@ -134,7 +190,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
             &sandbox,
         )?;
         scmd.ensure_success_or_log(
-            cmd.current_dir(&repo)
+            cmd.current_dir(&sparse_repo)
                 .arg("sparse-checkout")
                 .arg("set")
                 .arg("--stdin"),
@@ -157,7 +213,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
                 &sandbox,
             )?;
             scmd.ensure_success_or_log(
-                cmd.current_dir(&repo)
+                cmd.current_dir(&sparse_repo)
                     .arg("sparse-checkout")
                     .arg("set")
                     .arg("--cone")
@@ -170,7 +226,7 @@ pub fn run(sandbox: &Sandbox, repo: &Path) -> Result<()> {
     }
 
     perform("Updating the sync point", || {
-        sparse_repos::configure_sparse_sync_point(&repo, &sandbox)
+        sparse_repos::configure_sparse_sync_point(&sparse_repo, &sandbox)
     })?;
 
     Ok(())
