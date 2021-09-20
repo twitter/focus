@@ -133,6 +133,20 @@ enum Subcommand {
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
+
+    Outline {
+        /// Path to the existing dense repository that the sparse clone shall be based upon.
+        #[structopt(long, parse(from_os_str))]
+        dense_repo: PathBuf,
+
+        // /// The name of the branch to clone.
+        // #[structopt(long)]
+        // branch: String,
+
+        /// Bazel build coordinates to include as an ad-hoc layer set, cannot be specified in combination with 'layers'.
+        #[structopt(long, default_value = "")]
+        coordinates: CommaSeparatedStrings,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -184,6 +198,8 @@ fn main() -> Result<()> {
             filter_sparse,
             generate_project_view,
         } => {
+            let dense_repo = std::fs::canonicalize(dense_repo).context("canonicalizing path")?;
+
             let layers = filter_empty_strings(layers.0);
             let coordinates = filter_empty_strings(coordinates.0);
 
@@ -213,22 +229,48 @@ fn main() -> Result<()> {
         Subcommand::Sync {
             dense_repo,
             sparse_repo,
-        } => subcommands::sync::run(&sandbox, &dense_repo, &sparse_repo),
+        } => {
+            let dense_repo = std::fs::canonicalize(dense_repo)?;
+            let sparse_repo = std::fs::canonicalize(sparse_repo)?;
+            subcommands::sync::run(&sandbox, &dense_repo, &sparse_repo)
+        }
 
-        Subcommand::AvailableLayers { repo } => subcommands::available_layers::run(&repo),
+        Subcommand::AvailableLayers { repo } => {
+            let repo = std::fs::canonicalize(repo)?;
+            subcommands::available_layers::run(&repo)
+        }
 
-        Subcommand::SelectedLayers { repo } => subcommands::selected_layers::run(&repo),
+        Subcommand::SelectedLayers { repo } => {
+            let repo = std::fs::canonicalize(repo)?;
+            subcommands::selected_layers::run(&repo)
+        }
 
-        Subcommand::PushLayer { repo, names } => subcommands::push_layer::run(&repo, names),
+        Subcommand::PushLayer { repo, names } => {
+            let repo = std::fs::canonicalize(repo)?;
+            subcommands::push_layer::run(&repo, names)
+        }
 
-        Subcommand::PopLayer { repo, count } => subcommands::pop_layer::run(&repo, count),
+        Subcommand::PopLayer { repo, count } => {
+            let repo = std::fs::canonicalize(repo)?;
+            subcommands::pop_layer::run(&repo, count)
+        }
 
-        Subcommand::RemoveLayer { repo, names } => subcommands::remove_layer::run(&repo, names),
+        Subcommand::RemoveLayer { repo, names } => {
+            let repo = std::fs::canonicalize(repo)?;
+            subcommands::remove_layer::run(&repo, names)
+        }
 
         Subcommand::ListRepos {} => subcommands::list_repos::run(),
 
         Subcommand::DetectBuildGraphChanges { repo } => {
+            let repo = std::fs::canonicalize(repo)?;
             subcommands::detect_build_graph_changes::run(&sandbox, &repo)
         }
+
+        Subcommand::Outline { repo, count } => {
+            let repo = std::fs::canonicalize(repo)?;
+            subcommands::pop_layer::run(&repo, count)
+        }
+
     }
 }

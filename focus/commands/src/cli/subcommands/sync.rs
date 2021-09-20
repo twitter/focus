@@ -35,7 +35,6 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
     use std::io::Write;
     use std::os::unix::ffi::OsStrExt;
 
-    let dense_repo = std::fs::canonicalize(dense_repo).context("canonicalizing dense repo path")?;
     let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, &sandbox)?;
     let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, &sandbox)?;
 
