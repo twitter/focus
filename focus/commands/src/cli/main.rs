@@ -137,12 +137,12 @@ enum Subcommand {
     Outline {
         /// Path to the existing dense repository that the sparse clone shall be based upon.
         #[structopt(long, parse(from_os_str))]
-        dense_repo: PathBuf,
+        source: PathBuf,
 
-        // /// The name of the branch to clone.
-        // #[structopt(long)]
-        // branch: String,
-
+        /// Path to the existing dense repository that the sparse clone shall be based upon.
+        #[structopt(long, parse(from_os_str))]
+        mount_point: PathBuf,
+        
         /// Bazel build coordinates to include as an ad-hoc layer set, cannot be specified in combination with 'layers'.
         #[structopt(long, default_value = "")]
         coordinates: CommaSeparatedStrings,
@@ -267,9 +267,9 @@ fn main() -> Result<()> {
             subcommands::detect_build_graph_changes::run(&sandbox, &repo)
         }
 
-        Subcommand::Outline { repo, count } => {
-            let repo = std::fs::canonicalize(repo)?;
-            subcommands::pop_layer::run(&repo, count)
+        Subcommand::Outline { source, mount_point, coordinates } => {
+            let source = std::fs::canonicalize(source)?;
+            subcommands::outline::run(&source, &mount_point, coordinates.0)
         }
 
     }
