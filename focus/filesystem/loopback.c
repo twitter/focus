@@ -13,6 +13,8 @@
  * Amit Singh <http://osxbook.com>
  */
 
+#define UNUSED(var) (void)var
+
 #include <AvailabilityMacros.h>
 
 #if MAC_OS_X_VERSION_MIN_REQUIRED < 1050
@@ -31,6 +33,7 @@
 
 #include <fuse.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -303,6 +306,7 @@ loopback_rename(const char *from, const char *to)
 static int
 loopback_exchange(const char *path1, const char *path2, unsigned long options)
 {
+    UNUSED(options);
     int res;
 
 #if MAC_OS_X_VERSION_MIN_REQUIRED < 101200
@@ -347,6 +351,9 @@ loopback_fsetattr_x(const char *path, struct setattr_x *attr,
     int res;
     uid_t uid = -1;
     gid_t gid = -1;
+    bool should_change_ownership = false;
+
+    UNUSED(path);
 
     if (SETATTR_WANTS_MODE(attr)) {
         res = fchmod(fi->fh, attr->mode);
@@ -357,13 +364,15 @@ loopback_fsetattr_x(const char *path, struct setattr_x *attr,
 
     if (SETATTR_WANTS_UID(attr)) {
         uid = attr->uid;
+        should_change_ownership = true;
     }
 
     if (SETATTR_WANTS_GID(attr)) {
         gid = attr->gid;
+        should_change_ownership = true;
     }
 
-    if ((uid != -1) || (gid != -1)) {
+    if (should_change_ownership) {
         res = fchown(fi->fh, uid, gid);
         if (res == -1) {
             return -errno;
@@ -468,6 +477,7 @@ loopback_setattr_x(const char *path, struct setattr_x *attr)
     int res;
     uid_t uid = -1;
     gid_t gid = -1;
+    bool should_change_ownership = false;
 
     if (SETATTR_WANTS_MODE(attr)) {
         res = lchmod(path, attr->mode);
@@ -478,13 +488,15 @@ loopback_setattr_x(const char *path, struct setattr_x *attr)
 
     if (SETATTR_WANTS_UID(attr)) {
         uid = attr->uid;
+        should_change_ownership = true;
     }
 
     if (SETATTR_WANTS_GID(attr)) {
         gid = attr->gid;
+        should_change_ownership = true;
     }
 
-    if ((uid != -1) || (gid != -1)) {
+    if (should_change_ownership) {
         res = lchown(path, uid, gid);
         if (res == -1) {
             return -errno;
@@ -802,6 +814,11 @@ loopback_listxattr(const char *path, char *list, size_t size)
             char *curr = list;
             do {
                 size_t thislen = strlen(curr) + 1;
+                if (thislen >= _POSIX_SSIZE_MAX) {
+                    perror("unhandled case!");
+                    abort();
+                }
+
                 if (strcmp(curr, G_KAUTH_FILESEC_XATTR) == 0) {
                     memmove(curr, curr + thislen, res - len - thislen);
                     res -= thislen;
@@ -809,8 +826,10 @@ loopback_listxattr(const char *path, char *list, size_t size)
                 }
                 curr += thislen;
                 len += thislen;
-            } while (len < res);
+            } while ((ssize_t)len < res);
         } else {
+            perror("unhandled case!");
+            abort();
             /*
             ssize_t res2 = getxattr(path, G_KAUTH_FILESEC_XATTR, NULL, 0, 0,
                                     XATTR_NOFOLLOW);
@@ -861,6 +880,8 @@ loopback_fallocate(const char *path, int mode, off_t offset, off_t length,
 {
     fstore_t fstore;
 
+    UNUSED(path);
+
     if (!(mode & PREALLOCATE)) {
         return -ENOTSUP;
     }
@@ -894,6 +915,7 @@ loopback_fallocate(const char *path, int mode, off_t offset, off_t length,
 static int
 loopback_setvolname(const char *name)
 {
+    UNUSED(name);
     return 0;
 }
 
@@ -915,7 +937,8 @@ loopback_init(struct fuse_conn_info *conn)
 void
 loopback_destroy(void *userdata)
 {
-    /* nothing */
+    /* do nothing */
+    UNUSED(userdata);
 }
 
 static struct fuse_operations loopback_oper = {
@@ -991,3 +1014,4 @@ main(int argc, char *argv[])
     fuse_opt_free_args(&args);
     return res;
 }
+
