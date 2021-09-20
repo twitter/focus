@@ -178,6 +178,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "filesystem"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cc",
+ "dirs",
+ "env_logger",
+ "log",
+ "nix",
+ "signal-hook",
+ "thiserror",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
