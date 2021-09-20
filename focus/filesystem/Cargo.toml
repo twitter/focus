@@ -21,13 +21,5 @@ name = "internals"
 path = "src/lib.rs"
 
 [target.x86_64-apple-darwin]
-# rustc-flags = "-D_FILE_OFFSET_BITS=64 -D_DARWIN_USE_64_BIT_INODE"
 rustc-link-lib = ["osxfuse"]
 rustc-link-search = ["/usr/local/lib"]
-
-# rustc-flags = "-L /usr/local/lib"
-# rustc-cfg = ['key="value"']
-# rustc-env = {key = "value"}
-# rustc-cdylib-link-arg = ["-losxfuse.2"]
-
-# runner = "foo"  # Searches `PATH` for `foo`.
