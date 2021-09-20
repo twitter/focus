@@ -16,10 +16,10 @@ thiserror = "1.0.28"
 [build-dependencies]
 cc = "1.0"
 
-[lib]
-name = "internals"
-path = "src/lib.rs"
-
 [target.x86_64-apple-darwin]
 rustc-link-lib = ["osxfuse"]
 rustc-link-search = ["/usr/local/lib"]
+
+[lib]
+name = "internals"
+path = "src/lib.rs"
