@@ -19,8 +19,7 @@ fn add_os_specific_flags(builder: &mut cc::Build) {
 }
 
 fn main() {
-    // let cflags = std::env::var("CFLAGS");
-    // let ldflags = std::env::var("LDFLAGS");
+    println!("cargo:rerun-if-changed=loopback.c");
 
     let mut builder = cc::Build::new();
     builder.file("loopback.c");
