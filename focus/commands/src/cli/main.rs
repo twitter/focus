@@ -25,6 +25,7 @@ use subcommands::remove_layer;
 use tracker::Tracker;
 
 use std::{
+    ffi::OsString,
     fmt::Display,
     path::{Path, PathBuf},
     str::FromStr,
@@ -33,7 +34,19 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::{app::App, subcommands::{available_layers, pop_layer, push_layer, selected_layers}};
+use crate::{
+    app::App,
+    subcommands::{available_layers, pop_layer, push_layer, selected_layers},
+};
+
+fn the_name_of_this_binary() -> String {
+    std::env::args_os()
+        .next()
+        .unwrap_or(OsString::from("focus"))
+        .to_str()
+        .unwrap()
+        .to_owned()
+}
 
 #[derive(Debug)]
 struct CommaSeparatedStrings(Vec<String>);
@@ -118,32 +131,30 @@ enum Subcommand {
 
 #[derive(StructOpt, Debug)]
 enum LayersOpts {
-        /// List all available layers
-        Available {
-        },
-    
-        /// List currently selected layers
-        Selected {
-        },
-    
-        /// Push a layer onto the top of the stack of currently selected layers
-        Push {    
-            /// Names of layers to push.
-            names: Vec<String>,
-        },
-    
-        /// Pop one or more layer(s) from the top of the stack of current selected layers
-        Pop {
-            /// The number of layers to pop.
-            #[structopt(long, default_value = "1")]
-            count: usize,
-        },
-    
-        /// Filter out one or more layer(s) from the stack of currently selected layers
-        Remove {
-            /// Names of the layers to be removed.
-            names: Vec<String>,
-        },
+    /// List all available layers
+    Available {},
+
+    /// List currently selected layers
+    List {},
+
+    /// Push a layer onto the top of the stack of currently selected layers
+    Push {
+        /// Names of layers to push.
+        names: Vec<String>,
+    },
+
+    /// Pop one or more layer(s) from the top of the stack of current selected layers
+    Pop {
+        /// The number of layers to pop.
+        #[structopt(long, default_value = "1")]
+        count: usize,
+    },
+
+    /// Filter out one or more layer(s) from the stack of currently selected layers
+    Remove {
+        /// Names of the layers to be removed.
+        names: Vec<String>,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -152,35 +163,32 @@ struct LayerSubcommand {
     verb: LayersOpts,
 }
 
-
 #[derive(StructOpt, Debug)]
 enum AdhocOpts {
-        /// List all available layers
-        Available {
-        },
-    
-        /// List currently selected layers
-        Selected {
-        },
-    
-        /// Push a layer onto the top of the stack of currently selected layers
-        Push {    
-            /// Names of layers to push.
-            names: Vec<String>,
-        },
-    
-        /// Pop one or more layer(s) from the top of the stack of current selected layers
-        Pop {
-            /// The number of layers to pop.
-            #[structopt(long, default_value = "1")]
-            count: usize,
-        },
-    
-        /// Filter out one or more layer(s) from the stack of currently selected layers
-        Remove {
-            /// Names of the layers to be removed.
-            names: Vec<String>,
-        },
+    /// List all available layers
+    Available {},
+
+    /// List currently selected layers
+    Selected {},
+
+    /// Push a layer onto the top of the stack of currently selected layers
+    Push {
+        /// Names of layers to push.
+        names: Vec<String>,
+    },
+
+    /// Pop one or more layer(s) from the top of the stack of current selected layers
+    Pop {
+        /// The number of layers to pop.
+        #[structopt(long, default_value = "1")]
+        count: usize,
+    },
+
+    /// Filter out one or more layer(s) from the stack of currently selected layers
+    Remove {
+        /// Names of the layers to be removed.
+        names: Vec<String>,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -188,7 +196,6 @@ struct AdhocSubcommand {
     #[structopt(subcommand)]
     verb: AdhocOpts,
 }
-
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Focused Development Tools")]
@@ -321,30 +328,46 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Layer { repo, args } => {
+            // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
+            let mut args = args.clone();
+            args.insert(0, format!("{} layer", the_name_of_this_binary()));
             let layer_subcommand = LayerSubcommand::from_iter(args.iter());
             match layer_subcommand.verb {
-                LayersOpts::Available {  } => { available_layers::run(&repo)?; Ok(()) },
-                LayersOpts::Selected {  } => { selected_layers::run(&repo)?; Ok(()) },
-                LayersOpts::Push { names } => { push_layer::run(&repo, names)?; Ok(()) },
-                LayersOpts::Pop { count } => { pop_layer::run(&repo, count)?; Ok(()) },
-                LayersOpts::Remove { names } => { remove_layer::run(&repo, names); Ok(()) },
-            }            
-        }
-
-        // Subcommand::Adhoc { repo, args } =>  {
-        //     let ui = cloned_app.ui();
-        //     let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
-        //     match adhoc_subcommand.verb {
-        //         AdhocOpts::Available {  } => todo!(),
-        //         AdhocOpts::Selected {  } => todo!(),
-        //         AdhocOpts::Push { names } => todo!(),
-        //         AdhocOpts::Pop { count } => todo!(),
-        //         AdhocOpts::Remove { names } => todo!(),
-        //     }
-        //     // let _ = ui.status(format!("UI Test"));
-        //     // ui.set_enabled(interactive);
-        //     Ok(())
-        // }
+                LayersOpts::Available {} => {
+                    available_layers::run(&repo)?;
+                    Ok(())
+                }
+                LayersOpts::List {} => {
+                    selected_layers::run(&repo)?;
+                    Ok(())
+                }
+                LayersOpts::Push { names } => {
+                    push_layer::run(&repo, names)?;
+                    Ok(())
+                }
+                LayersOpts::Pop { count } => {
+                    pop_layer::run(&repo, count)?;
+                    Ok(())
+                }
+                LayersOpts::Remove { names } => {
+                    remove_layer::run(&repo, names);
+                    Ok(())
+                }
+            }
+        } // Subcommand::Adhoc { repo, args } =>  {
+          //     let ui = cloned_app.ui();
+          //     let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
+          //     match adhoc_subcommand.verb {
+          //         AdhocOpts::Available {  } => todo!(),
+          //         AdhocOpts::Selected {  } => todo!(),
+          //         AdhocOpts::Push { names } => todo!(),
+          //         AdhocOpts::Pop { count } => todo!(),
+          //         AdhocOpts::Remove { names } => todo!(),
+          //     }
+          //     // let _ = ui.status(format!("UI Test"));
+          //     // ui.set_enabled(interactive);
+          //     Ok(())
+          // }
     }
 }
 
