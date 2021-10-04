@@ -25,7 +25,6 @@ use crate::git_helper;
 use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
-use crate::temporary_working_directory::TemporaryWorkingDirectory;
 use crate::tracker::Tracker;
 use crate::ui::ProgressReporter;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
@@ -99,8 +98,6 @@ pub fn config_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App
 
 // Set git config key focus.sync-point to HEAD
 fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result<()> {
-    use std::io::Write;
-
     let sparse_focus_dir = sparse_repo.join(".focus");
     if !sparse_focus_dir.is_dir() {
         std::fs::create_dir(sparse_focus_dir.as_path()).with_context(|| {
@@ -303,10 +300,8 @@ pub fn create_sparse_clone(
     sparse_repo: &PathBuf,
     branch: &String,
     spec: &Spec,
-    filter_sparse: bool,
-    all_branches: bool,
-    generate_project_view: bool,
     app: Arc<App>,
+
 ) -> Result<()> {
     let mut adhoc_layer_set: Option<LayerSet> = None;
 

@@ -19,9 +19,6 @@ pub fn run(
         sparse_repo,
         branch,
         spec,
-        filter_sparse,
-        all_branches,
-        generate_project_view,
         app,
     )
 }
