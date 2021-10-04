@@ -75,18 +75,6 @@ enum Subcommand {
         /// Named layers to include. Comma separated, loaded from the dense repository's `focus/projects` directory), cannot be specified in combination with 'coordinates'.
         #[structopt(long, default_value = "")]
         layers: CommaSeparatedStrings,
-
-        /// Supress copying of all personal branches and instead copy the given branch only.
-        #[structopt(long)]
-        all_branches: bool,
-
-        /// Experimental, NOT RECOMMENDED: use sparse filtering (`--filter:oid:...`) when cloning.
-        #[structopt(long)]
-        filter_sparse: bool,
-
-        /// When specified a Bazel project view will be written to `focus-<repo-name>.bazelproject` in the sparse repository.
-        #[structopt(long)]
-        generate_project_view: bool,
     },
 
     /// Update the sparse checkout to reflect changes to the build graph.
@@ -231,9 +219,6 @@ fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> R
             branch,
             layers,
             coordinates,
-            all_branches,
-            filter_sparse,
-            generate_project_view,
         } => {
             let dense_repo = expand_tilde(dense_repo)?;
             let sparse_repo = expand_tilde(sparse_repo)?;
@@ -269,9 +254,6 @@ fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> R
                 &sparse_repo,
                 &branch,
                 &spec,
-                filter_sparse,
-                all_branches,
-                generate_project_view,
                 cloned_app.clone(),
             )
         }
