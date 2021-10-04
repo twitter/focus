@@ -2,9 +2,7 @@ use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
 use std::{
-    cell::Cell,
     collections::HashMap,
-    convert::TryInto,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{exit, Command, Stdio},

@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use std::{path::PathBuf, sync::Arc};
 
-use crate::{sandbox::Sandbox, sparse_repos::Spec};
+use crate::{app::App, sparse_repos::Spec};
 
 pub fn run(
     dense_repo: &PathBuf,
@@ -10,8 +10,9 @@ pub fn run(
     branch: &String,
     spec: &Spec,
     filter_sparse: bool,
+    all_branches: bool,
     generate_project_view: bool,
-    sandbox: Arc<Sandbox>,
+    app: Arc<App>,
 ) -> Result<()> {
     crate::sparse_repos::create_sparse_clone(
         dense_repo,
@@ -19,7 +20,8 @@ pub fn run(
         branch,
         spec,
         filter_sparse,
+        all_branches,
         generate_project_view,
-        sandbox,
+        app,
     )
 }

@@ -4,7 +4,7 @@
             "name": "mandatory",
             "description": "Mandatory dependencies imposed by the repository",
             "coordinates": [
-                "//mandatory_z/..."
+                "bazel://mandatory_z/..."
             ]
         }
     ]

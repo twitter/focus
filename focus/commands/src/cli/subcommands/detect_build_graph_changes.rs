@@ -2,10 +2,10 @@ use anyhow::{bail, Context, Result};
 
 use std::path::{Path, PathBuf};
 
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 
+use crate::app::App;
 use crate::git_helper;
-use crate::sandbox::Sandbox;
 
 fn build_graph_involved_filename_predicate(name: &Path) -> bool {
     if let Some(extension) = name.extension() {
@@ -20,15 +20,20 @@ fn build_graph_involved_filename_predicate(name: &Path) -> bool {
     false
 }
 
-fn find_committed_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
-    let sync_state = git_helper::read_config(repo.as_path(), "focus.sync-point", sandbox)
+fn find_committed_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
+    let sync_state = git_helper::read_config(repo.as_path(), "focus.sync-point", app.clone())
         .context("reading sync state")?;
 
     let revspec = format!("{}..HEAD", &sync_state.trim());
+    let description = format!(
+        "Finding committed changes since the last sync point ({})",
+        &revspec
+    );
     let output = git_helper::run_git_command_consuming_stdout(
+        description,
         repo,
         vec!["diff", "--name-only", revspec.as_str()],
-        sandbox,
+        app.clone(),
     )?;
     let changed_paths: Vec<&str> = output.lines().collect::<_>();
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
@@ -42,11 +47,12 @@ fn find_committed_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
     Ok(!&changed_paths.is_empty())
 }
 
-fn find_uncommitted_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
+fn find_uncommitted_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
     let output = git_helper::run_git_command_consuming_stdout(
+        "Finding uncommitted changes".to_owned(),
         repo,
         vec!["status", "--porcelain", "--no-renames"],
-        sandbox,
+        app,
     )?;
     let all_changes: Vec<&str> = output.lines().collect::<_>();
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
@@ -70,16 +76,16 @@ fn find_uncommitted_changes(sandbox: &Sandbox, repo: &PathBuf) -> Result<bool> {
     Ok(!&build_involved_changed_paths.is_empty())
 }
 
-pub fn run(sandbox: &Sandbox, repo: &PathBuf) -> Result<()> {
+pub fn run(app: Arc<App>, repo: &PathBuf) -> Result<()> {
     let (uncommitted_tx, uncommitted_rx) = mpsc::channel();
     let uncommited_finder_thread = {
         let cloned_repo = repo.clone();
-        let cloned_sandbox = sandbox.clone();
+        let cloned_sandbox = app.clone();
 
         std::thread::spawn(move || {
             uncommitted_tx
                 .send(
-                    find_uncommitted_changes(&cloned_sandbox, &cloned_repo)
+                    find_uncommitted_changes(cloned_sandbox.clone(), &cloned_repo)
                         .expect("error detecting uncommitted changes"),
                 )
                 .expect("send failed");
@@ -89,12 +95,12 @@ pub fn run(sandbox: &Sandbox, repo: &PathBuf) -> Result<()> {
     let (committed_tx, committed_rx) = mpsc::channel();
     let committed_finder_thread = {
         let cloned_repo = repo.clone();
-        let cloned_sandbox = sandbox.clone();
+        let cloned_sandbox = app.clone();
 
         std::thread::spawn(move || {
             committed_tx
                 .send(
-                    find_committed_changes(&cloned_sandbox, &cloned_repo)
+                    find_committed_changes(cloned_sandbox, &cloned_repo)
                         .expect("error detecting committed changes"),
                 )
                 .expect("send failed");

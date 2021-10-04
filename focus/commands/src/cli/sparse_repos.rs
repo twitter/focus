@@ -1,38 +1,54 @@
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{bail, Context, Result};
 use internals::util::lock_file::LockFile;
 
+use std::collections::HashSet;
+use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
-use std::os::unix::fs::symlink;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::thread;
-use std::{
-    collections::BTreeSet,
-    path::PathBuf,
-    process::Stdio,
-    sync::{Arc, Barrier},
-};
+use std::{collections::BTreeSet, path::PathBuf, process::Stdio, sync::Arc};
 
-use crate::git_helper::{self, git_binary, git_command};
-use crate::model::{self, Layer, LayerSet, LayerSets, RichLayerSet};
-use crate::sandbox::Sandbox;
+use crate::app::App;
+use crate::coordinate::Coordinate;
+use crate::coordinate::CoordinateSet;
+use crate::coordinate_resolver::CacheOptions;
+use crate::coordinate_resolver::RepoState;
+use crate::coordinate_resolver::ResolutionRequest;
+use crate::coordinate_resolver::Resolver;
+use crate::coordinate_resolver::RoutingResolver;
+use crate::git_helper;
+use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
+use crate::temporary_working_directory::TemporaryWorkingDirectory;
 use crate::tracker::Tracker;
+use crate::ui::ProgressReporter;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 
 // TODO: Revisit this...
 const SPARSE_PROFILE_PRELUDE: &str =
     "/tools\n/pants-plugins/\n/pants-support/\n/3rdparty/\n/focus/\n";
 
-pub fn configure_dense_repo(dense_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
-    git_helper::write_config(dense_repo, "uploadPack.allowFilter", "true", sandbox)
+fn report_progress<T>(app: Arc<App>, message: T) -> Result<ProgressReporter>
+where
+    T: AsRef<str>,
+{
+    Ok(ProgressReporter::new(
+        app.clone(),
+        message.as_ref().to_string(),
+    )?)
 }
 
-pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
+pub fn configure_dense_repo(dense_repo: &PathBuf, app: Arc<App>) -> Result<()> {
+    git_helper::write_config(dense_repo, "uploadPack.allowFilter", "true", app)
+}
+
+pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _app: Arc<App>) -> Result<()> {
     Ok(())
 }
 
@@ -48,30 +64,41 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
 
     std::fs::create_dir_all(&sparse_pruned_odb).context("creating sparse pruned-odb")?;
 
-    let mut buf = Vec::from(dense_odb.as_os_str().as_bytes());
-    buf.push(b'\n');
-    buf.extend(dense_pruned_odb.as_os_str().as_bytes());
-    buf.push(b'\n');
+    let mut buf = Vec::<u8>::new();
+    if dense_odb.is_dir() {
+        buf.extend(dense_odb.as_os_str().as_bytes());
+        buf.push(b'\n');
+    }
+    if dense_pruned_odb.is_dir() {
+        buf.extend(dense_pruned_odb.as_os_str().as_bytes());
+        buf.push(b'\n');
+    }
     buf.extend(sparse_pruned_odb.as_os_str().as_bytes());
     buf.push(b'\n');
-    std::fs::write(alternates_path, buf)?;
+    std::fs::write(alternates_path, buf).context("Failed to write the alternates file")?;
 
     Ok(())
 }
 
 // Set git config key focus.sync-point to HEAD
-pub fn configure_sparse_sync_point(sparse_repo: &Path, sandbox: &Sandbox) -> Result<()> {
+pub fn configure_sparse_sync_point(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     let head_str = git_helper::run_git_command_consuming_stdout(
+        "Reading the current revision to use as a sync point".to_owned(),
         &sparse_repo,
         vec!["rev-parse", "HEAD"],
-        sandbox,
+        app.clone(),
     )?;
 
-    git_helper::write_config(sparse_repo, "focus.sync-point", head_str.as_str(), sandbox)
+    git_helper::write_config(sparse_repo, "focus.sync-point", head_str.as_str(), app)
+}
+
+// Disable filesystem monitor
+pub fn config_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
+    git_helper::unset_config(sparse_repo, "core.fsmonitor", app)
 }
 
 // Set git config key focus.sync-point to HEAD
-fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _sandbox: &Sandbox) -> Result<()> {
+fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result<()> {
     use std::io::Write;
 
     let sparse_focus_dir = sparse_repo.join(".focus");
@@ -99,7 +126,7 @@ fn configure_sparse_repo_final(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     _branch: &str,
-    sandbox: &Sandbox,
+    app: Arc<App>,
 ) -> Result<()> {
     // TODO: Figure out the remote based on the branch fetch/push config rather than assuming 'origin'. Kinda pedantic, but correct.
     let dense_git_dir = dense_repo.join(".git");
@@ -109,9 +136,19 @@ fn configure_sparse_repo_final(
         .join("objects")
         .join("journals")
         .join("origin");
-    let journal_state_lock_path = origin_journal_path.join("state.bin.lock");
-    let _journal_state_lock =
-        LockFile::new(&journal_state_lock_path).context("acquiring a lock on journal state")?;
+
+    let _origin_journal_state_lock = {
+        let journal_state_lock_path = origin_journal_path.join("state.bin.lock");
+        if origin_journal_path.is_dir() {
+            Some(
+                LockFile::new(&journal_state_lock_path)
+                    .context("acquiring a lock on journal state")?,
+            )
+        } else {
+            None
+        }
+    };
+
     let sparse_journal_state_lock_path = sparse_git_dir
         .join("objects")
         .join("journals")
@@ -125,68 +162,49 @@ fn configure_sparse_repo_final(
         "repo.d",
         "objects/journals",
     ];
+
     for name in paths_to_copy {
+        let app = app.clone();
         let from = dense_git_dir.join(name);
         if !from.exists() {
-            log::warn!("Dense path {} does not exist!", &from.display());
             continue;
         }
         let to = sparse_git_dir.join(name);
-        log::debug!("Copying {} -> {}", &from.display(), &to.display());
-        let (mut cmd, scmd) = SandboxCommand::new("cp", sandbox)?;
+        let description = format!("Copying {} -> {}", &from.display(), &to.display());
+        let (mut cmd, scmd) = SandboxCommand::new(description.clone(), "cp", app)?;
         scmd.ensure_success_or_log(
             cmd.arg("-r").arg(&from).arg(&to),
             SandboxCommandOutput::Stderr,
-            &format!("Copying {} -> {}", &from.display(), &to.display()),
+            &description,
         )?;
     }
 
-    let dense_url: OsString = {
-        let mut url = OsString::from("file://");
-        url.push(dense_repo.as_os_str());
-        url
-    };
-
-    git_helper::remote_add(&sparse_repo, "dense", dense_url.as_os_str(), &sandbox)
+    git_helper::remote_add(&sparse_repo, "dense", dense_repo.as_os_str(), app.clone())
         .context("adding dense remote")?;
 
     if sparse_journal_state_lock_path.exists() {
         std::fs::remove_file(sparse_journal_state_lock_path)?;
     }
 
-    configure_sparse_sync_point(sparse_repo, sandbox).context("configuring the sync point")?;
+    configure_sparse_sync_point(sparse_repo, app.clone()).context("configuring the sync point")?;
 
-    setup_bazel_preflight_script(sparse_repo, sandbox).context("setting up build hooks")?;
+    setup_bazel_preflight_script(sparse_repo, app.clone()).context("setting up build hooks")?;
 
     Ok(())
 }
 
-fn create_dense_link(dense_repo: &PathBuf, sparse_repo: &PathBuf) -> Result<()> {
-    let link_path = sparse_repo.join(".dense");
-    symlink(dense_repo, link_path).map_err(|e| Error::new(e))
-}
+
 // Write an object to a repo returning its identity.
-fn git_hash_object(repo: &PathBuf, file: &PathBuf, sandbox: &Sandbox) -> Result<String> {
+fn git_hash_object(repo: &PathBuf, file: &PathBuf, app: Arc<App>) -> Result<String> {
     git_helper::run_git_command_consuming_stdout(
+        format!("Writing {} to the object store", file.display()),
         repo,
         vec![
             OsString::from("hash-object"),
             OsString::from("-w"),
             file.as_os_str().to_owned(),
         ],
-        sandbox,
-    )
-}
-
-fn git_remote_get_url(repo: &PathBuf, name: &str, sandbox: &Sandbox) -> Result<String> {
-    git_helper::run_git_command_consuming_stdout(
-        repo,
-        vec![
-            OsString::from("remote"),
-            OsString::from("get-url"),
-            OsString::from(name),
-        ],
-        sandbox,
+        app,
     )
 }
 
@@ -220,18 +238,79 @@ pub enum Spec {
     Layers(Vec<String>),
 }
 
+/// RepoContextualizedSpec pairs a repository with a spec, allowing for the resolving of coordinates.
+struct RepoContextualizedSpec {
+    repo: PathBuf,
+    spec: Spec,
+}
+
+impl RepoContextualizedSpec {
+    pub fn new(repo: PathBuf, spec: Spec) -> Self {
+        Self { repo, spec }
+    }
+}
+
+impl TryInto<HashSet<Coordinate>> for RepoContextualizedSpec {
+    fn try_into(self) -> Result<HashSet<Coordinate>> {
+        let layer_sets = LayerSets::new(&self.repo);
+        let layer_set = layer_sets
+            .mandatory_layers()
+            .context("resolving mandatory layers")?;
+
+        let mut results = HashSet::<Coordinate>::new();
+
+        for layer in layer_set.layers() {
+            for coordinate in layer.coordinates() {
+                let coordinate = Coordinate::try_from(coordinate.as_str())
+                    .context("converting mandatory cooordinates")?;
+                results.insert(coordinate);
+            }
+        }
+
+        match self.spec {
+            Spec::Coordinates(coordinates) => {
+                for coordinate in coordinates {
+                    let coordinate =
+                        Coordinate::try_from(coordinate.as_str()).with_context(|| {
+                            format!("converting user-specified cooordinate {}", &coordinate)
+                        })?;
+                    results.insert(coordinate);
+                }
+            }
+            Spec::Layers(layer_names) => {
+                let layer_set = set_containing_layers(&self.repo, &layer_names)
+                    .context("resolving user-selected layers")?;
+                for layer in layer_set.layers() {
+                    for coordinate in layer.coordinates() {
+                        let coordinate =
+                            Coordinate::try_from(coordinate.as_str()).with_context(|| {
+                                format!("converting user-specified cooordinate {}", &coordinate)
+                            })?;
+                        results.insert(coordinate);
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    type Error = anyhow::Error;
+}
+
 pub fn create_sparse_clone(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
     spec: &Spec,
     filter_sparse: bool,
+    all_branches: bool,
     generate_project_view: bool,
-    sandbox: Arc<Sandbox>,
+    app: Arc<App>,
 ) -> Result<()> {
     let mut adhoc_layer_set: Option<LayerSet> = None;
 
-    let dense_sets = model::LayerSets::new(&dense_repo);
+    let dense_sets = LayerSets::new(&dense_repo);
     let mut layer_set = dense_sets
         .mandatory_layers()
         .context("resolving mandatory layers")?;
@@ -243,7 +322,7 @@ pub fn create_sparse_clone(
                 "adhoc",
                 "Ad hoc layer",
                 false,
-                coordinates,
+                coordinates.clone(),
             )]);
             adhoc_layer_set = Some(set.clone());
             set
@@ -262,31 +341,28 @@ pub fn create_sparse_clone(
     // Add the user selected set to the overall set
     layer_set.extend(&user_selected_set);
 
-    // Use coordinates_from_layers(repo, layer_names, sandbox)?
-
     let mut coordinates = Vec::<String>::new();
     for layer in layer_set.layers() {
         let layer_coordinates = layer.coordinates().clone();
         coordinates.extend(layer_coordinates);
     }
 
+    let cloned_app = app.clone();
     create_or_update_sparse_clone(
         &dense_repo,
         &sparse_repo,
         &branch,
         &coordinates,
-        filter_sparse,
-        generate_project_view,
         true,
-        sandbox,
+        cloned_app,
     )?;
 
     if let Some(set) = &adhoc_layer_set {
-        log::info!("Writing the adhoc layer set");
+        let _ = report_progress(app, "Writing the adhoc layer set");
         write_adhoc_layer_set(&sparse_repo, set).context("writing the adhoc layer set")?;
     } else {
         // We know that layers were specified since there's no adhoc layer set.
-        log::info!("Pushing the selected layers");
+        let _ = report_progress(app, "Pushing the selected layers");
         let names = user_selected_set
             .layers()
             .iter()
@@ -306,12 +382,15 @@ pub fn create_or_update_sparse_clone(
     sparse_repo: &PathBuf,
     branch: &String,
     coordinates: &Vec<String>,
-    filter_sparse: bool,
-    generate_project_view: bool,
     create: bool,
-    sandbox: Arc<Sandbox>,
+    app: Arc<App>,
 ) -> Result<()> {
+
     // TODO: Crash harder in threads to prevent extra work.
+    let sandbox = app.sandbox();
+
+    let coordinate_set =
+        CoordinateSet::try_from(coordinates).context("formulating coordinate set failed")?;
 
     if create {
         if sparse_repo.is_dir() {
@@ -333,13 +412,13 @@ pub fn create_or_update_sparse_clone(
         sandbox.path().join(project_view_name)
     };
 
-    configure_dense_repo(&dense_repo, sandbox.as_ref())
+    configure_dense_repo(&dense_repo, app.clone())
         .context("setting configuration options in the dense repo")?;
 
     // Make sure that the dense repo is in a clean state
     {
-        let cloned_sandbox = sandbox.clone();
-        let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, cloned_sandbox.as_ref())
+        let cloned_app = app.clone();
+        let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, cloned_app)
             .context("creating working tree synchronizer for dense repository")?;
         if !dense_sync
             .is_working_tree_clean()
@@ -350,173 +429,151 @@ pub fn create_or_update_sparse_clone(
     }
 
     // Being on the right branch in the dense repository is a prerequisite for any work.
-    switch_to_detached_branch_discarding_changes(&dense_repo, &branch, None, sandbox.as_ref())?;
+    switch_to_detached_branch_discarding_changes(&dense_repo, &branch, None, app.clone())?;
 
-    let profile_generation_barrier = Arc::new(Barrier::new(2));
-    let profile_generation_thread = {
-        let cloned_sandbox = sandbox.clone();
+    let profile_generation_handle = {
+        let cloned_app = app.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
-        let cloned_coordinates = coordinates.clone();
-        let cloned_profile_generation_barrier = profile_generation_barrier.clone();
+        let cloned_coordinate_set = coordinate_set.clone();
 
         thread::Builder::new()
             .name("SparseProfileGeneration".to_owned())
             .spawn(move || {
-                log::info!("Generating sparse profile");
+                let _ = cloned_app.ui().log(
+                    String::from("Profile Generation"),
+                    String::from("Generating sparse profile"),
+                );
+
                 generate_sparse_profile(
                     &cloned_dense_repo,
                     &cloned_sparse_profile_output,
-                    &cloned_coordinates,
-                    &cloned_sandbox.as_ref(),
+                    cloned_coordinate_set,
+                    cloned_app.clone(),
                 )
                 .expect("failed to generate a sparse profile");
-                log::info!("Finished generating sparse profile");
-                cloned_profile_generation_barrier.wait();
+
+                let _ = cloned_app.ui().log(
+                    String::from("Profile Generation"),
+                    String::from("Finished generating sparse profile"),
+                );
             })
-    };
+    }?;
 
-    let project_view_generation_thread = {
-        let cloned_sandbox = sandbox.clone();
-        let cloned_dense_repo = dense_repo.to_owned();
-        let cloned_project_view_output = project_view_output.clone();
-        let cloned_coordinates = coordinates.clone();
-
-        thread::Builder::new()
-            .name("ProjectViewGeneration".to_owned())
-            .spawn(move || {
-                if !generate_project_view {
-                    log::info!("Skipping generation of project view");
-                    return;
-                }
-
-                log::info!("Generating project view");
-                write_project_view_file(
-                    &cloned_dense_repo,
-                    &cloned_project_view_output,
-                    &cloned_coordinates,
-                    &cloned_sandbox.as_ref(),
-                )
-                .expect("generating the project view");
-                log::info!("Finished generating project view");
-            })
-    };
-
-    project_view_generation_thread?
-        .join()
-        .expect("project view generation thread exited abnormally");
-
-    let profile_generation_joinable = profile_generation_thread.context("getting joinable")?;
-    if filter_sparse {
-        // If we filter using the 'sparse' technique, we have to wait for the sparse profile to be
-        // complete before cloning (since it reads it from the dense repo during clone).
-        profile_generation_barrier.wait();
-    }
-
-    let clone_thread = {
+    let clone_handle = {
         if !create {
             return Ok(());
         }
 
-        let cloned_sandbox = sandbox.clone();
+        let cloned_app = app.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_repo = sparse_repo.to_owned();
         let cloned_branch = branch.clone();
-        let cloned_sparse_profile_output = sparse_profile_output.clone();
 
         thread::Builder::new()
             .name("CloneRepository".to_owned())
             .spawn(move || {
-                log::info!("Creating a template clone");
+                let _ = cloned_app.ui().log(
+                    String::from("Profile Generation"),
+                    String::from("Creating a template clone"),
+                );
                 create_empty_sparse_clone(
                     &cloned_dense_repo,
                     &cloned_sparse_repo,
                     &cloned_branch,
-                    &cloned_sparse_profile_output,
-                    filter_sparse,
-                    &cloned_sandbox,
+                    cloned_app.clone(),
                 )
                 .expect("failed to create an empty sparse clone");
-                configure_sparse_repo_initial(&cloned_sparse_repo, &cloned_sandbox)
+                configure_sparse_repo_initial(&cloned_sparse_repo, cloned_app.clone())
                     .expect("failed to configure sparse clone");
-                log::info!("Finished creating a template clone");
+                let _ = cloned_app.ui().log(
+                    String::from("Profile Generation"),
+                    String::from("Finished creating a template clone"),
+                );
+                // N.B. For now, we set up alternates because they allow for journaled fetches
+                set_up_alternates(&cloned_sparse_repo, &cloned_dense_repo)
+                    .expect("Setting up object database alternates failed");
             })
-    };
-    clone_thread?
-        .join()
-        .expect("clone thread exited abnormally");
+    }?;
 
-    // N.B. We set up an alternate because it allows for journaled fetches
-    set_up_alternates(&sparse_repo, &dense_repo).context("setting up an alternate")?;
-
-    if !filter_sparse {
-        // If we haven't awaited the profile generation thread, we we must now.
-        profile_generation_barrier.wait();
+    // The clone has to finish before we can do anything else.
+    if let Err(e) = clone_handle.join() {
+        bail!("Cloning failed: {:?}", e);
     }
 
-    profile_generation_joinable
-        .join()
-        .expect("sparse profile generation thread exited abnormally");
+    if let Err(e) = profile_generation_handle.join() {
+        bail!("Profile Generation failed: {:?}", e);
+    }
+
     {
-        let cloned_sandbox = sandbox.clone();
+        let cloned_app = app.clone();
         let cloned_sparse_repo = sparse_repo.clone();
         let cloned_dense_repo = dense_repo.clone();
         let cloned_branch = branch.clone();
 
-        log::info!("Copying configuration");
+        let _ = cloned_app.ui().log(
+            String::from("Repository Setup"),
+            String::from("Copying configuration"),
+        );
         if create {
             configure_sparse_repo_final(
                 &cloned_dense_repo,
                 &cloned_sparse_repo,
                 &cloned_branch,
-                &cloned_sandbox,
+                cloned_app.clone(),
             )
             .context("failed to perform final configuration in the sparse repo")?;
-            create_dense_link(&cloned_dense_repo, &cloned_sparse_repo)
-                .context("failed to create a link to the dense repo in the sparse repo")?;
         }
 
-        log::info!("Configuring visible paths");
-        set_sparse_checkout(sparse_repo, &sparse_profile_output, &cloned_sandbox)
-            .context("setting up sparse checkout options")?;
+        let _ = cloned_app.ui().log(
+            String::from("Repository Setup"),
+            String::from("Configuring visible paths"),
+        );
+        set_sparse_checkout(sparse_repo, &sparse_profile_output, cloned_app.clone())
+            .context("Failed to set the sparse checkout file")?;
 
-        log::info!("Checking out the working copy");
-        checkout_working_copy(&cloned_sparse_repo, &cloned_sandbox)
-            .context("switching branches")?;
+        let _ = cloned_app.ui().log(
+            String::from("Repository Setup"),
+            String::from("Checking out the working copy"),
+        );
+        checkout_working_copy(&cloned_sparse_repo, cloned_app.clone())
+            .context("Failed to check out the working copy")?;
+        let _ = cloned_app.ui().log(
+            String::from("Repository Setup"),
+            String::from("Setting up other branches"),
+        );
 
-        log::info!("Moving the project view into place");
-        let project_view_file_name = &project_view_output
-            .file_name()
-            .context("getting the file name failed")?;
-        let project_view_destination = &cloned_sparse_repo.join(&project_view_file_name);
-        if project_view_output.is_file() {
-            std::fs::rename(project_view_output, project_view_destination)
-                .context("copying in the project view")?;
-        }
+        let _ = cloned_app.ui().log(
+            String::from("Repository Setup"),
+            String::from("Moving the project view into place"),
+        );
     }
 
     Tracker::default()
-        .ensure_registered(&sparse_repo, sandbox.as_ref())
+        .ensure_registered(&sparse_repo, app)
         .context("adding sparse repo to the list of tracked repos")?;
 
     Ok(())
 }
 
-pub fn set_sparse_config(sparse_repo: &Path, sandbox: &Sandbox) -> Result<()> {
-    git_helper::write_config(&sparse_repo, "core.sparseCheckout", "true", &sandbox)?;
-    git_helper::write_config(&sparse_repo, "core.sparseCheckoutCone", "true", &sandbox)?;
+pub fn set_sparse_config(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
+    git_helper::write_config(&sparse_repo, "core.sparseCheckout", "true", app.clone())?;
+    git_helper::write_config(&sparse_repo, "core.sparseCheckoutCone", "true", app.clone())?;
     Ok(())
 }
 
 pub fn set_sparse_checkout(
     sparse_repo: &PathBuf,
     sparse_profile: &PathBuf,
-    sandbox: &Sandbox,
+    app: Arc<App>,
 ) -> Result<()> {
-    set_sparse_config(&sparse_repo, &sandbox)?;
+    set_sparse_config(&sparse_repo, app.clone())?;
     {
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-        let (mut cmd, scmd) = git_command(&sandbox)?;
+        let (mut cmd, scmd) = git_helper::git_command(
+            "Initializing sparse checkout profile".to_owned(),
+            app.clone(),
+        )?;
         scmd.ensure_success_or_log(
             cmd.current_dir(sparse_repo)
                 .arg("sparse-checkout")
@@ -531,19 +588,19 @@ pub fn set_sparse_checkout(
 
     {
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-        log::info!("Adding directories");
         let sparse_profile_file = File::open(&sparse_profile).context("opening sparse profile")?;
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
-            git_binary(),
+            "Adding directories".to_owned(),
+            git_helper::git_binary(),
             Some(Stdio::from(sparse_profile_file)),
             None,
             None,
-            &sandbox,
+            app,
         )?;
         scmd.ensure_success_or_log(
             cmd.current_dir(sparse_repo)
                 .arg("sparse-checkout")
-                .arg("add")
+                .arg("set")
                 .arg("--stdin"),
             SandboxCommandOutput::Stderr,
             "sparse-checkout add",
@@ -555,9 +612,9 @@ pub fn set_sparse_checkout(
     Ok(())
 }
 
-pub fn checkout_working_copy(sparse_repo: &PathBuf, sandbox: &Sandbox) -> Result<()> {
+pub fn checkout_working_copy(sparse_repo: &PathBuf, app: Arc<App>) -> Result<()> {
     // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-    let (mut cmd, scmd) = git_command(&sandbox)?;
+    let (mut cmd, scmd) = git_helper::git_command("Checking out a working copy".to_owned(), app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(sparse_repo).arg("checkout"),
         SandboxCommandOutput::Stderr,
@@ -571,44 +628,33 @@ pub fn create_empty_sparse_clone(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
-    sparse_profile_output: &PathBuf,
-    filter_sparse: bool,
-    sandbox: &Sandbox,
+    app: Arc<App>,
 ) -> Result<()> {
-    let mut dense_url = OsString::from("file://");
-    dense_url.push(dense_repo);
+    let app = app.clone();
+    let _ui = app.ui();
 
     let sparse_repo_dir_parent = &sparse_repo
         .parent()
         .context("sparse repo parent directory does not exist")?;
 
-    let filter_arg = if filter_sparse {
-        let profile_object_id = git_hash_object(&dense_repo, &sparse_profile_output, sandbox)
-            .context("writing sparse profile into dense repo")?;
-        log::info!(
-            "Wrote the sparse profile into the dense repo as {}",
-            &profile_object_id
-        );
-        format!("--filter=sparse:oid={}", &profile_object_id).to_owned()
-    } else {
-        "--filter=blob:none".to_owned()
-    };
-
     // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-    let (mut cmd, scmd) = git_command(&sandbox)?;
+    let description = format!(
+        "Creating a new a sparse shallow clone of {} in {}",
+        dense_repo.display(),
+        sparse_repo.display()
+    );
+    let (mut cmd, scmd) = git_helper::git_command(description, app.clone())?;
     scmd.ensure_success_or_log(
         cmd.current_dir(sparse_repo_dir_parent)
             .arg("clone")
             .arg("--sparse")
+            .arg("--local")
             .arg("--no-checkout")
             .arg("--no-tags")
             .arg("--single-branch")
-            .arg("--depth")
-            .arg("1")
             .arg("-b")
             .arg(branch.as_str())
-            .arg(filter_arg)
-            .arg(dense_url)
+            .arg(dense_repo)
             .arg(sparse_repo),
         SandboxCommandOutput::Stderr,
         "clone",
@@ -649,70 +695,12 @@ fn allowable_project_view_directory_predicate(dense_repo: &Path, directory: &Pat
 }
 
 fn write_project_view_file(
-    dense_repo: &PathBuf,
-    bazel_project_view_path: &Path,
-    coordinates: &Vec<String>,
-    sandbox: &Sandbox,
+    _dense_repo: &PathBuf,
+    _bazel_project_view_path: &Path,
+    _coordinates: &Vec<String>,
+    _app: Arc<App>,
 ) -> Result<()> {
-    use std::os::unix::ffi::OsStrExt;
-
-    let client = BazelRepo::new(dense_repo, coordinates.clone())?;
-    let mut directories = BTreeSet::<PathBuf>::new();
-
-    let directories_for_coordinate = client
-        .involved_directories_query(&coordinates, Some(1), true, sandbox)
-        .context("determining directories for project view")?;
-    for dir in directories_for_coordinate {
-        let dir_path = PathBuf::from(dir);
-        if let Some(dir_with_build) = client
-            .find_closest_directory_with_build_file(dir_path.as_path(), &dense_repo)
-            .context("finding closest directory with a build file")?
-        {
-            if allowable_project_view_directory_predicate(&dense_repo.as_path(), &dir_with_build) {
-                directories.insert(dir_with_build);
-            }
-        } else {
-            log::warn!(
-                "Ignoring directory '{}' as it has no discernible BUILD file",
-                &dir_path.display()
-            );
-        }
-    }
-
-    if directories.is_empty() {
-        bail!("Refusing to generate a project view with an empty set of directories.");
-    }
-
-    let f = File::create(&bazel_project_view_path).context("creating output file")?;
-
-    let mut buffer = BufWriter::new(f);
-    writeln!(buffer, "workspace_type: java")?;
-    writeln!(buffer, "")?;
-    writeln!(buffer, "additional_languages:")?;
-    writeln!(buffer, "  scala")?;
-    writeln!(buffer, "")?;
-    writeln!(buffer, "derive_targets_from_directories: true")?;
-    writeln!(buffer, "")?;
-    writeln!(buffer, "directories:")?;
-    let prefix = dense_repo
-        .to_str()
-        .context("interpreting prefix as utf-8")?;
-    // TODO: Sort and dedup. Fix weird breaks
-    for dir in &directories {
-        let relative_path = dir.strip_prefix(&prefix);
-        let path_bytestring = relative_path
-            .context("truncating path")?
-            .as_os_str()
-            .as_bytes();
-        if !path_bytestring.is_empty() {
-            write!(buffer, "  ")?;
-            buffer.write_all(&path_bytestring[..])?;
-            writeln!(buffer, "")?;
-        }
-    }
-    writeln!(buffer, "")?;
-    buffer.flush()?;
-
+    // TODO: Remove this. We will implement a 'focus idea' command or similar.
     Ok(())
 }
 
@@ -720,10 +708,11 @@ pub fn switch_to_detached_branch_discarding_changes(
     repo: &Path,
     refname: &str,
     alternate: Option<&Path>,
-    sandbox: &Sandbox,
+    app: Arc<App>,
 ) -> Result<()> {
-    let (mut cmd, scmd) = git_command(sandbox)?;
-    let mut cmd = cmd
+    let description = format!("Switching to {} in {}", refname, repo.display());
+    let (mut cmd, scmd) = git_helper::git_command(description, app)?;
+    let cmd = cmd
         .arg("switch")
         .arg(refname)
         .arg("--quiet")
@@ -745,161 +734,111 @@ pub fn switch_to_detached_branch_discarding_changes(
     Ok(())
 }
 
+fn resolve_involved_directories(
+    repo: &Path,
+    coordinate_set: CoordinateSet,
+    app: Arc<App>,
+    into: &mut BTreeSet<PathBuf>,
+) -> Result<usize> {
+    let cache_dir = dirs::cache_dir()
+        .context("failed to determine cache dir")?
+        .join("focus")
+        .join("cache");
+    let resolver = RoutingResolver::new(cache_dir.as_path());
+
+    let repo_state = RepoState::new(&repo, app.clone())?;
+    let request = ResolutionRequest::new(repo, repo_state, coordinate_set);
+    let cache_options = CacheOptions::default();
+
+    let result = resolver
+        .resolve(&request, &cache_options, app.clone())
+        .context("resolving coordinates")?;
+
+    let before = into.len();
+    for path in result.paths() {
+        let qualified_path = repo.join(path);
+        if let Some(path) = find_closest_directory_with_build_file(&qualified_path, repo)
+            .context("locating closest build file")?
+        {
+            into.insert(path);
+        }
+    }
+
+    let difference = into.len() - before;
+    report_progress(
+        app,
+        format!(
+            "Dependency query yielded {} directories ({} total)",
+            difference,
+            &result.paths().len()
+        ),
+    );
+
+    Ok(difference)
+}
+
 pub fn generate_sparse_profile(
     repo: &Path,
     sparse_profile_output: &Path,
-    coordinates: &Vec<String>,
-    sandbox: &Sandbox,
+    coordinate_set: CoordinateSet,
+    app: Arc<App>,
 ) -> Result<()> {
-    use std::os::unix::ffi::OsStrExt;
-
-    let client = BazelRepo::new(repo, coordinates.clone())?;
-
-    let repo_component_count = repo.components().count();
-
-    let mut query_dirs = BTreeSet::<PathBuf>::new();
-
-    let directories_for_coordinate = client
-        .involved_directories_query(&coordinates, None, false, sandbox)
-        .with_context(|| format!("Determining involved directories for {:?}", &coordinates))?;
-    log::info!(
-        "Dependency query {:?} yielded {} directories",
-        &coordinates,
-        &directories_for_coordinate.len()
-    );
-
-    for dir in directories_for_coordinate {
-        let absolute_path = repo.join(dir);
-        query_dirs.insert(absolute_path);
-    }
+    let mut directories = BTreeSet::<PathBuf>::new();
 
     let mut f = File::create(&sparse_profile_output).context("creating output file")?;
     f.write_all(&SPARSE_PROFILE_PRELUDE.as_bytes())
         .context("writing sparse profile prelude")?;
-    for dir in &query_dirs {
-        let mut line = Vec::<u8>::new();
+    resolve_involved_directories(repo, coordinate_set, app, &mut directories)
+        .context("resolving involved directories")?;
 
+    for dir in &directories {
+        let mut line = Vec::<u8>::new();
         line.extend(b"/"); // Paths have a '/' prefix
         {
-            let mut relative_path = PathBuf::new();
-            // These queries return explicit paths. relativize them.
-            for component in dir.components().skip(repo_component_count) {
-                relative_path.push(component);
-            }
-            log::debug!("+ {}", &relative_path.display());
-            line.extend(relative_path.as_os_str().as_bytes());
+            let dir = dir
+                .as_path()
+                .strip_prefix(repo)
+                .context("Failed to strip prefix")?;
+            log::debug!("+ {}", &dir.display());
+            line.extend(dir.as_os_str().as_bytes());
         }
         line.extend(b"/\n"); // Paths have a '/' suffix
-        f.write_all(&line[..])
-            .with_context(|| format!("writing output (item={:?})", dir))?;
+        f.write_all(&line[..]).context("writing paths")?;
     }
     f.sync_data().context("syncing data")?;
 
     Ok(())
 }
 
-struct BazelRepo {
-    dense_repo: PathBuf,
-}
-
-impl BazelRepo {
-    pub fn new(dense_repo: &Path, _coordinates: Vec<String>) -> Result<Self> {
-        Ok(Self {
-            dense_repo: dense_repo.to_owned(),
-        })
-    }
-
-    fn find_closest_directory_with_build_file(
-        &self,
-        file: &Path,
-        ceiling: &Path,
-    ) -> Result<Option<PathBuf>> {
-        let mut dir = if file.is_dir() {
-            file
+fn find_closest_directory_with_build_file(file: &Path, ceiling: &Path) -> Result<Option<PathBuf>> {
+    let mut dir = if file.is_dir() {
+        file
+    } else {
+        if let Some(parent) = file.parent() {
+            parent
         } else {
-            file.parent().context("getting parent directory of file")?
-        };
-        loop {
-            if dir == ceiling {
-                return Ok(None);
-            }
-
-            for entry in std::fs::read_dir(&dir)
-                .with_context(|| format!("reading directory contents {}", dir.display()))?
-            {
-                let entry = entry.context("reading directory entry")?;
-                if entry.file_name() == "BUILD" {
-                    // Match BUILD, BUILD.*
-                    return Ok(Some(dir.to_owned()));
-                }
-            }
-
-            dir = dir
-                .parent()
-                .context("getting parent of current directory")?;
+            log::warn!("Path {} has no parent", file.display());
+            return Ok(None);
         }
-    }
+    };
+    loop {
+        if dir == ceiling {
+            return Ok(None);
+        }
 
-    // Use bazel query to get involved packages and turn them into directories.
-    pub fn involved_directories_query(
-        &self,
-        coordinates: &Vec<String>,
-        depth: Option<usize>,
-        identity: bool,
-        sandbox: &Sandbox,
-    ) -> Result<Vec<String>> {
-        // N.B. `bazel aquery` cannot handle unions ;(
-        let mut directories = Vec::<String>::new();
-
-        let clauses: Vec<String> = coordinates
-            .iter()
-            .map(|coordinate| {
-                if identity {
-                    coordinate.to_owned()
-                } else if let Some(depth) = depth {
-                    // format!("{}deps({}, {})", identity_clause, coordinate, depth)
-                    format!("buildfiles(deps({}, {}))", coordinate, depth)
-                } else {
-                    format!("buildfiles(deps({}))", coordinate)
-                }
-            })
-            .collect();
-
-        let query = clauses.join(" union ");
-
-        // Run Bazel query
-        let (mut cmd, scmd) = SandboxCommand::new("./bazel", sandbox)?;
-        scmd.ensure_success_or_log(
-            cmd.arg("query")
-                .arg(query)
-                .arg("--output=package")
-                .current_dir(&self.dense_repo),
-            SandboxCommandOutput::Stderr,
-            "bazel query",
-        )?;
-
-        let reader = scmd.read_buffered(SandboxCommandOutput::Stdout)?;
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                let path = PathBuf::from(&line);
-                if !&line.starts_with("@")
-                    && !path.starts_with("bazel-out/")
-                    && !path.starts_with("external/")
-                {
-                    let absolute_path = &self.dense_repo.join(&path);
-                    if let Some(path) = absolute_path.to_str() {
-                        directories.push(path.to_owned());
-                    } else {
-                        bail!(
-                            "Path '{}' contains characters that cannot be safely converted",
-                            &path.display()
-                        );
-                    }
-                }
+        for entry in std::fs::read_dir(&dir)
+            .with_context(|| format!("reading directory contents {}", dir.display()))?
+        {
+            let entry = entry.context("reading directory entry")?;
+            if entry.file_name() == "BUILD" {
+                // Match BUILD, BUILD.*
+                return Ok(Some(dir.to_owned()));
             }
         }
 
-        Ok(directories)
+        dir = dir
+            .parent()
+            .context("getting parent of current directory")?;
     }
 }
 

@@ -1,25 +1,26 @@
-use crate::backed_up_file::BackedUpFile;
+use crate::app::App;
+use crate::coordinate::CoordinateSet;
 use crate::model::Layer;
 use crate::model::LayerSets;
 use crate::sandbox_command::SandboxCommand;
+use std::convert::TryFrom;
 use std::fs::File;
-use std::fs::OpenOptions;
 
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
 use crate::{
-    sandbox::Sandbox, sandbox_command::SandboxCommandOutput,
-    working_tree_synchronizer::WorkingTreeSynchronizer,
+    sandbox_command::SandboxCommandOutput, working_tree_synchronizer::WorkingTreeSynchronizer,
 };
 
 pub fn perform<F, J>(description: &str, f: F) -> Result<J>
 where
     F: FnOnce() -> Result<J>,
 {
-    log::info!("{}", description);
     let result = f();
     if let Err(e) = result {
         log::error!("Failed {}: {}", description.to_ascii_lowercase(), e);
@@ -29,14 +30,31 @@ where
     result
 }
 
-pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<()> {
+pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     use crate::git_helper;
     use crate::sparse_repos;
-    use std::io::Write;
-    use std::os::unix::ffi::OsStrExt;
 
-    let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, &sandbox)?;
-    let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, &sandbox)?;
+    let ui = app.ui();
+    let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
+        .context("canonicalizing sparse repo path")?;
+    let dense_repo = git_helper::run_git_command_consuming_stdout(
+        "Reading dense repo URL".to_owned(),
+        &sparse_repo,
+        vec!["remote", "get-url", "dense"],
+        app.clone(),
+    )
+    .context("Failed reading the dense repo URL")
+    .map(|path| PathBuf::from(path))?;
+    let dense_repo = git_helper::find_top_level(app.clone(), &dense_repo)
+        .context("Failed finding dense repo top level")?;
+
+    let _ = ui.status(format!(
+        "Syncing {}",
+        &sparse_repo.display(),
+    ));
+
+    let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, app.clone())?;
+    let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, app.clone())?;
 
     let sparse_profile_path = sparse_repo
         .join(".git")
@@ -44,7 +62,7 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         .join("sparse-checkout");
 
     let (sparse_profile_output_file, sparse_profile_output_path) =
-        sandbox.create_file(Some("sparse-profile"), None)?;
+        app.sandbox().create_file(Some("sparse-profile"), None)?;
     drop(sparse_profile_output_file);
 
     let sparse_checkout_backup_path = {
@@ -121,19 +139,26 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         Ok(coordinates)
     })?;
 
+    let coordinate_set =
+        CoordinateSet::try_from(coordinates.as_ref()).context("constructing coordinate set")?;
+
+    let cloned_app = app.clone();
     let dense_revision = perform("Determining the current commit in the dense repo", || {
         git_helper::run_git_command_consuming_stdout(
+            "Determining the current commit in the dense repo".to_owned(),
             &dense_repo,
             vec!["rev-parse", "HEAD"],
-            &sandbox,
+            cloned_app,
         )
     })?;
 
+    let cloned_app = app.clone();
     let sparse_revision = perform("Determining the current commit in the sparse repo", || {
         git_helper::run_git_command_consuming_stdout(
+            "Determining the current commit in the sparse repo".to_owned(),
             &sparse_repo,
             vec!["rev-parse", "HEAD"],
-            &sandbox,
+            cloned_app,
         )
     })?;
 
@@ -149,44 +174,50 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         .join(".git")
         .join("objects");
 
+    let cloned_app = app.clone();
     perform("Switching in the dense repo", || {
         // When checking out in the dense repo, we make the sparse repo objects available as an alternate so as to not need to push to the dense repo.
         sparse_repos::switch_to_detached_branch_discarding_changes(
             &dense_repo,
             &sparse_revision.as_str(),
             Some(sparse_objects_directory.as_ref()),
-            &sandbox,
+            cloned_app,
         )
     })?;
 
+    let cloned_app = app.clone();
     perform("Computing the new sparse profile", || {
         sparse_repos::generate_sparse_profile(
             &dense_repo,
             &sparse_profile_output_path,
-            &coordinates,
-            &sandbox,
+            coordinate_set,
+            cloned_app,
         )
     })?;
 
+    let cloned_app = app.clone();
     perform("Resetting in the dense repo", || {
         git_helper::run_git_command_consuming_stdout(
+            "Resetting in the dense repo".to_owned(),
             &dense_repo,
             vec!["reset", "--hard", &dense_revision],
-            &sandbox,
+            cloned_app,
         )
     })?;
 
+    let cloned_app = app.clone();
     if let Err(_e) = perform("Applying the sparse profile", || {
-        sparse_repos::set_sparse_config(&sparse_repo, &sandbox)?;
+        sparse_repos::set_sparse_config(&sparse_repo, cloned_app.clone())?;
 
         let sparse_profile_output_file =
             File::open(&sparse_profile_output_path).context("opening new sparse profile")?;
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
+            "Applying the sparse profile".to_owned(),
             git_helper::git_binary(),
             Some(Stdio::from(sparse_profile_output_file)),
             None,
             None,
-            &sandbox,
+            cloned_app.clone(),
         )?;
         scmd.ensure_success_or_log(
             cmd.current_dir(&sparse_repo)
@@ -200,16 +231,15 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         .context("setting sparse checkout from new profile")
     }) {
         perform("Restoring and reapplying the backup profile", || {
-            // std::fs::copy(&sparse_profile_path, &sparse_checkout_backup_path)
-            //     .context("restoring the backup file")?;
             let backup_file = File::open(&sparse_checkout_backup_path)
                 .context("opening backup sparse profile")?;
             let (mut cmd, scmd) = SandboxCommand::new_with_handles(
+                "Restoring and reapplying the backup profile".to_owned(),
                 git_helper::git_binary(),
                 Some(Stdio::from(backup_file)),
                 None,
                 None,
-                &sandbox,
+                cloned_app.clone(),
             )?;
             scmd.ensure_success_or_log(
                 cmd.current_dir(&sparse_repo)
@@ -224,8 +254,14 @@ pub fn run(sandbox: &Sandbox, dense_repo: &Path, sparse_repo: &Path) -> Result<(
         })?;
     }
 
+    let cloned_app = app.clone();
     perform("Updating the sync point", || {
-        sparse_repos::configure_sparse_sync_point(&sparse_repo, &sandbox)
+        sparse_repos::configure_sparse_sync_point(&sparse_repo, cloned_app)
+    })?;
+
+    let cloned_app = app.clone();
+    perform("Disabling the filesystem monitor", || {
+        sparse_repos::config_sparse_disable_filesystem_monitor(&sparse_repo, cloned_app)
     })?;
 
     Ok(())

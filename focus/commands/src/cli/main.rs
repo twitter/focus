@@ -1,4 +1,7 @@
+mod app;
 mod backed_up_file;
+mod coordinate;
+mod coordinate_resolver;
 mod detail;
 mod git_helper;
 mod model;
@@ -9,6 +12,7 @@ mod subcommands;
 mod temporary_working_directory;
 mod testing;
 mod tracker;
+mod ui;
 mod working_tree_synchronizer;
 
 #[macro_use]
@@ -17,11 +21,18 @@ extern crate lazy_static;
 use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
-use sandbox::Sandbox;
 use tracker::Tracker;
 
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    time::Instant,
+};
 use structopt::StructOpt;
+
+use crate::app::App;
 
 #[derive(Debug)]
 struct CommaSeparatedStrings(Vec<String>);
@@ -32,6 +43,12 @@ impl FromStr for CommaSeparatedStrings {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let splayed: Vec<_> = s.split(",").map(|s| s.to_owned()).collect();
         Ok(CommaSeparatedStrings(splayed))
+    }
+}
+
+impl Display for CommaSeparatedStrings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.join(", "))
     }
 }
 
@@ -59,6 +76,10 @@ enum Subcommand {
         #[structopt(long, default_value = "")]
         layers: CommaSeparatedStrings,
 
+        /// Supress copying of all personal branches and instead copy the given branch only.
+        #[structopt(long)]
+        all_branches: bool,
+
         /// Experimental, NOT RECOMMENDED: use sparse filtering (`--filter:oid:...`) when cloning.
         #[structopt(long)]
         filter_sparse: bool,
@@ -70,10 +91,6 @@ enum Subcommand {
 
     /// Update the sparse checkout to reflect changes to the build graph.
     Sync {
-        /// Path to the dense repository. Build graph queries are always run in the dense repository.
-        #[structopt(long, parse(from_os_str), default_value = ".dense")]
-        dense_repo: PathBuf,
-
         /// Path to the sparse repository.
         #[structopt(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
@@ -134,26 +151,20 @@ enum Subcommand {
         repo: PathBuf,
     },
 
-    Outline {
-        /// Path to the existing dense repository that the sparse clone shall be based upon.
-        #[structopt(long, parse(from_os_str))]
-        source: PathBuf,
-
-        /// Path to the existing dense repository that the sparse clone shall be based upon.
-        #[structopt(long, parse(from_os_str))]
-        mount_point: PathBuf,
-        
-        /// Bazel build coordinates to include as an ad-hoc layer set, cannot be specified in combination with 'layers'.
-        #[structopt(long, default_value = "")]
-        coordinates: CommaSeparatedStrings,
-    },
+    /// Test the user interface
+    UserInterfaceTest {},
 }
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Focused Development Tools")]
 struct ParachuteOpts {
+    /// Preserve the created sandbox directory for inspecting logs and other files.
     #[structopt(long)]
     preserve_sandbox: bool,
+
+    /// Disable textual user interface; happens by default on non-interactive terminals.
+    #[structopt(long)]
+    ugly: bool,
 
     #[structopt(subcommand)]
     cmd: Subcommand,
@@ -179,26 +190,56 @@ fn ensure_directories_exist() -> Result<()> {
 
     Ok(())
 }
+fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Result<PathBuf> {
+    let p = path_user_input.as_ref();
+    if !p.starts_with("~") {
+        return Ok(p.to_path_buf());
+    }
+    if p == Path::new("~") {
+        if let Some(home_dir) = dirs::home_dir() {
+            return Ok(home_dir);
+        } else {
+            bail!("Could not determine home directory");
+        }
+    }
 
-fn main() -> Result<()> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-    ensure_directories_exist().context("ensuring directories exist")?;
+    let result = dirs::home_dir().map(|mut h| {
+        if h == Path::new("/") {
+            // Corner case: `h` root directory;
+            // don't prepend extra `/`, just drop the tilde.
+            p.strip_prefix("~").unwrap().to_path_buf()
+        } else {
+            h.push(p.strip_prefix("~/").unwrap());
+            h
+        }
+    });
 
-    let opt = ParachuteOpts::from_args();
+    if let Some(path) = result {
+        Ok(path)
+    } else {
+        bail!("Failed to expand tildes in path '{}'", p.display());
+    }
+}
 
-    let sandbox = Arc::new(Sandbox::new(opt.preserve_sandbox).context("Creating a sandbox")?);
+fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> Result<()> {
+    let cloned_app = app.clone();
 
-    match opt.cmd {
+    match options.cmd {
         Subcommand::Clone {
             dense_repo,
             sparse_repo,
             branch,
             layers,
             coordinates,
+            all_branches,
             filter_sparse,
             generate_project_view,
         } => {
-            let dense_repo = std::fs::canonicalize(dense_repo).context("canonicalizing path")?;
+            let dense_repo = expand_tilde(dense_repo)?;
+            let sparse_repo = expand_tilde(sparse_repo)?;
+
+            let dense_repo = git_helper::find_top_level(cloned_app.clone(), &dense_repo)
+                .context("Failed to canonicalize dense repo path")?;
 
             let layers = filter_empty_strings(layers.0);
             let coordinates = filter_empty_strings(coordinates.0);
@@ -215,62 +256,103 @@ fn main() -> Result<()> {
                 unreachable!()
             };
 
+            let ui = cloned_app.ui();
+            let _ = ui.status(format!(
+                "Cloning {} into {}",
+                dense_repo.display(),
+                sparse_repo.display()
+            ));
+            ui.set_enabled(interactive);
+
             subcommands::clone::run(
                 &dense_repo,
                 &sparse_repo,
                 &branch,
                 &spec,
                 filter_sparse,
+                all_branches,
                 generate_project_view,
-                sandbox,
+                cloned_app.clone(),
             )
         }
 
-        Subcommand::Sync {
-            dense_repo,
-            sparse_repo,
-        } => {
-            let dense_repo = std::fs::canonicalize(dense_repo)?;
-            let sparse_repo = std::fs::canonicalize(sparse_repo)?;
-            subcommands::sync::run(&sandbox, &dense_repo, &sparse_repo)
+        Subcommand::Sync { sparse_repo } => {
+            let sparse_repo = expand_tilde(sparse_repo)?;
+            app.ui().set_enabled(interactive);
+            subcommands::sync::run(app, &sparse_repo)
         }
 
         Subcommand::AvailableLayers { repo } => {
-            let repo = std::fs::canonicalize(repo)?;
+            let repo = expand_tilde(repo)?;
+            let repo = git_helper::find_top_level(app, &repo)
+                .context("Failed to canonicalize repo path")?;
             subcommands::available_layers::run(&repo)
         }
 
         Subcommand::SelectedLayers { repo } => {
-            let repo = std::fs::canonicalize(repo)?;
+            let repo = expand_tilde(repo)?;
+            let repo = git_helper::find_top_level(app, &repo)
+                .context("Failed to canonicalize repo path")?;
             subcommands::selected_layers::run(&repo)
         }
 
         Subcommand::PushLayer { repo, names } => {
-            let repo = std::fs::canonicalize(repo)?;
+            let repo = expand_tilde(repo)?;
+            let repo = git_helper::find_top_level(app, &repo)
+                .context("Failed to canonicalize repo path")?;
             subcommands::push_layer::run(&repo, names)
         }
 
         Subcommand::PopLayer { repo, count } => {
-            let repo = std::fs::canonicalize(repo)?;
+            let repo = expand_tilde(repo)?;
+            let repo = git_helper::find_top_level(app, &repo)
+                .context("Failed to canonicalize repo path")?;
             subcommands::pop_layer::run(&repo, count)
         }
 
         Subcommand::RemoveLayer { repo, names } => {
-            let repo = std::fs::canonicalize(repo)?;
+            let repo = expand_tilde(repo)?;
+            let repo = git_helper::find_top_level(app, &repo)
+                .context("Failed to canonicalize repo path")?;
             subcommands::remove_layer::run(&repo, names)
         }
 
         Subcommand::ListRepos {} => subcommands::list_repos::run(),
 
         Subcommand::DetectBuildGraphChanges { repo } => {
-            let repo = std::fs::canonicalize(repo)?;
-            subcommands::detect_build_graph_changes::run(&sandbox, &repo)
+            let repo = expand_tilde(repo)?;
+            let repo = git_helper::find_top_level(app.clone(), &repo)
+                .context("Failed to canonicalize repo path")?;
+            subcommands::detect_build_graph_changes::run(app, &repo)
         }
 
-        Subcommand::Outline { source, mount_point, coordinates } => {
-            let source = std::fs::canonicalize(source)?;
-            subcommands::outline::run(&source, &mount_point, coordinates.0)
+        Subcommand::UserInterfaceTest {} => {
+            let ui = cloned_app.ui();
+            let _ = ui.status(format!("UI Test"));
+            ui.set_enabled(interactive);
+            subcommands::user_interface_test::run(app)
         }
-
     }
+}
+
+fn main() -> Result<()> {
+    let started_at = Instant::now();
+    let options = ParachuteOpts::from_args();
+
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
+    let interactive = if options.ugly {
+        false
+    } else {
+        termion::is_tty(&std::io::stdout())
+    };
+
+    ensure_directories_exist().context("Failed to create necessary directories")?;
+    let app = Arc::from(App::new(options.preserve_sandbox, interactive)?);
+    run_subcommand(app, options, interactive)?;
+
+    let total_runtime = started_at.elapsed();
+    log::info!("Finished normally in {:.2}s", total_runtime.as_secs_f32());
+
+    Ok(())
 }

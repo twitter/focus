@@ -1,11 +1,15 @@
-use std::ffi::{OsStr, OsString};
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::Command;
 
 use crate::{
-    sandbox::Sandbox,
+    app::App,
     sandbox_command::{SandboxCommand, SandboxCommandOutput},
 };
 
@@ -13,17 +17,18 @@ pub fn git_binary() -> OsString {
     OsString::from("git")
 }
 
-pub fn git_command(sandbox: &Sandbox) -> Result<(Command, SandboxCommand)> {
-    SandboxCommand::new(git_binary(), sandbox)
+pub fn git_command(description: String, app: Arc<App>) -> Result<(Command, SandboxCommand)> {
+    SandboxCommand::new(description, git_binary(), app)
 }
 
 pub fn remote_add<P: AsRef<Path>>(
     repo_path: P,
     name: &str,
     url: &OsStr,
-    sandbox: &Sandbox,
+    app: Arc<App>,
 ) -> Result<()> {
-    let (mut cmd, scmd) = git_command(&sandbox)?;
+    let description = format!("Adding remote {} ({})", &name, &url.to_string_lossy());
+    let (mut cmd, scmd) = git_command(description, app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(repo_path)
             .arg("remote")
@@ -31,7 +36,7 @@ pub fn remote_add<P: AsRef<Path>>(
             .arg(name)
             .arg(url),
         SandboxCommandOutput::Stderr,
-        "git remote_add",
+        "git remote add",
     )
     .map(|_| ())
 }
@@ -40,9 +45,10 @@ pub fn write_config<P: AsRef<Path>>(
     repo_path: P,
     key: &str,
     val: &str,
-    sandbox: &Sandbox,
+    app: Arc<App>,
 ) -> Result<()> {
-    let (mut cmd, scmd) = git_command(&sandbox)?;
+    let description = format!("git config {} {}", key, val);
+    let (mut cmd, scmd) = git_command(description, app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(repo_path).arg("config").arg(key).arg(val),
         SandboxCommandOutput::Stderr,
@@ -51,8 +57,9 @@ pub fn write_config<P: AsRef<Path>>(
     .map(|_| ())
 }
 
-pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, sandbox: &Sandbox) -> Result<String> {
-    let (mut cmd, scmd) = git_command(&sandbox)?;
+pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> Result<String> {
+    let description = format!("git config {}", key);
+    let (mut cmd, scmd) = git_command(description, app)?;
     let mut output_string = String::new();
     scmd.ensure_success_or_log(
         cmd.current_dir(repo_path).arg("config").arg(key),
@@ -64,17 +71,29 @@ pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, sandbox: &Sandbox) -
     Ok(output_string)
 }
 
+pub fn unset_config<P: AsRef<Path>>(_repo_path: P, key: &str, app: Arc<App>) -> Result<()> {
+    let description = format!("git config --unset {}", key);
+    let (mut cmd, _scmd) = git_command(description, app)?;
+    cmd.arg("config")
+        .arg("--unset")
+        .arg(key)
+        .status()
+        .with_context(|| format!("Running `git config --unset {}` failed", key))?;
+    Ok(())
+}
+
 pub fn run_git_command_consuming_stdout<P, I, S>(
+    description: String,
     repo: P,
     args: I,
-    sandbox: &Sandbox,
+    app: Arc<App>,
 ) -> Result<String>
 where
     P: AsRef<Path>,
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let (mut cmd, scmd) = git_command(&sandbox)?;
+    let (mut cmd, scmd) = git_command(description, app)?;
     if let Err(e) = cmd.current_dir(repo).args(args).status() {
         scmd.log(
             crate::sandbox_command::SandboxCommandOutput::Stderr,
@@ -85,4 +104,23 @@ where
     let mut stdout_contents = String::new();
     scmd.read_to_string(SandboxCommandOutput::Stdout, &mut stdout_contents)?;
     Ok(stdout_contents.trim().to_owned())
+}
+
+pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
+    if let Ok(path) = std::fs::canonicalize(path) {
+        Ok(PathBuf::from(
+            run_git_command_consuming_stdout(
+                "Finding the repo's top level".to_owned(),
+                path,
+                vec!["rev-parse", "--show-toplevel"],
+                app,
+            )
+            .context("Finding the repo's top level failed")?,
+        ))
+    } else {
+        bail!(
+            "Could not canonicalize repository path '{}'",
+            &path.display()
+        );
+    }
 }

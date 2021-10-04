@@ -1,12 +1,12 @@
 use anyhow::{bail, Context, Error, Result};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use git2::{Repository, RepositoryState};
 
-use crate::{
-    sandbox::Sandbox,
-    sandbox_command::{SandboxCommand, SandboxCommandOutput},
-};
+use crate::{app::App, ui::ProgressReporter};
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum SyncError {
@@ -16,20 +16,20 @@ pub(crate) enum SyncError {
     #[error("Working tree cannot be dirty")]
     DirtyWorkingTree,
 }
-pub struct WorkingTreeSynchronizer<'this> {
+pub struct WorkingTreeSynchronizer {
     path: PathBuf,
-    sandbox: &'this Sandbox,
+    app: Arc<App>,
 }
 
-impl<'this> WorkingTreeSynchronizer<'this> {
-    pub(crate) fn new(path: &Path, sandbox: &'this Sandbox) -> Result<Self> {
+impl WorkingTreeSynchronizer {
+    pub(crate) fn new(path: &Path, app: Arc<App>) -> Result<Self> {
         if !path.is_dir() {
             return Err(Error::new(SyncError::RepoPath));
         }
 
         Ok(Self {
             path: path.to_path_buf(),
-            sandbox,
+            app,
         })
     }
 
@@ -49,7 +49,13 @@ impl<'this> WorkingTreeSynchronizer<'this> {
 
     pub fn is_working_tree_clean(&self) -> Result<bool> {
         use std::process;
-
+        let _progress = ProgressReporter::new(
+            self.app.clone(),
+            format!(
+                "Determining the state of the working tree in repo {}",
+                self.path.display()
+            ),
+        );
         let output = process::Command::new("git")
             .arg("status")
             .arg("--porcelain")
@@ -66,7 +72,13 @@ impl<'this> WorkingTreeSynchronizer<'this> {
     pub(crate) fn read_head(&self) -> Result<Vec<u8>> {
         use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
-
+        let _progress = ProgressReporter::new(
+            self.app.clone(),
+            format!(
+                "Determining the current revision in repo {}",
+                self.path.display()
+            ),
+        );
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
         let output = process::Command::new("git")
             .arg("rev-parse")
@@ -89,6 +101,13 @@ impl<'this> WorkingTreeSynchronizer<'this> {
 
     pub fn read_branch(&self) -> Result<String> {
         use std::process;
+        let _progress = ProgressReporter::new(
+            self.app.clone(),
+            format!(
+                "Determining the current branch in repo {}",
+                self.path.display()
+            ),
+        );
 
         let output = process::Command::new("git")
             .arg("branch")
@@ -109,6 +128,10 @@ impl<'this> WorkingTreeSynchronizer<'this> {
     pub(crate) fn get_merge_base(&self, reference: &str) -> Result<Vec<u8>> {
         use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
+        let _progress = ProgressReporter::new(
+            self.app.clone(),
+            format!("Determining the merge base in repo {}", self.path.display()),
+        );
 
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
         let output = process::Command::new("git")
@@ -128,87 +151,6 @@ impl<'this> WorkingTreeSynchronizer<'this> {
                 .as_bytes(),
         ))
     }
-
-    pub fn checkout_orphaned(&self, commit_identifier: &str) -> Result<()> {
-        let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
-
-        scmd.ensure_success_or_log(
-            cmd.arg("checkout")
-                .arg("--orphaned")
-                .arg(commit_identifier)
-                .current_dir(&self.path),
-            SandboxCommandOutput::Ignore,
-            "checking out orphaned commit",
-        )
-        .context("checking out orphaned commit")?;
-
-        Ok(())
-    }
-
-    // pub fn add_remote(&self, name: &str, url: &str) -> Result<()> {
-    //     let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
-
-    //     scmd.ensure_success_or_log(
-    //         cmd.arg("remote")
-    //             .arg("add")
-    //             .arg(name)
-    //             .arg(url)
-    //             .current_dir(&self.path),
-    //         SandboxCommandOutput::Ignore,
-    //         "adding a remote",
-    //     )
-    //     .context("adding a remote")?;
-
-    //     Ok(())
-    // }
-
-    // pub fn remove_remote(&self, name: &str) -> Result<()> {
-    //     let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
-
-    //     scmd.ensure_success_or_log(
-    //         cmd.arg("remote")
-    //             .arg("remove")
-    //             .arg(name)
-    //             .current_dir(&self.path),
-    //         SandboxCommandOutput::Ignore,
-    //         "removing a remote",
-    //     )
-    //     .context("removing a remote")?;
-
-    //     Ok(())
-    // }
-
-    pub fn push_to_remote(&self, remote: &str, name: &str) -> Result<()> {
-        let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
-
-        scmd.ensure_success_or_log(
-            cmd.arg("push")
-                .arg(remote)
-                .arg(name)
-                .current_dir(&self.path),
-            SandboxCommandOutput::Ignore,
-            "push to remote",
-        )
-        .context("push to remote")?;
-
-        Ok(())
-    }
-
-    // pub fn push_temp(&self, commit_identifier: &str) -> Result<()> {
-    //     let (mut cmd, scmd) = SandboxCommand::new("git", &self.sandbox)?;
-
-    //     scmd.ensure_success_or_log(
-    //         cmd.arg("checkout")
-    //             .arg("--orphaned")
-    //             .arg(commit_identifier)
-    //             .current_dir(&self.path),
-    //         SandboxCommandOutput::Ignore,
-    //         "checking out orphaned commit",
-    //     )
-    //     .context("checking out orphaned commit")?;
-
-    //     Ok(())
-    // }
 
     #[allow(dead_code)]
     pub(crate) fn create_snapshot(&self) -> Result<()> {
@@ -233,13 +175,14 @@ mod tests {
 
     #[test]
     fn test_get_merge_base() {
-        let sandbox = Sandbox::new(false).unwrap();
+        let app = Arc::from(App::new(false, false).unwrap());
         let containing_dir = tempdir().unwrap();
         let original = ScratchGitRepo::new_fixture(&containing_dir.path()).unwrap();
         let cloned = original.make_clone().unwrap();
-
-        let original_sync = WorkingTreeSynchronizer::new(&original.path(), &sandbox).unwrap();
-        let clone_sync = WorkingTreeSynchronizer::new(&cloned.path(), &sandbox).unwrap();
+        let cloned_app = app.clone();
+        let original_sync = WorkingTreeSynchronizer::new(&original.path(), cloned_app).unwrap();
+        let cloned_app = app.clone();
+        let clone_sync = WorkingTreeSynchronizer::new(&cloned.path(), cloned_app).unwrap();
         cloned
             .commit(
                 Path::new("quotes.txt"),

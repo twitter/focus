@@ -1,4 +1,4 @@
-use crate::sandbox::Sandbox;
+use crate::{app::App, ui::ProgressReporter};
 use anyhow::{bail, Context, Result};
 use std::{
     ffi::OsStr,
@@ -6,6 +6,7 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
+    sync::Arc,
 };
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
@@ -24,6 +25,7 @@ fn exhibit_file(file: &Path, title: &str) -> Result<()> {
 
 // SandboxCommandRunner is a command that captures stdout and stderr into sandbox logs unless other destinations are specified.
 pub struct SandboxCommand {
+    progress_reporter: ProgressReporter,
     stdout_path: PathBuf,
     stderr_path: PathBuf,
 }
@@ -37,36 +39,43 @@ pub enum SandboxCommandOutput {
 }
 
 impl SandboxCommand {
-    pub fn new<S: AsRef<OsStr>>(program: S, sandbox: &Sandbox) -> Result<(Command, Self)> {
+    pub fn new<S: AsRef<OsStr>>(
+        description: String,
+        program: S,
+        app: Arc<App>,
+    ) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
-        let sandbox_command = Self::with_command(&mut command, sandbox)?;
+        let sandbox_command = Self::with_command(description, &mut command, app)?;
         Ok((command, sandbox_command))
     }
 
     pub fn new_with_handles<S: AsRef<OsStr>>(
+        description: String,
         program: S,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
         stderr: Option<&Path>,
-        sandbox: &Sandbox,
+        app: Arc<App>,
     ) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
         let sandbox_command =
-            Self::with_command_and_handles(&mut command, stdin, stdout, stderr, sandbox)?;
+            Self::with_command_and_handles(description, &mut command, stdin, stdout, stderr, app)?;
         Ok((command, sandbox_command))
     }
 
-    pub fn with_command(command: &mut Command, sandbox: &Sandbox) -> Result<Self> {
-        Self::with_command_and_handles(command, None, None, None, sandbox)
+    pub fn with_command(description: String, command: &mut Command, app: Arc<App>) -> Result<Self> {
+        Self::with_command_and_handles(description, command, None, None, None, app)
     }
 
     pub fn with_command_and_handles(
+        description: String,
         command: &mut Command,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
         stderr: Option<&Path>,
-        sandbox: &Sandbox,
+        app: Arc<App>,
     ) -> Result<Self> {
+        let sandbox = app.sandbox();
         let output_file = |extension: &str| -> Result<(Stdio, PathBuf)> {
             let (file, path) = sandbox.create_file(Some("sandboxed_command"), Some(extension))?;
             let mut description_path = path.clone();
@@ -89,6 +98,7 @@ impl SandboxCommand {
         command.stdin(stdin).stdout(stdout).stderr(stderr);
 
         Ok(Self {
+            progress_reporter: ProgressReporter::new(app.clone(), description)?,
             stdout_path,
             stderr_path,
         })
@@ -169,6 +179,7 @@ impl SandboxCommand {
         output: SandboxCommandOutput,
         description: &str,
     ) -> Result<ExitStatus> {
+        log::debug!("Starting {:?} ({})", cmd, description);
         let status = cmd
             .status()
             .with_context(|| format!("launching command {}", description))?;
@@ -205,8 +216,8 @@ mod tests {
     #[test]
     fn sandboxed_command_capture_all() -> Result<()> {
         init_logging();
-        let sandbox = Sandbox::new(false)?;
-        let (mut cmd, scmd) = SandboxCommand::new("echo", &sandbox)?;
+        let app = Arc::from(App::new(false, false)?);
+        let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app)?;
         cmd.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
         scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
@@ -218,18 +229,20 @@ mod tests {
     #[test]
     fn sandboxed_command_specific_stdin() -> Result<()> {
         init_logging();
-        let sandbox = Sandbox::new(false)?;
+        let app = Arc::from(App::new(false, false)?);
+        let sandbox = app.sandbox();
         let path = {
             let (mut file, path) = sandbox.create_file(None, None)?;
             file.write_all(b"hello, world")?;
             path
         };
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
+            "Testing with cat".to_owned(),
             "cat",
             Some(Stdio::from(File::open(&path)?)),
             None,
             None,
-            &sandbox,
+            app,
         )?;
         cmd.status()?;
         let mut output_string = String::new();

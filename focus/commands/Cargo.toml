@@ -7,31 +7,31 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures = { version = "0.3.17", features = ["executor", "thread-pool"] }
-protobuf = "2.25.1"
 focus-internals = { path = "../internals" }
 focus-formats = { path = "../formats" }
 anyhow = "1.0.43"
-log = "0.4.14"
-thiserror = "1.0.28"
 dirs = "3.0.2"
+env_logger = "0.9.0"
+futures = { version = "0.3.17", features = ["executor", "thread-pool"] }
+futures-channel = "0.3.17"
 git2 = { version = "0.13.21", default-features = false }
+lazy_static = "1.4.0"
+log = "0.4.14"
+pretty-hex = "0.2.1"
+prost = "0.8.0"
+protobuf = "2.25.1"
 serde = "1.0.130"
+serde_derive = "1.0.130"
+serde_json = "1.0.67"
+sha2 = "0.9.6"
 signal-hook = "0.3.10"
 structopt = "0.3.23"
 tempfile = "3.2.0"
-uuid = { version = "0.8.2", features = ["v4"] }
-crossbeam-utils = "0.8.5"
-futures-channel = "0.3.17"
-serde_json = "1.0.67"
-env_logger = "0.9.0"
-pretty-hex = "0.2.1"
-lazy_static = "1.4.0"
-sha2 = "0.9.6"
-prost = "0.8.0"
-walkdir = "2.3.2"
-serde_derive = "1.0.130"
+termion = "1.5"
+thiserror = "1.0.28"
 url = "2.2.2"
+uuid = { version = "0.8.2", features = ["v4"] }
+walkdir = "2.3.2"
 
 ##
 ## Focus CLI: The primary UI for Project Focused Development

@@ -4,7 +4,10 @@ use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
 use tempfile::TempDir;
+
+
 
 pub struct Sandbox {
     #[allow(dead_code)]
@@ -64,6 +67,16 @@ impl Sandbox {
         Ok((file, qualified_path))
     }
 
+    pub fn create_subdirectory(&self, prefix: &str) -> Result<PathBuf> {
+        let parent = self.path.to_owned();
+        let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
+        let name = format!("{}-{:x}", prefix, serial);
+        let qualified_path = parent.join(name);
+        std::fs::create_dir(qualified_path.as_path())
+            .context("creating sandbox subdirectory failed")?;
+        Ok(qualified_path)
+    }
+
     pub fn path(&self) -> &Path {
         self.path.as_path()
     }
@@ -110,10 +123,10 @@ mod tests {
     #[test]
     fn sandbox_preservation() -> Result<()> {
         let sandbox = Sandbox::new(true)?;
-        let path = &sandbox.path().to_owned();
-        drop(&sandbox);
-        assert!(fs::metadata(path)?.is_dir());
-        fs::remove_dir(path)?;
+        let path = sandbox.path().to_owned();
+        drop(sandbox);
+        assert!(fs::metadata(&path)?.is_dir());
+        fs::remove_dir(&path)?;
         Ok(())
     }
 
