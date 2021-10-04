@@ -229,17 +229,9 @@ fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> R
             let layers = filter_empty_strings(layers.0);
             let coordinates = filter_empty_strings(coordinates.0);
 
-            if !(coordinates.is_empty() ^ layers.is_empty()) {
-                bail!("Either layers or coordinates must be specified");
+            if coordinates.is_empty() && layers.is_empty() {
+                bail!("No coordinates or layers specfiied");
             }
-
-            let spec = if !coordinates.is_empty() {
-                sparse_repos::Spec::Coordinates(coordinates.to_vec())
-            } else if !layers.is_empty() {
-                sparse_repos::Spec::Layers(layers.to_vec())
-            } else {
-                unreachable!()
-            };
 
             let ui = cloned_app.ui();
             let _ = ui.status(format!(
@@ -250,10 +242,11 @@ fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> R
             ui.set_enabled(interactive);
 
             subcommands::clone::run(
-                &dense_repo,
-                &sparse_repo,
-                &branch,
-                &spec,
+                dense_repo,
+                sparse_repo,
+                branch,
+                coordinates,
+                layers,
                 cloned_app.clone(),
             )
         }

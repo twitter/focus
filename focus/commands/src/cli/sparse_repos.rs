@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use internals::util::lock_file::LockFile;
+use prost::encoding::bool::merge;
 
 use std::collections::HashSet;
 use std::convert::TryFrom;
@@ -190,7 +191,6 @@ fn configure_sparse_repo_final(
     Ok(())
 }
 
-
 // Write an object to a repo returning its identity.
 fn git_hash_object(repo: &PathBuf, file: &PathBuf, app: Arc<App>) -> Result<String> {
     git_helper::run_git_command_consuming_stdout(
@@ -230,111 +230,35 @@ pub fn write_adhoc_layer_set(sparse_repo: &PathBuf, layer_set: &LayerSet) -> Res
     layer_sets.store_adhoc_layers(layer_set)
 }
 
-pub enum Spec {
-    Coordinates(Vec<String>),
-    Layers(Vec<String>),
-}
-
-/// RepoContextualizedSpec pairs a repository with a spec, allowing for the resolving of coordinates.
-struct RepoContextualizedSpec {
-    repo: PathBuf,
-    spec: Spec,
-}
-
-impl RepoContextualizedSpec {
-    pub fn new(repo: PathBuf, spec: Spec) -> Self {
-        Self { repo, spec }
-    }
-}
-
-impl TryInto<HashSet<Coordinate>> for RepoContextualizedSpec {
-    fn try_into(self) -> Result<HashSet<Coordinate>> {
-        let layer_sets = LayerSets::new(&self.repo);
-        let layer_set = layer_sets
-            .mandatory_layers()
-            .context("resolving mandatory layers")?;
-
-        let mut results = HashSet::<Coordinate>::new();
-
-        for layer in layer_set.layers() {
-            for coordinate in layer.coordinates() {
-                let coordinate = Coordinate::try_from(coordinate.as_str())
-                    .context("converting mandatory cooordinates")?;
-                results.insert(coordinate);
-            }
-        }
-
-        match self.spec {
-            Spec::Coordinates(coordinates) => {
-                for coordinate in coordinates {
-                    let coordinate =
-                        Coordinate::try_from(coordinate.as_str()).with_context(|| {
-                            format!("converting user-specified cooordinate {}", &coordinate)
-                        })?;
-                    results.insert(coordinate);
-                }
-            }
-            Spec::Layers(layer_names) => {
-                let layer_set = set_containing_layers(&self.repo, &layer_names)
-                    .context("resolving user-selected layers")?;
-                for layer in layer_set.layers() {
-                    for coordinate in layer.coordinates() {
-                        let coordinate =
-                            Coordinate::try_from(coordinate.as_str()).with_context(|| {
-                                format!("converting user-specified cooordinate {}", &coordinate)
-                            })?;
-                        results.insert(coordinate);
-                    }
-                }
-            }
-        }
-
-        Ok(results)
-    }
-
-    type Error = anyhow::Error;
-}
-
 pub fn create_sparse_clone(
-    dense_repo: &PathBuf,
-    sparse_repo: &PathBuf,
-    branch: &String,
-    spec: &Spec,
+    dense_repo: PathBuf,
+    sparse_repo: PathBuf,
+    branch: String,
+    coordinates: Vec<String>,
+    layers: Vec<String>,
     app: Arc<App>,
-
 ) -> Result<()> {
-    let mut adhoc_layer_set: Option<LayerSet> = None;
-
     let dense_sets = LayerSets::new(&dense_repo);
     let mut layer_set = dense_sets
         .mandatory_layers()
-        .context("resolving mandatory layers")?;
+        .context("Failed to resolve  mandatory layers")?;
 
-    let user_selected_set = match spec {
-        Spec::Coordinates(coordinates) => {
-            // Put coordinates them into the "ad hoc" layer.
-            let set = LayerSet::new(vec![Layer::new(
-                "adhoc",
-                "Ad hoc layer",
-                false,
-                coordinates.clone(),
-            )]);
-            adhoc_layer_set = Some(set.clone());
-            set
-        }
+    // Add specified coordinates to an "ad-hoc" set
+    let adhoc_set = LayerSet::new(vec![Layer::new(
+        "adhoc",
+        "Ad-hoc layer",
+        false,
+        coordinates,
+    )]);
 
-        Spec::Layers(layers) => {
-            set_containing_layers(&dense_repo, layers).context("resolving user-selected layers")?
-        }
-    };
+    // Add user selected layers
+    let layer_backed_set =
+        set_containing_layers(&dense_repo, &layers).context("resolving user-selected layers")?;
 
     // Check that the user selected set is valid
-    user_selected_set
-        .validate()
-        .context("validating user-selected layers")?;
-
-    // Add the user selected set to the overall set
-    layer_set.extend(&user_selected_set);
+    layer_set.extend(adhoc_set.clone());
+    layer_set.extend(layer_backed_set.clone());
+    layer_set.validate().context("Failed to merged layer set")?;
 
     let mut coordinates = Vec::<String>::new();
     for layer in layer_set.layers() {
@@ -352,22 +276,25 @@ pub fn create_sparse_clone(
         cloned_app,
     )?;
 
-    if let Some(set) = &adhoc_layer_set {
-        let _ = report_progress(app, "Writing the adhoc layer set");
-        write_adhoc_layer_set(&sparse_repo, set).context("writing the adhoc layer set")?;
-    } else {
-        // We know that layers were specified since there's no adhoc layer set.
-        let _ = report_progress(app, "Pushing the selected layers");
-        let names = user_selected_set
-            .layers()
-            .iter()
-            .map(|layer| layer.name().to_owned())
-            .collect();
-        let sparse_sets = LayerSets::new(&sparse_repo);
-        sparse_sets
-            .push_as_selection(names)
-            .context("pushing the selected layers")?;
-    }
+    // Write the ad-hoc set
+    let _ = app.ui().log(
+        String::from("Clone"),
+        String::from("writing the ad-hoc layer set"),
+    );
+    write_adhoc_layer_set(&sparse_repo, &adhoc_set)
+        .context("Failed writing the adhoc layer set")?;
+    let layer_names: Vec<String> = layer_backed_set
+        .layers()
+        .iter()
+        .map(|layer| layer.name().to_owned())
+        .collect();
+    let _ = app.ui().log(
+        String::from("Clone"),
+        String::from("writing the stack of selected layers"),
+    );
+    LayerSets::new(&sparse_repo)
+        .push_as_selection(layer_names)
+        .context("Failed to write the selected layer set to the sparse repo")?;
 
     Ok(())
 }
@@ -380,7 +307,6 @@ pub fn create_or_update_sparse_clone(
     create: bool,
     app: Arc<App>,
 ) -> Result<()> {
-
     // TODO: Crash harder in threads to prevent extra work.
     let sandbox = app.sandbox();
 

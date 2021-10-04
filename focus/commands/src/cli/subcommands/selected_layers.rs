@@ -21,7 +21,6 @@ pub fn run(repo: &Path) -> Result<()> {
     }
 
     if let Ok(Some(adhoc_layers)) = sets.adhoc_layers() {
-        eprintln!("Note: An ad-hoc layer set exists, containing these layers:");
         for layer in adhoc_layers.layers() {
             eprintln!("[ad-hoc]: {}", layer);
         }

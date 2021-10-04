@@ -117,8 +117,8 @@ impl LayerSet {
         &self.layers
     }
 
-    pub fn extend(&mut self, other: &LayerSet) {
-        self.layers.extend(other.layers.clone());
+    pub fn extend(&mut self, other: LayerSet) {
+        self.layers.extend(other.layers);
     }
 
     pub fn remove_named_layer(&mut self, name: &str) -> Result<()> {
@@ -356,7 +356,7 @@ impl LayerSets {
 
     pub fn store_adhoc_layers(&self, layer_set: &LayerSet) -> Result<()> {
         LayerSet::store(self.adhoc_layer_path().as_path(), layer_set)
-            .context("storing ad hoc layer set")
+            .context("storing ad-hoc layer set")
     }
 
     // Return a layer_set cataloging all available layers
@@ -372,7 +372,7 @@ impl LayerSets {
 
         for path in &paths {
             layer.extend(
-                &LayerSet::load(&path)
+                LayerSet::load(&path)
                     .with_context(|| format!("loading layer_set from {}", &path.display()))?,
             );
         }
@@ -438,10 +438,10 @@ impl LayerSets {
             .mandatory_layers()
             .context("loading mandatory layers")?;
         if let Some(adhoc_layers) = self.adhoc_layers().context("loading ad hoc layers")? {
-            layers.extend(&adhoc_layers);
+            layers.extend(adhoc_layers);
         }
         if let Some(selected_layers) = self.selected_layers().context("loading selected layers")? {
-            layers.extend(&selected_layers);
+            layers.extend(selected_layers);
         } else {
             log::warn!("No layers are selected!");
         }
@@ -644,7 +644,7 @@ mod tests {
             content_hash: None,
         };
 
-        t1.extend(&t2);
+        t1.extend(t2);
         assert_eq!(&t1.layers.last().unwrap(), &t2.layers.last().unwrap());
         Ok(())
     }
