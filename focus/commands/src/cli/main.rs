@@ -21,6 +21,7 @@ extern crate lazy_static;
 use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
+use subcommands::remove_layer;
 use tracker::Tracker;
 
 use std::{
@@ -32,7 +33,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::app::App;
+use crate::{app::App, subcommands::{available_layers, pop_layer, push_layer, selected_layers}};
 
 #[derive(Debug)]
 struct CommaSeparatedStrings(Vec<String>);
@@ -84,50 +85,23 @@ enum Subcommand {
         sparse_repo: PathBuf,
     },
 
-    /// List available layers
-    AvailableLayers {
-        /// Path to the repository.
-        #[structopt(long, parse(from_os_str), default_value = ".")]
-        repo: PathBuf,
-    },
-
-    /// List currently selected layers
-    SelectedLayers {
-        /// Path to the repository.
-        #[structopt(long, parse(from_os_str), default_value = ".")]
-        repo: PathBuf,
-    },
-
-    /// Push a layer onto the top of the stack of currently selected layers
-    PushLayer {
+    /// Interact with the stack of selected layers. Run `focus layer help` for more information.
+    Layer {
         /// Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        /// Names of layers to push.
-        names: Vec<String>,
+        args: Vec<String>,
     },
 
-    /// Pop one or more layer(s) from the top of the stack of current selected layers
-    PopLayer {
-        /// Path to the repository.
-        #[structopt(long, parse(from_os_str), default_value = ".")]
-        repo: PathBuf,
+    /// Interact with the ad-hoc coordinate stack. Run `focus selection help` for more information.
+    // Adhoc {
+    //     /// Path to the repository.
+    //     #[structopt(long, parse(from_os_str), default_value = ".")]
+    //     repo: PathBuf,
 
-        /// The number of layers to pop.
-        #[structopt(long, default_value = "1")]
-        count: usize,
-    },
-
-    /// Filter out one or more layer(s) from the stack of currently selected layers
-    RemoveLayer {
-        /// Path to the repository.
-        #[structopt(long, parse(from_os_str), default_value = ".")]
-        repo: PathBuf,
-
-        /// Names of the layers to be removed.
-        names: Vec<String>,
-    },
+    //     args: Vec<String>,
+    // },
 
     /// List focused repositories
     ListRepos {},
@@ -139,13 +113,86 @@ enum Subcommand {
         repo: PathBuf,
     },
 
-    /// Test the user interface
     UserInterfaceTest {},
 }
 
 #[derive(StructOpt, Debug)]
+enum LayersOpts {
+        /// List all available layers
+        Available {
+        },
+    
+        /// List currently selected layers
+        Selected {
+        },
+    
+        /// Push a layer onto the top of the stack of currently selected layers
+        Push {    
+            /// Names of layers to push.
+            names: Vec<String>,
+        },
+    
+        /// Pop one or more layer(s) from the top of the stack of current selected layers
+        Pop {
+            /// The number of layers to pop.
+            #[structopt(long, default_value = "1")]
+            count: usize,
+        },
+    
+        /// Filter out one or more layer(s) from the stack of currently selected layers
+        Remove {
+            /// Names of the layers to be removed.
+            names: Vec<String>,
+        },
+}
+
+#[derive(StructOpt, Debug)]
+struct LayerSubcommand {
+    #[structopt(subcommand)]
+    verb: LayersOpts,
+}
+
+
+#[derive(StructOpt, Debug)]
+enum AdhocOpts {
+        /// List all available layers
+        Available {
+        },
+    
+        /// List currently selected layers
+        Selected {
+        },
+    
+        /// Push a layer onto the top of the stack of currently selected layers
+        Push {    
+            /// Names of layers to push.
+            names: Vec<String>,
+        },
+    
+        /// Pop one or more layer(s) from the top of the stack of current selected layers
+        Pop {
+            /// The number of layers to pop.
+            #[structopt(long, default_value = "1")]
+            count: usize,
+        },
+    
+        /// Filter out one or more layer(s) from the stack of currently selected layers
+        Remove {
+            /// Names of the layers to be removed.
+            names: Vec<String>,
+        },
+}
+
+#[derive(StructOpt, Debug)]
+struct AdhocSubcommand {
+    #[structopt(subcommand)]
+    verb: AdhocOpts,
+}
+
+
+#[derive(StructOpt, Debug)]
 #[structopt(about = "Focused Development Tools")]
-struct ParachuteOpts {
+struct FocusOpts {
     /// Preserve the created sandbox directory for inspecting logs and other files.
     #[structopt(long)]
     preserve_sandbox: bool,
@@ -209,7 +256,7 @@ fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Result<PathBuf> {
     }
 }
 
-fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> Result<()> {
+fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Result<()> {
     let cloned_app = app.clone();
 
     match options.cmd {
@@ -257,41 +304,6 @@ fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> R
             subcommands::sync::run(app, &sparse_repo)
         }
 
-        Subcommand::AvailableLayers { repo } => {
-            let repo = expand_tilde(repo)?;
-            let repo = git_helper::find_top_level(app, &repo)
-                .context("Failed to canonicalize repo path")?;
-            subcommands::available_layers::run(&repo)
-        }
-
-        Subcommand::SelectedLayers { repo } => {
-            let repo = expand_tilde(repo)?;
-            let repo = git_helper::find_top_level(app, &repo)
-                .context("Failed to canonicalize repo path")?;
-            subcommands::selected_layers::run(&repo)
-        }
-
-        Subcommand::PushLayer { repo, names } => {
-            let repo = expand_tilde(repo)?;
-            let repo = git_helper::find_top_level(app, &repo)
-                .context("Failed to canonicalize repo path")?;
-            subcommands::push_layer::run(&repo, names)
-        }
-
-        Subcommand::PopLayer { repo, count } => {
-            let repo = expand_tilde(repo)?;
-            let repo = git_helper::find_top_level(app, &repo)
-                .context("Failed to canonicalize repo path")?;
-            subcommands::pop_layer::run(&repo, count)
-        }
-
-        Subcommand::RemoveLayer { repo, names } => {
-            let repo = expand_tilde(repo)?;
-            let repo = git_helper::find_top_level(app, &repo)
-                .context("Failed to canonicalize repo path")?;
-            subcommands::remove_layer::run(&repo, names)
-        }
-
         Subcommand::ListRepos {} => subcommands::list_repos::run(),
 
         Subcommand::DetectBuildGraphChanges { repo } => {
@@ -307,12 +319,38 @@ fn run_subcommand(app: Arc<App>, options: ParachuteOpts, interactive: bool) -> R
             ui.set_enabled(interactive);
             subcommands::user_interface_test::run(app)
         }
+
+        Subcommand::Layer { repo, args } => {
+            let layer_subcommand = LayerSubcommand::from_iter(args.iter());
+            match layer_subcommand.verb {
+                LayersOpts::Available {  } => { available_layers::run(&repo)?; Ok(()) },
+                LayersOpts::Selected {  } => { selected_layers::run(&repo)?; Ok(()) },
+                LayersOpts::Push { names } => { push_layer::run(&repo, names)?; Ok(()) },
+                LayersOpts::Pop { count } => { pop_layer::run(&repo, count)?; Ok(()) },
+                LayersOpts::Remove { names } => { remove_layer::run(&repo, names); Ok(()) },
+            }            
+        }
+
+        // Subcommand::Adhoc { repo, args } =>  {
+        //     let ui = cloned_app.ui();
+        //     let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
+        //     match adhoc_subcommand.verb {
+        //         AdhocOpts::Available {  } => todo!(),
+        //         AdhocOpts::Selected {  } => todo!(),
+        //         AdhocOpts::Push { names } => todo!(),
+        //         AdhocOpts::Pop { count } => todo!(),
+        //         AdhocOpts::Remove { names } => todo!(),
+        //     }
+        //     // let _ = ui.status(format!("UI Test"));
+        //     // ui.set_enabled(interactive);
+        //     Ok(())
+        // }
     }
 }
 
 fn main() -> Result<()> {
     let started_at = Instant::now();
-    let options = ParachuteOpts::from_args();
+    let options = FocusOpts::from_args();
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -327,7 +365,7 @@ fn main() -> Result<()> {
     run_subcommand(app, options, interactive)?;
 
     let total_runtime = started_at.elapsed();
-    log::info!("Finished normally in {:.2}s", total_runtime.as_secs_f32());
+    log::debug!("Finished normally in {:.2}s", total_runtime.as_secs_f32());
 
     Ok(())
 }
