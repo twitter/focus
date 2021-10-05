@@ -330,7 +330,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             args.insert(0, format!("{} repo", the_name_of_this_binary()));
             let repo_subcommand = RepoSubcommand::from_iter(args.iter());
             match repo_subcommand.verb {
-                RepoOpts::List {} => subcommands::list_repos::run(),
+                RepoOpts::List {} => subcommands::repo::list(),
             }
         }
         Subcommand::DetectBuildGraphChanges { repo } => {
