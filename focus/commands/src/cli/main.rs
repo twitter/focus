@@ -21,7 +21,6 @@ extern crate lazy_static;
 use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
-use subcommands::remove_layer;
 use tracker::Tracker;
 
 use std::{
@@ -36,7 +35,7 @@ use structopt::StructOpt;
 
 use crate::{
     app::App,
-    subcommands::{available_layers, pop_layer, push_layer, selected_layers},
+    subcommands::layer,
 };
 
 fn the_name_of_this_binary() -> String {
@@ -331,9 +330,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             args.insert(0, format!("{} repo", the_name_of_this_binary()));
             let repo_subcommand = RepoSubcommand::from_iter(args.iter());
             match repo_subcommand.verb {
-                RepoOpts::List {} => {
-                    subcommands::list_repos::run()
-                }
+                RepoOpts::List {} => subcommands::list_repos::run(),
             }
         }
         Subcommand::DetectBuildGraphChanges { repo } => {
@@ -357,23 +354,23 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let layer_subcommand = LayerSubcommand::from_iter(args.iter());
             match layer_subcommand.verb {
                 LayersOpts::Available {} => {
-                    available_layers::run(&repo)?;
+                    layer::available(&repo)?;
                     Ok(())
                 }
                 LayersOpts::List {} => {
-                    selected_layers::run(&repo)?;
+                    layer::selected(&repo)?;
                     Ok(())
                 }
                 LayersOpts::Push { names } => {
-                    push_layer::run(&repo, names)?;
+                    layer::push(&repo, names)?;
                     Ok(())
                 }
                 LayersOpts::Pop { count } => {
-                    pop_layer::run(&repo, count)?;
+                    layer::pop(&repo, count)?;
                     Ok(())
                 }
                 LayersOpts::Remove { names } => {
-                    remove_layer::run(&repo, names);
+                    layer::remove(&repo, names);
                     Ok(())
                 }
             }

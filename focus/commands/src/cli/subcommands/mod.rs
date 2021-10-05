@@ -1,10 +1,6 @@
-pub mod available_layers;
 pub mod clone;
 pub mod detect_build_graph_changes;
 pub mod list_repos;
-pub mod pop_layer;
-pub mod push_layer;
-pub mod remove_layer;
-pub mod selected_layers;
 pub mod sync;
 pub mod user_interface_test;
+pub mod layer;
