@@ -98,6 +98,11 @@ enum Subcommand {
         sparse_repo: PathBuf,
     },
 
+    /// Interact with repos configured on this system. Run `focus repo help` for more information.
+    Repo {
+        args: Vec<String>,
+    },
+
     /// Interact with the stack of selected layers. Run `focus layer help` for more information.
     Layer {
         /// Path to the repository.
@@ -108,16 +113,13 @@ enum Subcommand {
     },
 
     /// Interact with the ad-hoc coordinate stack. Run `focus selection help` for more information.
-    // Adhoc {
-    //     /// Path to the repository.
-    //     #[structopt(long, parse(from_os_str), default_value = ".")]
-    //     repo: PathBuf,
+    Adhoc {
+        /// Path to the repository.
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
 
-    //     args: Vec<String>,
-    // },
-
-    /// List focused repositories
-    ListRepos {},
+        args: Vec<String>,
+    },
 
     /// Detect whether there are changes to the build graph (used internally)
     DetectBuildGraphChanges {
@@ -127,6 +129,18 @@ enum Subcommand {
     },
 
     UserInterfaceTest {},
+}
+
+#[derive(StructOpt, Debug)]
+struct RepoSubcommand {
+    #[structopt(subcommand)]
+    verb: RepoOpts,
+}
+
+#[derive(StructOpt, Debug)]
+enum RepoOpts {
+    /// List registered repositories
+    List {},
 }
 
 #[derive(StructOpt, Debug)]
@@ -311,8 +325,17 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             subcommands::sync::run(app, &sparse_repo)
         }
 
-        Subcommand::ListRepos {} => subcommands::list_repos::run(),
-
+        Subcommand::Repo { args } => {
+            // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
+            let mut args = args.clone();
+            args.insert(0, format!("{} repo", the_name_of_this_binary()));
+            let repo_subcommand = RepoSubcommand::from_iter(args.iter());
+            match repo_subcommand.verb {
+                RepoOpts::List {} => {
+                    subcommands::list_repos::run()
+                }
+            }
+        }
         Subcommand::DetectBuildGraphChanges { repo } => {
             let repo = expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
@@ -354,20 +377,24 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     Ok(())
                 }
             }
-        } // Subcommand::Adhoc { repo, args } =>  {
-          //     let ui = cloned_app.ui();
-          //     let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
-          //     match adhoc_subcommand.verb {
-          //         AdhocOpts::Available {  } => todo!(),
-          //         AdhocOpts::Selected {  } => todo!(),
-          //         AdhocOpts::Push { names } => todo!(),
-          //         AdhocOpts::Pop { count } => todo!(),
-          //         AdhocOpts::Remove { names } => todo!(),
-          //     }
-          //     // let _ = ui.status(format!("UI Test"));
-          //     // ui.set_enabled(interactive);
-          //     Ok(())
-          // }
+        }
+
+        Subcommand::Adhoc { repo, args } => {
+            let ui = cloned_app.ui();
+            let mut args = args.clone();
+            args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
+            let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
+            match adhoc_subcommand.verb {
+                AdhocOpts::Available {} => todo!(),
+                AdhocOpts::Selected {} => todo!(),
+                AdhocOpts::Push { names } => todo!(),
+                AdhocOpts::Pop { count } => todo!(),
+                AdhocOpts::Remove { names } => todo!(),
+            }
+            // let _ = ui.status(format!("UI Test"));
+            // ui.set_enabled(interactive);
+            Ok(())
+        }
     }
 }
 
