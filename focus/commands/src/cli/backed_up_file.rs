@@ -1,6 +1,10 @@
 use anyhow::{Context, Result};
-use std::{cell::Cell, path::{Path, PathBuf}};
+use std::{
+    cell::Cell,
+    path::{Path, PathBuf},
+};
 
+#[derive(Debug)]
 pub struct BackedUpFile {
     original_path: PathBuf,
     backup_path: PathBuf,
@@ -9,8 +13,24 @@ pub struct BackedUpFile {
 
 impl BackedUpFile {
     pub fn new(path: &Path) -> Result<Self> {
-        let backup_path = path.join(".backup");
-        std::fs::copy(&path, &backup_path).context("copying to the backup")?;
+        let mut backup_path = path.to_owned();
+        let mut name = backup_path
+            .file_name()
+            .expect("Backup file with no file name")
+            .to_owned();
+        name.push(".backup");
+        backup_path.set_file_name(name);
+
+        std::fs::copy(&path, &backup_path).with_context(|| {
+            format!(
+                "Copying {} to the backup file {}",
+                &path.display(),
+                &backup_path.display()
+            )
+        })?;
+
+        log::debug!("Backed up {} -> {}", &path.display(), &backup_path.display());
+
         Ok(Self {
             original_path: path.to_owned(),
             backup_path: backup_path.to_owned(),
@@ -25,10 +45,13 @@ impl BackedUpFile {
 
 impl Drop for BackedUpFile {
     fn drop(&mut self) {
-        if !self.restore.get() {
-            std::fs::copy(&self.backup_path, &self.original_path)
-            .expect("failed to restore backup file");
+        if self.restore.get() {
+            log::info!("Restoring backup {} -> {}", self.backup_path.display(), self.original_path.display());
+            std::fs::rename(&self.backup_path, &self.original_path)
+                .expect("failed to restore backup file");
+        } else {
+            log::debug!("Removing backup {}", self.backup_path.display());
+            std::fs::remove_file(&self.backup_path).expect("failed to delete backup file");
         }
-        std::fs::remove_file(&self.backup_path).expect("failed to delete backup file");
     }
 }

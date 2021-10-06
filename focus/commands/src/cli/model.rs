@@ -433,7 +433,7 @@ impl LayerSets {
     }
 
     // Return the computed layers, namely the mandatory layers and the selected layers
-    fn computed_layers(&self) -> Result<LayerSet> {
+    pub fn computed_layers(&self) -> Result<LayerSet> {
         let mut layers = self
             .mandatory_layers()
             .context("loading mandatory layers")?;

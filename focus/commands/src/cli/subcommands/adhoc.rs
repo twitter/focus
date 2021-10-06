@@ -38,7 +38,6 @@ impl Adhoc {
         visitor_fn(&mut mutated_coordinates)
             .context("Visitor function failed while mutating coordinates")?;
 
-        log::info!("After visit");
 
         if mutated_coordinates != coordinates {
             let layer = Layer::new("adhoc", "Ad-hoc coordinate stack", false, mutated_coordinates);

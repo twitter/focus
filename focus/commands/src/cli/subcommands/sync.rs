@@ -128,35 +128,11 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
 
         // Add mandatory layers
         let sets = LayerSets::new(&sparse_repo);
-        let layer_set = sets
-            .mandatory_layers()
-            .context("resolving mandatory layers")?;
+        let layer_set = sets.computed_layers().context("Failed resolving applied layers")?;
         for layer in layer_set.layers() {
             merge_coordinates_from_layer(layer);
         }
 
-        if let Some(selected) = sets.selected_layers().context("loading selected layers")? {
-            // Add selected layers' coordinates
-            if selected.layers().is_empty() {
-                eprintln!("No layers are selected, but a stack exists");
-                bail!("No layers found");
-            }
-            for layer in selected.layers() {
-                merge_coordinates_from_layer(layer);
-            }
-        } else {
-            // Add ad-hoc layer coordinates
-            if let Some(adhoc_layers) = sets.adhoc_layers().context("reading adhoc layers")? {
-                for layer in adhoc_layers.layers() {
-                    merge_coordinates_from_layer(layer);
-                }
-            } else {
-                // Fail because there are no selected layers or ad-hoc layer
-                eprintln!("There are no selected layers and an ad-hoc layer does not exist.");
-                eprintln!("The focused development working state in this repo might be corrupted.");
-                bail!("No layers found");
-            }
-        }
         Ok(coordinates)
     })?;
 

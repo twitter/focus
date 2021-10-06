@@ -376,6 +376,15 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
             let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
 
+            let adhoc_layer_set_backup = {
+                let sets = LayerSets::new(&repo);
+                if sets.adhoc_layer_path().is_file() {
+                    Some(BackedUpFile::new(sets.adhoc_layer_path().as_path())?)
+                } else {
+                    None
+                }
+            };
+
             let mutated: bool = match adhoc_subcommand.verb {
                 AdhocOpts::List {} => adhoc::list(app.clone(), repo.clone())?,
                 AdhocOpts::Push { names } => adhoc::push(app.clone(), repo.clone(), names)?,
@@ -384,24 +393,19 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             };
 
             if mutated {
-                let adhoc_layer_set_backup = {
-                    let sets = LayerSets::new(&repo);
-                    if sets.adhoc_layer_path().is_file() {
-                        Some(BackedUpFile::new(sets.adhoc_layer_path().as_path())?)
-                    } else {
-                        None
-                    }
-                };
-
+                let _ = app.ui().log(
+                    String::from("Adhoc Cooordinate Stack Update"),
+                    String::from("Syncing focused paths since the selected content has changed"),
+                );
                 app.ui().set_enabled(interactive);
-                let sparse_profile_path = &repo.join(".git").join("info").join("sparse-checkout");
-                let sparse_profile_backup = BackedUpFile::new(&sparse_profile_path)
-                    .context("Failed making a backup of the sparse profile")?;
-                subcommands::sync::run(app, repo.as_path())?;
-                // Sync was okay, so skip reverting the sparse profile.
-                sparse_profile_backup.set_restore(false); 
+                subcommands::sync::run(app, repo.as_path())
+                    .context("Sync failed; changes to the stack will be reverted.")?;
 
                 // Sync was okay, so skip reverting the ad-hoc coordinate stack.
+                adhoc_layer_set_backup.map(|backup| {
+                    backup.set_restore(false);
+                });
+            } else {
                 adhoc_layer_set_backup.map(|backup| {
                     backup.set_restore(false);
                 });
