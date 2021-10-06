@@ -1,10 +1,7 @@
 use anyhow::{bail, Context, Result};
 use internals::util::lock_file::LockFile;
-use prost::encoding::bool::merge;
 
-use std::collections::HashSet;
 use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
@@ -15,7 +12,6 @@ use std::thread;
 use std::{collections::BTreeSet, path::PathBuf, process::Stdio, sync::Arc};
 
 use crate::app::App;
-use crate::coordinate::Coordinate;
 use crate::coordinate::CoordinateSet;
 use crate::coordinate_resolver::CacheOptions;
 use crate::coordinate_resolver::RepoState;
@@ -321,17 +317,7 @@ pub fn create_or_update_sparse_clone(
         bail!("Sparse repo does not exist and creation is not allowed")
     }
 
-    let name: String = if let Some(name) = sparse_repo.file_name() {
-        name.to_string_lossy().into()
-    } else {
-        bail!("unable to determine file stem for sparse repo directory");
-    };
-
     let sparse_profile_output = sandbox.path().join("sparse-checkout");
-    let project_view_output = {
-        let project_view_name = format!("focus-{}.bazelproject", &name);
-        sandbox.path().join(project_view_name)
-    };
 
     configure_dense_repo(&dense_repo, app.clone())
         .context("setting configuration options in the dense repo")?;
