@@ -41,11 +41,10 @@ pub fn run(app: Arc<App>) -> Result<()> {
                         i,
                         i - 1
                     ),
-                ).expect("log failed");
+                );
             std::thread::sleep(Duration::from_millis(50));
         }
     });
-    // handles.push(beer_thread);
 
     let cloned_ui = app.ui();
     for handle in handles {
@@ -53,8 +52,7 @@ pub fn run(app: Arc<App>) -> Result<()> {
             .log(
                 format!("Thread Butler"),
                 format!("Waiting on thread {:?}", handle.thread()),
-            )
-            .expect("log failed");
+            );
         handle.join().expect("Thread failed");
     }
 

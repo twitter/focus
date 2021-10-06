@@ -109,7 +109,7 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
         path
     };
 
-    let _ = ui.status(format!("Syncing {}", &sparse_repo.display(),));
+    ui.status(format!("Syncing {}", &sparse_repo.display()));
 
     ensure_working_trees_are_clean(app.clone(), sparse_repo.as_path(), Some(dense_repo.clone()))
         .context("Failed trying to determine whether working trees were clean")?;

@@ -300,7 +300,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             }
 
             let ui = cloned_app.ui();
-            let _ = ui.status(format!(
+            ui.status(format!(
                 "Cloning {} into {}",
                 dense_repo.display(),
                 sparse_repo.display()
@@ -341,7 +341,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
         Subcommand::UserInterfaceTest {} => {
             let ui = cloned_app.ui();
-            let _ = ui.status(format!("UI Test"));
+            ui.status(format!("UI Test"));
             ui.set_enabled(interactive);
             subcommands::user_interface_test::run(app)
         }
@@ -375,7 +375,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             };
 
             if mutated {
-                let _ = app.ui().log(
+                app.ui().log(
                     String::from("Layer Stack Update"),
                     String::from("Syncing focused paths since the selected content has changed"),
                 );
@@ -415,7 +415,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             };
 
             if mutated {
-                let _ = app.ui().log(
+                app.ui().log(
                     String::from("Adhoc Cooordinate Stack Update"),
                     String::from("Syncing focused paths since the selected content has changed"),
                 );

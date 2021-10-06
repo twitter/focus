@@ -355,6 +355,7 @@ impl Drop for UserInterfaceRenderer {
     }
 }
 
+#[derive(Debug)]
 pub struct LogEntry {
     created_at: Instant,
     subject: String,
@@ -448,30 +449,27 @@ impl UserInterfaceState {
         }
     }
 
-    pub fn add_log_entry(&self, entry: LogEntry) -> Result<()> {
+    pub fn add_log_entry(&self, entry: LogEntry) {
         match self.log_entries.lock() {
             Ok(mut locked_log_entries) => {
                 if locked_log_entries.len() == self.log_entry_limit {
                     locked_log_entries.remove(0);
                 }
-
                 locked_log_entries.push(entry);
-                Ok(())
             }
-            Err(_) => {
-                bail!("Failed to obtain lock")
+            Err(e) => {
+                log::warn!("Failed to obtain lock; could not add log entry {:?}: {}", entry, e);
             }
         }
     }
 
-    pub fn set_status(&self, status: String) -> Result<()> {
+    pub fn set_status(&self, status: String)  {
         match self.status.lock() {
             Ok(mut locked_status) => {
                 *locked_status = status;
-                Ok(())
             }
-            Err(_) => {
-                bail!("Failed to obtain lock")
+            Err(e) => {
+                log::warn!("Failed to obtain lock; could not set status to {}: {}", status, e);
             }
         }
     }
@@ -507,11 +505,11 @@ impl UserInterface {
         self.state.set_enabled(enabled);
     }
 
-    pub fn update_progress(&self, handle: TaskHandle, current: usize) -> Result<()> {
+    pub fn update_progress(&self, handle: TaskHandle, current: usize) {
         let task = self
             .state
             .get_task(handle)
-            .context("Retreiving task failed")?;
+            .expect("Retreiving task failed");
         if let Some(task) = task {
             task.update_progress(current);
             self.renderer
@@ -528,11 +526,7 @@ impl UserInterface {
             };
             self.renderer
                 .notify(UserInterfaceEvent::DiagnosticMessage(message));
-        } else {
-            bail!("Task {:?} was not found", &handle);
         }
-
-        Ok(())
     }
 
     pub fn elapsed_time_on_task(&self, handle: TaskHandle) -> Result<Duration> {
@@ -547,10 +541,9 @@ impl UserInterface {
         }
     }
 
-    pub fn log(&self, subject: String, content: String) -> Result<()> {
+    pub fn log(&self, subject: String, content: String) {
         let entry = LogEntry::new(subject, content, None);
-        self.state.add_log_entry(entry)?;
-        Ok(())
+        self.state.add_log_entry(entry);
     }
 
     pub fn log_with_task_time(
@@ -558,15 +551,13 @@ impl UserInterface {
         subject: String,
         content: String,
         task_time: Option<Duration>,
-    ) -> Result<()> {
+    ) {
         let entry = LogEntry::new(subject, content, task_time);
-        self.state.add_log_entry(entry)?;
-        Ok(())
+        self.state.add_log_entry(entry);
     }
 
-    pub fn status(&self, status: String) -> Result<()> {
-        self.state.set_status(status)?;
-        Ok(())
+    pub fn status(&self, status: String){
+        self.state.set_status(status);
     }
 }
 
@@ -589,8 +580,6 @@ impl ProgressReporter {
         let task_handle = ui
             .new_task(task)
             .context("Registering task with UI failed")?;
-
-        // let _ = ui.log("Started".to_owned(), description.clone());
 
         Ok(Self {
             app: app,
@@ -629,7 +618,7 @@ impl Drop for ProgressReporter {
         } else {
             None
         };
-        let _ = ui.log_with_task_time("Finished".to_owned(), self.description.clone(), task_time);
-        let _ = ui.update_progress(self.task_handle, 1);
+        ui.log_with_task_time("Finished".to_owned(), self.description.clone(), task_time);
+        ui.update_progress(self.task_handle, 1);
     }
 }
