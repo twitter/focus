@@ -128,7 +128,9 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
 
         // Add mandatory layers
         let sets = LayerSets::new(&sparse_repo);
-        let layer_set = sets.computed_layers().context("Failed resolving applied layers")?;
+        let layer_set = sets
+            .computed_layers()
+            .context("Failed resolving applied layers")?;
         for layer in layer_set.layers() {
             merge_coordinates_from_layer(layer);
         }

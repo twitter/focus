@@ -7,8 +7,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tempfile::TempDir;
 
-
-
 pub struct Sandbox {
     #[allow(dead_code)]
     temp_dir: Option<tempfile::TempDir>,

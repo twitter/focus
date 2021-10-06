@@ -7,7 +7,11 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 
-use crate::{app::App, coordinate::{Coordinate, CoordinateSet}, model::{self, Layer, LayerSet, LayerSets}};
+use crate::{
+    app::App,
+    coordinate::{Coordinate, CoordinateSet},
+    model::{self, Layer, LayerSet, LayerSets},
+};
 
 struct Adhoc {
     app: Arc<App>,
@@ -38,12 +42,17 @@ impl Adhoc {
         visitor_fn(&mut mutated_coordinates)
             .context("Visitor function failed while mutating coordinates")?;
 
-
         if mutated_coordinates != coordinates {
-            let layer = Layer::new("adhoc", "Ad-hoc coordinate stack", false, mutated_coordinates);
+            let layer = Layer::new(
+                "adhoc",
+                "Ad-hoc coordinate stack",
+                false,
+                mutated_coordinates,
+            );
             let updated_set = LayerSet::new(vec![layer]);
             log::info!("Saving updated ad-hoc coordinate stack");
-            sets.store_adhoc_layers(&updated_set).context("Failed storing the ad-hoc coordinate stack layer set")?;
+            sets.store_adhoc_layers(&updated_set)
+                .context("Failed storing the ad-hoc coordinate stack layer set")?;
             Ok(true)
         } else {
             log::info!("Skipped saving because nothing changed");

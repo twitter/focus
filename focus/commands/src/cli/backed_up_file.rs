@@ -29,7 +29,11 @@ impl BackedUpFile {
             )
         })?;
 
-        log::debug!("Backed up {} -> {}", &path.display(), &backup_path.display());
+        log::debug!(
+            "Backed up {} -> {}",
+            &path.display(),
+            &backup_path.display()
+        );
 
         Ok(Self {
             original_path: path.to_owned(),
@@ -46,7 +50,11 @@ impl BackedUpFile {
 impl Drop for BackedUpFile {
     fn drop(&mut self) {
         if self.restore.get() {
-            log::info!("Restoring backup {} -> {}", self.backup_path.display(), self.original_path.display());
+            log::info!(
+                "Restoring backup {} -> {}",
+                self.backup_path.display(),
+                self.original_path.display()
+            );
             std::fs::rename(&self.backup_path, &self.original_path)
                 .expect("failed to restore backup file");
         } else {

@@ -545,10 +545,12 @@ impl LayerSets {
         self.store_selected_layers(&new_layers)
             .context("storing the modified user layer stack")?;
 
-        Ok((self
-            .selected_layers()
-            .context("loading selected layers")?
-            .unwrap_or_default(), removals > 0))
+        Ok((
+            self.selected_layers()
+                .context("loading selected layers")?
+                .unwrap_or_default(),
+            removals > 0,
+        ))
     }
 }
 

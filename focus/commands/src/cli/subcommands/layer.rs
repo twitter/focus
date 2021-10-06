@@ -43,7 +43,9 @@ pub fn push(repo: &Path, names: Vec<String>) -> Result<bool> {
     // Push a layer
     let sets = model::LayerSets::new(&repo);
 
-    let (new_selection, changed) = sets.push_as_selection(names).context("Failed to push layers")?;
+    let (new_selection, changed) = sets
+        .push_as_selection(names)
+        .context("Failed to push layers")?;
 
     if new_selection.layers().is_empty() {
         eprintln!("The layer stack is empty!");
