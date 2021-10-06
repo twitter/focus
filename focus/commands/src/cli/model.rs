@@ -644,7 +644,7 @@ mod tests {
             content_hash: None,
         };
 
-        t1.extend(t2);
+        t1.extend(t2.clone());
         assert_eq!(&t1.layers.last().unwrap(), &t2.layers.last().unwrap());
         Ok(())
     }

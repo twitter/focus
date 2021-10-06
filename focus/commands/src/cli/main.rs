@@ -19,6 +19,7 @@ mod working_tree_synchronizer;
 extern crate lazy_static;
 
 use anyhow::{bail, Context, Result};
+use backed_up_file::BackedUpFile;
 use env_logger::{self, Env};
 
 use tracker::Tracker;
@@ -33,7 +34,11 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::{app::App, subcommands::{adhoc, layer}};
+use crate::{
+    app::App,
+    model::LayerSets,
+    subcommands::{adhoc, layer},
+};
 
 fn the_name_of_this_binary() -> String {
     std::env::args_os()
@@ -367,18 +372,41 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Adhoc { repo, args } => {
-            let ui = cloned_app.ui();
             let mut args = args.clone();
             args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
             let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
-            match adhoc_subcommand.verb {
-                AdhocOpts::List {} => adhoc::list(app.clone(), repo)?,
-                AdhocOpts::Push { names } => adhoc::push(app.clone(), repo, names)?,
-                AdhocOpts::Pop { count } => adhoc::pop(app.clone(), repo, count)?,
-                AdhocOpts::Remove { names } => adhoc::remove(app.clone(), repo, names)?,
+
+            let mutated: bool = match adhoc_subcommand.verb {
+                AdhocOpts::List {} => adhoc::list(app.clone(), repo.clone())?,
+                AdhocOpts::Push { names } => adhoc::push(app.clone(), repo.clone(), names)?,
+                AdhocOpts::Pop { count } => adhoc::pop(app.clone(), repo.clone(), count)?,
+                AdhocOpts::Remove { names } => adhoc::remove(app.clone(), repo.clone(), names)?,
+            };
+
+            if mutated {
+                let adhoc_layer_set_backup = {
+                    let sets = LayerSets::new(&repo);
+                    if sets.adhoc_layer_path().is_file() {
+                        Some(BackedUpFile::new(sets.adhoc_layer_path().as_path())?)
+                    } else {
+                        None
+                    }
+                };
+
+                app.ui().set_enabled(interactive);
+                let sparse_profile_path = &repo.join(".git").join("info").join("sparse-checkout");
+                let sparse_profile_backup = BackedUpFile::new(&sparse_profile_path)
+                    .context("Failed making a backup of the sparse profile")?;
+                subcommands::sync::run(app, repo.as_path())?;
+                // Sync was okay, so skip reverting the sparse profile.
+                sparse_profile_backup.set_restore(false); 
+
+                // Sync was okay, so skip reverting the ad-hoc coordinate stack.
+                adhoc_layer_set_backup.map(|backup| {
+                    backup.set_restore(false);
+                });
             }
-            // let _ = ui.status(format!("UI Test"));
-            // ui.set_enabled(interactive);
+
             Ok(())
         }
     }

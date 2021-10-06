@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::coordinate::CoordinateSet;
+use crate::git_helper;
 use crate::model::Layer;
 use crate::model::LayerSets;
 use crate::sandbox_command::SandboxCommand;
@@ -30,13 +31,7 @@ where
     result
 }
 
-pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
-    use crate::git_helper;
-    use crate::sparse_repos;
-
-    let ui = app.ui();
-    let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
-        .context("canonicalizing sparse repo path")?;
+fn find_dense_repo(app: Arc<App>, sparse_repo: &Path) -> Result<PathBuf> {
     let dense_repo = git_helper::run_git_command_consuming_stdout(
         "Reading dense repo URL".to_owned(),
         &sparse_repo,
@@ -47,29 +42,25 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     .map(|path| PathBuf::from(path))?;
     let dense_repo = git_helper::find_top_level(app.clone(), &dense_repo)
         .context("Failed finding dense repo top level")?;
+    Ok(dense_repo)
+}
 
-    let _ = ui.status(format!(
-        "Syncing {}",
-        &sparse_repo.display(),
-    ));
-
+pub fn ensure_working_trees_are_clean(
+    app: Arc<App>,
+    sparse_repo: &Path,
+    dense_repo: Option<PathBuf>,
+) -> Result<()> {
+    let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
+        .context("canonicalizing sparse repo path")?;
+    let dense_repo = {
+        if let Some(dense_repo) = dense_repo {
+            dense_repo
+        } else {
+            find_dense_repo(app.clone(), &sparse_repo)?
+        }
+    };
     let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, app.clone())?;
     let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, app.clone())?;
-
-    let sparse_profile_path = sparse_repo
-        .join(".git")
-        .join("info")
-        .join("sparse-checkout");
-
-    let (sparse_profile_output_file, sparse_profile_output_path) =
-        app.sandbox().create_file(Some("sparse-profile"), None)?;
-    drop(sparse_profile_output_file);
-
-    let sparse_checkout_backup_path = {
-        let mut path = sparse_profile_path.clone();
-        path.set_extension("backup");
-        path
-    };
 
     if let Ok(clean) = perform("Checking that dense repo is in a clean state", || {
         dense_sync.is_working_tree_clean()
@@ -92,6 +83,36 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     } else {
         bail!("Could not determine whether the sparse repo is in a clean state");
     }
+
+    Ok(())
+}
+
+pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
+    use crate::sparse_repos;
+    let ui = app.ui();
+    let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
+        .context("canonicalizing sparse repo path")?;
+    let dense_repo = find_dense_repo(app.clone(), &sparse_repo)?;
+
+    let sparse_profile_path = sparse_repo
+        .join(".git")
+        .join("info")
+        .join("sparse-checkout");
+
+    let (sparse_profile_output_file, sparse_profile_output_path) =
+        app.sandbox().create_file(Some("sparse-profile"), None)?;
+    drop(sparse_profile_output_file);
+
+    let sparse_checkout_backup_path = {
+        let mut path = sparse_profile_path.clone();
+        path.set_extension("backup");
+        path
+    };
+
+    let _ = ui.status(format!("Syncing {}", &sparse_repo.display(),));
+
+    ensure_working_trees_are_clean(app.clone(), sparse_repo.as_path(), Some(dense_repo.clone()))
+        .context("Failed trying to determine whether working trees were clean")?;
 
     // Figure out all of the coordinates we will be resolving
     let coordinates = perform("Enumerating coordinates", || {

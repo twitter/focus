@@ -19,7 +19,7 @@ impl Adhoc {
         Ok(Self { app, repo_path })
     }
 
-    pub fn with_mut_coordinates<F>(&self, visitor_fn: F) -> Result<()>
+    pub fn with_mut_coordinates<F>(&self, visitor_fn: F) -> Result<bool>
     where
         F: FnOnce(&mut Vec<String>) -> Result<()>,
     {
@@ -44,10 +44,11 @@ impl Adhoc {
             let layer = Layer::new("adhoc", "Ad-hoc coordinate stack", false, mutated_coordinates);
             let updated_set = LayerSet::new(vec![layer]);
             log::info!("Saving updated ad-hoc coordinate stack");
-            sets.store_adhoc_layers(&updated_set).context("Failed storing the ad-hoc coordinate stack layer set")
+            sets.store_adhoc_layers(&updated_set).context("Failed storing the ad-hoc coordinate stack layer set")?;
+            Ok(true)
         } else {
             log::info!("Skipped saving because nothing changed");
-            Ok(())
+            Ok(false)
         }
     }
 }
@@ -62,7 +63,7 @@ fn extract_coordinates(set: &LayerSet) -> Vec<String> {
     results
 }
 
-pub fn list(app: Arc<App>, repo: PathBuf) -> Result<()> {
+pub fn list(app: Arc<App>, repo: PathBuf) -> Result<bool> {
     Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
         if coordinates.is_empty() {
             eprintln!("The ad-hoc coordinate stack is empty!");
@@ -76,7 +77,7 @@ pub fn list(app: Arc<App>, repo: PathBuf) -> Result<()> {
     })
 }
 
-pub fn push(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<()> {
+pub fn push(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<bool> {
     Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
         let mut set = HashSet::<String>::with_capacity(coordinates.len());
         set.extend(coordinates.clone());
@@ -96,7 +97,7 @@ pub fn push(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<()> {
     })
 }
 
-pub fn pop(app: Arc<App>, repo: PathBuf, count: usize) -> Result<()> {
+pub fn pop(app: Arc<App>, repo: PathBuf, count: usize) -> Result<bool> {
     Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
         for i in 0..count {
             if coordinates.pop().is_none() {
@@ -109,7 +110,7 @@ pub fn pop(app: Arc<App>, repo: PathBuf, count: usize) -> Result<()> {
     })
 }
 
-pub fn remove(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<()> {
+pub fn remove(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<bool> {
     Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
         let mut coordinate_index: HashMap<String, usize> = HashMap::new();
         for (index, coordinate) in coordinates.iter().enumerate() {
