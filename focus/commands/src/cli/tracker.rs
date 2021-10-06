@@ -34,17 +34,14 @@ impl TrackedRepo {
         })
     }
 
-    fn read_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
+    pub(crate) fn read_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
         let uuid = git_helper::read_config(repo_path, "twitter.focus.uuid", app.clone())?;
-        let uuid = Uuid::from_str(uuid.as_str()).context("parsing uuid")?;
-        let _progress = ProgressReporter::new(
-            app.clone(),
-            format!(
-                "Read existing UUID {} for repo at path {}",
-                uuid.borrow(),
-                repo_path.display()
-            ),
-        );
+        let uuid = Uuid::from_str(uuid.trim()).context("parsing uuid")?;
+        app.ui().log(String::from("Tracker"), format!(
+            "Read existing UUID {} for repo at path {}",
+            uuid.borrow(),
+            repo_path.display()
+        ));
 
         Ok(uuid)
     }
@@ -161,6 +158,78 @@ impl Tracker {
         Ok(())
     }
 
+    // Repair the registry of tracked repositories by checking that symlinks point to canonicalizable destinations and that the configured UUIDs match the inbound link.
+    pub fn repair(&self, app: Arc<App>) -> Result<()> {
+        let reader = self
+            .repos_by_uuid_dir()
+            .read_dir()
+            .with_context(|| format!("Failed reading directory {}", self.directory.display()))?;
+
+        for entry in reader {
+            match entry {
+                Ok(entry) => {
+                    log::info!("Checking {}", entry.path().display());
+
+                    if let Ok(file_type) = entry.file_type() {
+                        if file_type.is_symlink() {
+                            match canonicalize(entry.path()) {
+                                Ok(canonical_path) => {
+                                    let file_name = entry.file_name();
+                                    let utf_file_name = file_name.to_str();
+                                    if utf_file_name.is_none() {
+                                        bail!(
+                                            "Unsable to interpret path {} as UTF-8",
+                                            entry.path().display()
+                                        );
+                                    }
+                                    let uuid_from_filename =
+                                        Uuid::parse_str(utf_file_name.unwrap())
+                                            .context("parsing file name as a uuid")?;
+
+                                    let uuid_from_config =
+                                        TrackedRepo::read_uuid(&canonical_path, app.clone());
+
+                                    let mismatched_uuid = match uuid_from_config {
+                                        Ok(configured) => configured != uuid_from_filename,
+                                        Err(_) => true,
+                                    };
+
+                                    if mismatched_uuid {
+                                        log::warn!(
+                                            "Removing {}: configured UUID differs from indicated UUID ({})",
+                                            entry.path().display(),
+                                            uuid_from_filename,
+                                        );
+                                        std::fs::remove_file(entry.path())?;
+                                    }
+                                }
+
+                                Err(e) => {
+                                    log::warn!(
+                                        "Removing {}: invalid destination.",
+                                        entry.path().display(),
+                                    );
+                                    std::fs::remove_file(entry.path())?;
+                                }
+                            }
+                        } else {
+                            log::warn!("Removing {} (not a symlink)", entry.path().display());
+                            std::fs::remove_file(entry.path())?;
+                        }
+                    } else {
+                        bail!("unable to determine file type for {:?}", entry.path());
+                    }
+                }
+
+                Err(e) => {
+                    bail!("failed reading directory entry: {}", e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     // Scan the directory containing repos labeled by UUID.
     pub fn scan(&self) -> Result<Snapshot> {
         let reader = self
@@ -196,8 +265,8 @@ impl Tracker {
                                 }
 
                                 Err(e) => {
-                                    bail!(
-                                        "unable to canonicalize path {}: {}",
+                                    log::warn!(
+                                        "Skipping {}: unable to canonicalize destination {}",
                                         entry.path().display(),
                                         e
                                     );

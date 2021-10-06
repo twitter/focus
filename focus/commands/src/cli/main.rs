@@ -142,6 +142,9 @@ struct RepoSubcommand {
 enum RepoOpts {
     /// List registered repositories
     List {},
+
+    /// Attempt to repair the registry of repositories
+    Repair {},
 }
 
 #[derive(StructOpt, Debug)]
@@ -330,6 +333,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let repo_subcommand = RepoSubcommand::from_iter(args.iter());
             match repo_subcommand.verb {
                 RepoOpts::List {} => subcommands::repo::list(),
+                RepoOpts::Repair {  } => subcommands::repo::repair(app.clone()),
             }
         }
         Subcommand::DetectBuildGraphChanges { repo } => {

@@ -478,7 +478,7 @@ pub fn set_sparse_checkout(
     {
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
         let (mut cmd, scmd) = git_helper::git_command(
-            "Initializing sparse checkout profile".to_owned(),
+            "Initializing baseline sparse checkout".to_owned(),
             app.clone(),
         )?;
         scmd.ensure_success_or_log(
@@ -490,7 +490,7 @@ pub fn set_sparse_checkout(
             "sparse-checkout init",
         )
         .map(|_| ())
-        .context("initializing sparse checkout")?;
+        .context("Failed to initialize the sparse checkout")?;
     }
 
     {
@@ -513,7 +513,7 @@ pub fn set_sparse_checkout(
             "sparse-checkout add",
         )
         .map(|_| ())
-        .context("initializing sparse checkout")?;
+        .context("Failed to set the sparse checkout")?;
     }
 
     Ok(())
@@ -672,14 +672,11 @@ fn resolve_involved_directories(
     }
 
     let difference = into.len() - before;
-    report_progress(
-        app,
-        format!(
-            "Dependency query yielded {} directories ({} total)",
-            difference,
-            &result.paths().len()
-        ),
-    );
+    app.ui().log(String::from("Resolver"), format!(
+        "Dependency query yielded {} directories ({} total)",
+        difference,
+        &result.paths().len()
+    ));
 
     Ok(difference)
 }

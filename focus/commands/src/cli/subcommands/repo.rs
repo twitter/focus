@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 
-use crate::tracker::Tracker;
+use crate::{app::App, tracker::Tracker};
 
 pub fn list() -> Result<()> {
     let tracker = Tracker::default();
@@ -10,4 +12,8 @@ pub fn list() -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn repair(app: Arc<App>) -> Result<()> {
+    Tracker::default().repair(app).context("Failed to repair repository registry")
 }
