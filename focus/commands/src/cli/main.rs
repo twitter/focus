@@ -33,10 +33,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::{
-    app::App,
-    subcommands::layer,
-};
+use crate::{app::App, subcommands::{adhoc, layer}};
 
 fn the_name_of_this_binary() -> String {
     std::env::args_os()
@@ -178,28 +175,25 @@ struct LayerSubcommand {
 
 #[derive(StructOpt, Debug)]
 enum AdhocOpts {
-    /// List all available layers
-    Available {},
+    /// List the contents of the ad-hoc coordinate stack
+    List {},
 
-    /// List currently selected layers
-    Selected {},
-
-    /// Push a layer onto the top of the stack of currently selected layers
+    /// Push one or more coordinate(s) onto the top of the ad-hoc coordinate stack
     Push {
-        /// Names of layers to push.
+        /// Names of coordinates to push.
         names: Vec<String>,
     },
 
-    /// Pop one or more layer(s) from the top of the stack of current selected layers
+    /// Pop one or more coordinates(s) from the top of the ad-hoc coordinate stack
     Pop {
-        /// The number of layers to pop.
+        /// The number of coordinates to pop.
         #[structopt(long, default_value = "1")]
         count: usize,
     },
 
-    /// Filter out one or more layer(s) from the stack of currently selected layers
+    /// Filter out one or more coordinate(s) from the ad-hoc coordinate stack
     Remove {
-        /// Names of the layers to be removed.
+        /// Names of the coordinates to be removed.
         names: Vec<String>,
     },
 }
@@ -355,25 +349,21 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             match layer_subcommand.verb {
                 LayersOpts::Available {} => {
                     layer::available(&repo)?;
-                    Ok(())
                 }
                 LayersOpts::List {} => {
-                    layer::selected(&repo)?;
-                    Ok(())
+                    layer::list(&repo)?;
                 }
                 LayersOpts::Push { names } => {
                     layer::push(&repo, names)?;
-                    Ok(())
                 }
                 LayersOpts::Pop { count } => {
                     layer::pop(&repo, count)?;
-                    Ok(())
                 }
                 LayersOpts::Remove { names } => {
-                    layer::remove(&repo, names);
-                    Ok(())
+                    layer::remove(&repo, names)?;
                 }
             }
+            Ok(())
         }
 
         Subcommand::Adhoc { repo, args } => {
@@ -382,11 +372,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
             let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
             match adhoc_subcommand.verb {
-                AdhocOpts::Available {} => todo!(),
-                AdhocOpts::Selected {} => todo!(),
-                AdhocOpts::Push { names } => todo!(),
-                AdhocOpts::Pop { count } => todo!(),
-                AdhocOpts::Remove { names } => todo!(),
+                AdhocOpts::List {} => adhoc::list(app.clone(), repo)?,
+                AdhocOpts::Push { names } => adhoc::push(app.clone(), repo, names)?,
+                AdhocOpts::Pop { count } => adhoc::pop(app.clone(), repo, count)?,
+                AdhocOpts::Remove { names } => adhoc::remove(app.clone(), repo, names)?,
             }
             // let _ = ui.status(format!("UI Test"));
             // ui.set_enabled(interactive);

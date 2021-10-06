@@ -14,7 +14,7 @@ pub fn available(repo: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn selected(repo: &Path) -> Result<()> {
+pub fn list(repo: &Path) -> Result<()> {
     let sets = LayerSets::new(&repo);
 
     if let Some(selected) = sets.selected_layers().context("loading selected layers")? {
