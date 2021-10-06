@@ -455,7 +455,7 @@ impl LayerSets {
             .context("storing user layer stack")
     }
 
-    pub fn push_as_selection(&self, names: Vec<String>) -> Result<LayerSet> {
+    pub fn push_as_selection(&self, names: Vec<String>) -> Result<(LayerSet, bool)> {
         // TODO: Locking
         let mut user_layers = self
             .user_layers()
@@ -464,6 +464,7 @@ impl LayerSets {
         let mut selected = self.selected_layers()?.unwrap_or_default();
         let selected_indexed = RichLayerSet::new(selected.clone())?;
         let available = RichLayerSet::new(self.available_layers()?)?;
+        let mut changed = false;
 
         for name in names {
             if selected_indexed.contains_key(&name) {
@@ -474,6 +475,7 @@ impl LayerSets {
                     // let name_clone = name.to_owned().to_owned();
                     user_layers.selected_layer_names.push(name.clone());
                     selected.layers.push(layer.clone());
+                    changed = true;
                 } else {
                     eprintln!("{}: Not found", &name);
                     bail!("One of the requested layers was not found");
@@ -481,33 +483,35 @@ impl LayerSets {
             }
         }
 
-        self.store_selected_layers(&user_layers)
-            .context("storing the modified user layer stack")?;
+        if changed {
+            self.store_selected_layers(&user_layers)
+                .context("Failed to store the modified user layer stack")?;
+        }
 
-        Ok(selected)
+        Ok((selected, changed))
     }
 
-    pub fn pop(&self, count: usize) -> Result<LayerSet> {
+    pub fn pop(&self, count: usize) -> Result<(LayerSet, bool)> {
         // TODO: Locking
         let mut user_layers = self
             .user_layers()
             .context("loading user layers")?
             .unwrap_or_default();
         let mut selected = self.selected_layers()?.unwrap_or_default();
-
+        let mut changed = false;
         for _ in 0..count {
             user_layers.selected_layer_names.pop();
             selected.layers.pop();
+            changed = true;
         }
 
         self.store_selected_layers(&user_layers)
             .context("storing the modified user layer stack")?;
 
-        Ok(selected)
+        Ok((selected, changed))
     }
 
-    pub fn remove(&self, names: Vec<String>) -> Result<LayerSet> {
-        // TODO: Locking
+    pub fn remove(&self, names: Vec<String>) -> Result<(LayerSet, bool)> {
         let user_layers = self
             .user_layers()
             .context("loading user layers")?
@@ -541,10 +545,10 @@ impl LayerSets {
         self.store_selected_layers(&new_layers)
             .context("storing the modified user layer stack")?;
 
-        Ok(self
+        Ok((self
             .selected_layers()
             .context("loading selected layers")?
-            .unwrap_or_default())
+            .unwrap_or_default(), removals > 0))
     }
 }
 

@@ -351,23 +351,42 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let mut args = args.clone();
             args.insert(0, format!("{} layer", the_name_of_this_binary()));
             let layer_subcommand = LayerSubcommand::from_iter(args.iter());
-            match layer_subcommand.verb {
-                LayersOpts::Available {} => {
-                    layer::available(&repo)?;
+
+            subcommands::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+                .context("Ensuring working trees are clean failed")?;
+
+            let selected_layer_stack_backup = {
+                let sets = LayerSets::new(&repo);
+                if sets.selected_layer_stack_path().is_file() {
+                    Some(BackedUpFile::new(
+                        sets.selected_layer_stack_path().as_path(),
+                    )?)
+                } else {
+                    None
                 }
-                LayersOpts::List {} => {
-                    layer::list(&repo)?;
-                }
-                LayersOpts::Push { names } => {
-                    layer::push(&repo, names)?;
-                }
-                LayersOpts::Pop { count } => {
-                    layer::pop(&repo, count)?;
-                }
-                LayersOpts::Remove { names } => {
-                    layer::remove(&repo, names)?;
-                }
+            };
+
+            let mutated = match layer_subcommand.verb {
+                LayersOpts::Available {} => layer::available(&repo)?,
+                LayersOpts::List {} => layer::list(&repo)?,
+                LayersOpts::Push { names } => layer::push(&repo, names)?,
+                LayersOpts::Pop { count } => layer::pop(&repo, count)?,
+                LayersOpts::Remove { names } => layer::remove(&repo, names)?,
+            };
+
+            if mutated {
+                let _ = app.ui().log(
+                    String::from("Layer Stack Update"),
+                    String::from("Syncing focused paths since the selected content has changed"),
+                );
+                app.ui().set_enabled(interactive);
+                subcommands::sync::run(app, repo.as_path())
+                    .context("Sync failed; changes to the stack will be reverted.")?;
             }
+
+            // If there was a change, the ssync succeded, so we we can discard the backup.
+            selected_layer_stack_backup.map(|backup| backup.set_restore(false));
+
             Ok(())
         }
 
@@ -375,6 +394,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let mut args = args.clone();
             args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
             let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
+
+            subcommands::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+                .context("Ensuring working trees are clean failed")?;
 
             let adhoc_layer_set_backup = {
                 let sets = LayerSets::new(&repo);
@@ -400,16 +422,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 app.ui().set_enabled(interactive);
                 subcommands::sync::run(app, repo.as_path())
                     .context("Sync failed; changes to the stack will be reverted.")?;
-
-                // Sync was okay, so skip reverting the ad-hoc coordinate stack.
-                adhoc_layer_set_backup.map(|backup| {
-                    backup.set_restore(false);
-                });
-            } else {
-                adhoc_layer_set_backup.map(|backup| {
-                    backup.set_restore(false);
-                });
             }
+
+            // Sync (if necessary) succeeded, so skip reverting the ad-hoc coordinate stack.
+            adhoc_layer_set_backup.map(|backup| {
+                backup.set_restore(false);
+            });
 
             Ok(())
         }

@@ -4,24 +4,24 @@ use anyhow::{Context, Result};
 
 use crate::model::{self, LayerSets};
 
-pub fn available(repo: &Path) -> Result<()> {
+pub fn available(repo: &Path) -> Result<bool> {
     let layer_sets = model::LayerSets::new(&repo);
     let set = &layer_sets.available_layers()?;
     for layer in set.layers() {
         println!("{}", layer);
     }
 
-    Ok(())
+    Ok(false)
 }
 
-pub fn list(repo: &Path) -> Result<()> {
+pub fn list(repo: &Path) -> Result<bool> {
     let sets = LayerSets::new(&repo);
 
     if let Some(selected) = sets.selected_layers().context("loading selected layers")? {
         // TODO: Extract printing and re-use
         if selected.layers().is_empty() {
             eprintln!("No layers are selected, but a stack exists");
-            return Ok(());
+            return Ok(false);
         }
         for (index, layer) in selected.layers().iter().enumerate() {
             println!("{}: {}", index, layer);
@@ -36,14 +36,14 @@ pub fn list(repo: &Path) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(false)
 }
 
-pub fn push(repo: &Path, names: Vec<String>) -> Result<()> {
+pub fn push(repo: &Path, names: Vec<String>) -> Result<bool> {
     // Push a layer
     let sets = model::LayerSets::new(&repo);
 
-    let new_selection = sets.push_as_selection(names).context("pushing layer")?;
+    let (new_selection, changed) = sets.push_as_selection(names).context("pushing layer")?;
 
     if new_selection.layers().is_empty() {
         eprintln!("The layer stack is empty!");
@@ -53,14 +53,14 @@ pub fn push(repo: &Path, names: Vec<String>) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(changed)
 }
 
-pub fn pop(repo: &Path, count: usize) -> Result<()> {
+pub fn pop(repo: &Path, count: usize) -> Result<bool> {
     // Pop a layer
     let sets = model::LayerSets::new(&repo);
 
-    let new_selection = sets.pop(count).context("popping layers")?;
+    let (new_selection, changed) = sets.pop(count).context("popping layers")?;
 
     if new_selection.layers().is_empty() {
         eprintln!("The layer stack is empty!");
@@ -70,14 +70,14 @@ pub fn pop(repo: &Path, count: usize) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(changed)
 }
 
-pub fn remove(repo: &Path, names: Vec<String>) -> Result<()> {
+pub fn remove(repo: &Path, names: Vec<String>) -> Result<bool> {
     // Remove a layer
     let sets = model::LayerSets::new(&repo);
 
-    let new_selection = sets.remove(names).context("removing layers")?;
+    let (new_selection, changed) = sets.remove(names).context("removing layers")?;
 
     if new_selection.layers().is_empty() {
         eprintln!("The layer stack is empty!");
@@ -87,5 +87,5 @@ pub fn remove(repo: &Path, names: Vec<String>) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(changed)
 }
