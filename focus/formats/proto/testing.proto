@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-package testing;
-
-message Foo {
-	uint32 bar = 1;
-}

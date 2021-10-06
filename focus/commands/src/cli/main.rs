@@ -2,7 +2,6 @@ mod app;
 mod backed_up_file;
 mod coordinate;
 mod coordinate_resolver;
-mod detail;
 mod git_helper;
 mod model;
 mod sandbox;
@@ -14,9 +13,7 @@ mod testing;
 mod tracker;
 mod ui;
 mod working_tree_synchronizer;
-
-#[macro_use]
-extern crate lazy_static;
+mod util;
 
 use anyhow::{bail, Context, Result};
 use backed_up_file::BackedUpFile;

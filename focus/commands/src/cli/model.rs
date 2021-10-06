@@ -79,11 +79,6 @@ pub struct LayerSet {
     content_hash: Option<String>, // Hex representation of a SHA-256 checksum
 }
 
-enum RemoveResult {
-    CannotRemoveMandatoryLayer,
-    NotFound,
-}
-
 impl LayerSet {
     pub fn new(layers: Vec<Layer>) -> Self {
         Self {

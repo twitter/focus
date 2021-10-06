@@ -7,13 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-focus-internals = { path = "../internals" }
-focus-formats = { path = "../formats" }
 anyhow = "1.0.43"
 dirs = "3.0.2"
 env_logger = "0.9.0"
-futures = { version = "0.3.17", features = ["executor", "thread-pool"] }
-futures-channel = "0.3.17"
 git2 = { version = "0.13.21", default-features = false }
 lazy_static = "1.4.0"
 log = "0.4.14"
@@ -32,6 +28,7 @@ thiserror = "1.0.28"
 url = "2.2.2"
 uuid = { version = "0.8.2", features = ["v4"] }
 walkdir = "2.3.2"
+nix = "0.22.1"
 
 ##
 ## Focus CLI: The primary UI for Project Focused Development
@@ -39,18 +36,3 @@ walkdir = "2.3.2"
 [[bin]]
 name = "focus"
 path = "src/cli/main.rs"
-
-##
-## Focus Remote: A remote helper for Git to support in-turn fetching
-##
-[[bin]]
-name = "git-remote-focus"
-path = "src/git-remote/main.rs"
-
-##
-## Treesnap: Tools to produce source tree images
-##
-[[bin]]
-name = "treesnap"
-path = "src/treesnap/main.rs"
-

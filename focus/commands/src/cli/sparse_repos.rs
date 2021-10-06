@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use internals::util::lock_file::LockFile;
 
 use std::convert::TryFrom;
 use std::ffi::OsString;
@@ -24,6 +23,7 @@ use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
 use crate::tracker::Tracker;
 use crate::ui::ProgressReporter;
+use crate::util::lock_file::LockFile;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 
 // TODO: Revisit this...

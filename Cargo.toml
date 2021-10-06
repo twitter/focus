@@ -1,6 +1,4 @@
 [workspace]
 members = [
         "focus/commands",
-        "focus/internals",
-        "focus/formats",
 ]
