@@ -6,7 +6,9 @@ use std::{
 
 use git2::{Repository, RepositoryState};
 
-use crate::{app::App, ui::ProgressReporter, util::temporary_working_directory::TemporaryWorkingDirectory};
+use crate::{
+    app::App, ui::ProgressReporter, util::temporary_working_directory::TemporaryWorkingDirectory,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum SyncError {

@@ -18,10 +18,10 @@ use crate::coordinate_resolver::Resolver;
 use crate::coordinate_resolver::RoutingResolver;
 use crate::git_helper;
 use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
-use crate::util::sandbox_command::SandboxCommand;
-use crate::util::sandbox_command::SandboxCommandOutput;
 use crate::tracker::Tracker;
 use crate::util::lock_file::LockFile;
+use crate::util::sandbox_command::SandboxCommand;
+use crate::util::sandbox_command::SandboxCommandOutput;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 
 // TODO: Revisit this...

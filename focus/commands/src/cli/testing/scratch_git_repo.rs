@@ -173,8 +173,8 @@ impl ScratchGitRepo {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
     use crate::testing::scratch_git_repo::ScratchGitRepo;
+    use anyhow::Result;
     use git2::Repository;
     use tempfile::tempdir;
 
