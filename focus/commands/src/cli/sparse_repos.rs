@@ -706,31 +706,3 @@ fn find_closest_directory_with_build_file(file: &Path, ceiling: &Path) -> Result
             .context("getting parent of current directory")?;
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_reduce_to_shortest_common_prefix() -> Result<()> {
-        let tempdir = tempfile::tempdir()?;
-        let dir = tempdir.path();
-        let mut set = BTreeSet::<PathBuf>::new();
-        let a0 = dir.join("a0");
-        let a0_b = a0.join("b");
-        let a0_b_c = a0_b.join("c");
-        let a1 = dir.join("a1");
-
-        set.insert(a0_b.clone());
-        set.insert(a0_b_c.clone());
-        set.insert(a1.clone());
-
-        let resulting_set = reduce_to_shortest_common_prefix(&set)?;
-
-        assert_eq!(resulting_set.len(), 2);
-        assert!(resulting_set.contains(&a0_b));
-        assert!(resulting_set.contains(&a1));
-
-        Ok(())
-    }
-}
