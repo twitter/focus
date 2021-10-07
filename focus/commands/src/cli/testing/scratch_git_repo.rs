@@ -1,10 +1,11 @@
-use crate::temporary_working_directory::TemporaryWorkingDirectory;
 use anyhow::{bail, Context, Result};
 use git2::Repository;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
+
+use crate::util::temporary_working_directory::TemporaryWorkingDirectory;
 
 #[allow(dead_code)]
 pub struct ScratchGitRepo {

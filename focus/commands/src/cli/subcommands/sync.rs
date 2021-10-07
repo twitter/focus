@@ -3,7 +3,9 @@ use crate::coordinate::CoordinateSet;
 use crate::git_helper;
 use crate::model::Layer;
 use crate::model::LayerSets;
-use crate::sandbox_command::SandboxCommand;
+use crate::util::sandbox_command::SandboxCommand;
+use crate::util::sandbox_command::SandboxCommandOutput;
+use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 use std::convert::TryFrom;
 use std::fs::File;
 
@@ -13,10 +15,6 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-
-use crate::{
-    sandbox_command::SandboxCommandOutput, working_tree_synchronizer::WorkingTreeSynchronizer,
-};
 
 pub fn perform<F, J>(description: &str, f: F) -> Result<J>
 where

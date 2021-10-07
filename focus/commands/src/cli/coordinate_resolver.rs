@@ -2,7 +2,7 @@ use crate::{
     app::App,
     coordinate::{Coordinate, CoordinateSet},
     git_helper,
-    sandbox_command::{SandboxCommand, SandboxCommandOutput},
+    util::sandbox_command::{SandboxCommand, SandboxCommandOutput},
 };
 use anyhow::{Context, Result};
 use std::{

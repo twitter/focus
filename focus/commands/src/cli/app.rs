@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{sandbox::Sandbox, ui::UserInterface};
+use crate::{ui::UserInterface, util::sandbox::Sandbox};
 use anyhow::{Context, Result};
 
 #[derive(Clone)]

@@ -8,10 +8,7 @@ use anyhow::{bail, Context, Result};
 use std::path::Path;
 use std::process::Command;
 
-use crate::{
-    app::App,
-    sandbox_command::{SandboxCommand, SandboxCommandOutput},
-};
+use crate::{app::App, util::sandbox_command::{SandboxCommand, SandboxCommandOutput}};
 
 pub fn git_binary() -> OsString {
     OsString::from("git")
@@ -96,7 +93,7 @@ where
     let (mut cmd, scmd) = git_command(description, app)?;
     if let Err(e) = cmd.current_dir(repo).args(args).status() {
         scmd.log(
-            crate::sandbox_command::SandboxCommandOutput::Stderr,
+            SandboxCommandOutput::Stderr,
             &"git command",
         )?;
         bail!("git command failed: {}", e);

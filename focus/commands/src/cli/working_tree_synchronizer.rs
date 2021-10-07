@@ -6,7 +6,7 @@ use std::{
 
 use git2::{Repository, RepositoryState};
 
-use crate::{app::App, ui::ProgressReporter};
+use crate::{app::App, ui::ProgressReporter, util::temporary_working_directory::TemporaryWorkingDirectory};
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum SyncError {
@@ -71,7 +71,6 @@ impl WorkingTreeSynchronizer {
 
     #[allow(dead_code)]
     pub(crate) fn read_head(&self) -> Result<Vec<u8>> {
-        use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
         let _progress = ProgressReporter::new(
             self.app.clone(),
@@ -129,7 +128,6 @@ impl WorkingTreeSynchronizer {
 
     #[allow(dead_code)]
     pub(crate) fn get_merge_base(&self, reference: &str) -> Result<Vec<u8>> {
-        use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
         let _progress = ProgressReporter::new(
             self.app.clone(),
