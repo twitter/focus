@@ -14,6 +14,7 @@ impl CoordinateSet {
         &self.underlying
     }
 
+    #[allow(unused)]
     pub fn is_uniform(&self) -> bool {
         self.uniform
     }
@@ -24,8 +25,6 @@ impl CoordinateSet {
         for coordinate in set {
             match coordinate {
                 Coordinate::Bazel(_) => count_by_type[0] += 1,
-                Coordinate::Pants(_) => count_by_type[1] += 1,
-                Coordinate::Shell(_) => count_by_type[2] += 1,
             }
         }
 
@@ -76,16 +75,12 @@ impl TryFrom<&Vec<String>> for CoordinateSet {
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum Coordinate {
     Bazel(String),
-    Pants(String),
-    Shell(String),
 }
 
 impl Display for Coordinate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Coordinate::Bazel(c) => write!(f, "{}", c),
-            Coordinate::Pants(c) => write!(f, "{}", c),
-            Coordinate::Shell(c) => write!(f, "{}", c),
         }
     }
 }
@@ -108,10 +103,6 @@ impl TryFrom<&str> for Coordinate {
                 let rest = rest.to_owned();
                 if prefix.eq_ignore_ascii_case("bazel") {
                     return Ok(Coordinate::Bazel(rest));
-                } else if prefix.eq_ignore_ascii_case("pants") {
-                    return Ok(Coordinate::Pants(rest));
-                } else if prefix.eq_ignore_ascii_case("shell") {
-                    return Ok(Coordinate::Shell(rest));
                 } else {
                     return Err(CoordinateError::UnsupportedScheme(prefix.to_owned()));
                 }

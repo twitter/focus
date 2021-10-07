@@ -4,7 +4,7 @@ use crate::{
     git_helper,
     sandbox_command::{SandboxCommand, SandboxCommandOutput},
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::Display,
@@ -115,11 +115,14 @@ impl Default for ResolutionResult {
 
 /// Dictates whether the resolver can retrieve or store responses to a cache.
 pub struct CacheOptions {
+    #[allow(unused)]
     accept_cached_response: bool,
+    #[allow(unused)]
     store_response_in_cache: bool,
 }
 
 impl CacheOptions {
+    #[allow(unused)]
     pub fn new(accept_cached_response: bool, store_response_in_cache: bool) -> Self {
         Self {
             accept_cached_response,
@@ -150,16 +153,12 @@ pub trait Resolver {
 
 pub struct RoutingResolver {
     bazel_resolver: BazelResolver,
-    pants_resolver: PantsResolver,
-    shell_resolver: ShellResolver,
 }
 
 impl Resolver for RoutingResolver {
     fn new(cache_root: &Path) -> Self {
         Self {
             bazel_resolver: BazelResolver::new(cache_root),
-            pants_resolver: PantsResolver::new(cache_root),
-            shell_resolver: ShellResolver::new(cache_root),
         }
     }
 
@@ -189,14 +188,6 @@ impl Resolver for RoutingResolver {
                     self.bazel_resolver
                         .resolve(&subrequest, &cache_options, app_clone)
                 }
-                Coordinate::Pants(_) => {
-                    self.pants_resolver
-                        .resolve(&subrequest, &cache_options, app_clone)
-                }
-                Coordinate::Shell(_) => {
-                    self.shell_resolver
-                        .resolve(&subrequest, &cache_options, app_clone)
-                }
             }
             .with_context(|| format!("failed to resolve coordinate {}", coordinate))?;
             aggregated_result.merge(&result);
@@ -208,6 +199,7 @@ impl Resolver for RoutingResolver {
 
 /// Resolves Bazel coordinates to paths
 struct BazelResolver {
+    #[allow(unused)]
     cache_root: PathBuf,
 }
 
@@ -245,7 +237,6 @@ impl Resolver for BazelResolver {
                 // TODO: Consider parameterizing depth
                 match coordinate {
                     Coordinate::Bazel(inner) => Some(format!("buildfiles(deps({}))", inner)),
-                    _ => unreachable!(),
                 }
             })
             .collect();
@@ -278,53 +269,5 @@ impl Resolver for BazelResolver {
         }
 
         Ok(ResolutionResult::from(directories))
-    }
-}
-
-/// Resolves Pants coordinates to paths
-struct PantsResolver {
-    cache_root: PathBuf,
-}
-
-impl Resolver for PantsResolver {
-    fn new(cache_root: &Path) -> Self {
-        Self {
-            cache_root: cache_root.join("pants").to_owned(),
-        }
-    }
-
-    fn resolve(
-        &self,
-        _request: &ResolutionRequest,
-        _cache_options: &CacheOptions,
-        _app: Arc<App>,
-    ) -> Result<ResolutionResult> {
-        // Set up the spy filesystem
-        //
-        bail!("Pants resolver not implemented")
-    }
-}
-
-/// Resolves to paths using example scripts
-struct ShellResolver {
-    cache_root: PathBuf,
-}
-
-impl ShellResolver {}
-
-impl Resolver for ShellResolver {
-    fn new(cache_root: &Path) -> Self {
-        ShellResolver {
-            cache_root: cache_root.join("shell").to_owned(),
-        }
-    }
-
-    fn resolve(
-        &self,
-        _request: &ResolutionRequest,
-        _cache_options: &CacheOptions,
-        _app: Arc<App>,
-    ) -> Result<ResolutionResult> {
-        bail!("Shell resolver not implemented")
     }
 }

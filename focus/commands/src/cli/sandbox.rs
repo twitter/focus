@@ -65,6 +65,7 @@ impl Sandbox {
         Ok((file, qualified_path))
     }
 
+    #[allow(unused)]
     pub fn create_subdirectory(&self, prefix: &str) -> Result<PathBuf> {
         let parent = self.path.to_owned();
         let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);

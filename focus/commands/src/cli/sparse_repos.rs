@@ -1,7 +1,6 @@
 use anyhow::{bail, Context, Result};
 
 use std::convert::TryFrom;
-use std::ffi::OsString;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufWriter;
@@ -22,23 +21,12 @@ use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::sandbox_command::SandboxCommand;
 use crate::sandbox_command::SandboxCommandOutput;
 use crate::tracker::Tracker;
-use crate::ui::ProgressReporter;
 use crate::util::lock_file::LockFile;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 
 // TODO: Revisit this...
 const SPARSE_PROFILE_PRELUDE: &str =
     "/tools\n/pants-plugins/\n/pants-support/\n/3rdparty/\n/focus/\n";
-
-fn report_progress<T>(app: Arc<App>, message: T) -> Result<ProgressReporter>
-where
-    T: AsRef<str>,
-{
-    Ok(ProgressReporter::new(
-        app.clone(),
-        message.as_ref().to_string(),
-    )?)
-}
 
 pub fn configure_dense_repo(dense_repo: &PathBuf, app: Arc<App>) -> Result<()> {
     git_helper::write_config(dense_repo, "uploadPack.allowFilter", "true", app)
@@ -185,20 +173,6 @@ fn configure_sparse_repo_final(
     setup_bazel_preflight_script(sparse_repo, app.clone()).context("setting up build hooks")?;
 
     Ok(())
-}
-
-// Write an object to a repo returning its identity.
-fn git_hash_object(repo: &PathBuf, file: &PathBuf, app: Arc<App>) -> Result<String> {
-    git_helper::run_git_command_consuming_stdout(
-        format!("Writing {} to the object store", file.display()),
-        repo,
-        vec![
-            OsString::from("hash-object"),
-            OsString::from("-w"),
-            file.as_os_str().to_owned(),
-        ],
-        app,
-    )
 }
 
 pub fn set_containing_layers(repo: &PathBuf, layer_names: &Vec<String>) -> Result<LayerSet> {
@@ -595,22 +569,6 @@ pub fn create_empty_sparse_clone(
     Ok(())
 }
 
-fn allowable_project_view_directory_predicate(dense_repo: &Path, directory: &Path) -> bool {
-    let scrooge_internal = dense_repo.join("scrooge-internal");
-    let loglens = dense_repo.join("loglens");
-    !directory.starts_with(scrooge_internal) && !directory.starts_with(loglens)
-}
-
-fn write_project_view_file(
-    _dense_repo: &PathBuf,
-    _bazel_project_view_path: &Path,
-    _coordinates: &Vec<String>,
-    _app: Arc<App>,
-) -> Result<()> {
-    // TODO: Remove this. We will implement a 'focus idea' command or similar.
-    Ok(())
-}
-
 pub fn switch_to_detached_branch_discarding_changes(
     repo: &Path,
     refname: &str,
@@ -744,24 +702,6 @@ fn find_closest_directory_with_build_file(file: &Path, ceiling: &Path) -> Result
             .parent()
             .context("getting parent of current directory")?;
     }
-}
-
-fn reduce_to_shortest_common_prefix(paths: &BTreeSet<PathBuf>) -> Result<BTreeSet<PathBuf>> {
-    let mut results = BTreeSet::<PathBuf>::new();
-    let mut last_path: Option<PathBuf> = None;
-    for path in paths {
-        let insert = match &last_path {
-            Some(last_path) => !path.starts_with(last_path),
-            None => true,
-        };
-
-        if insert {
-            results.insert(path.clone());
-            last_path = Some(path.to_owned());
-        }
-    }
-
-    Ok(results)
 }
 
 #[cfg(test)]

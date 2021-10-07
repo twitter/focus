@@ -81,6 +81,7 @@ impl TrackedRepo {
         self.location.borrow()
     }
 
+    #[allow(dead_code)]
     pub fn link_path(&self) -> &PathBuf {
         self.link_path.borrow()
     }
@@ -119,6 +120,7 @@ impl Snapshot {
         self.repos.borrow()
     }
 
+    #[allow(dead_code)]
     pub fn find_repo_by_id(&self, id: &Vec<u8>) -> Option<&TrackedRepo> {
         self.index_by_identifier
             .get(id)
@@ -131,6 +133,7 @@ pub struct Tracker {
 }
 
 impl Tracker {
+    #[allow(unused)]
     pub fn new(directory: &Path) -> Result<Self> {
         std::fs::create_dir_all(directory)
             .with_context(|| format!("creating directory hierarchy '{}'", directory.display()))?;
@@ -206,8 +209,9 @@ impl Tracker {
 
                                 Err(e) => {
                                     log::warn!(
-                                        "Removing {}: invalid destination.",
+                                        "Removing {}: invalid destination: {}",
                                         entry.path().display(),
+                                        e
                                     );
                                     std::fs::remove_file(entry.path())?;
                                 }

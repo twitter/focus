@@ -25,6 +25,7 @@ fn exhibit_file(file: &Path, title: &str) -> Result<()> {
 
 // SandboxCommandRunner is a command that captures stdout and stderr into sandbox logs unless other destinations are specified.
 pub struct SandboxCommand {
+    #[allow(unused)]
     progress_reporter: ProgressReporter,
     stdout_path: PathBuf,
     stderr_path: PathBuf,
@@ -32,9 +33,11 @@ pub struct SandboxCommand {
 
 #[derive(Debug)]
 pub enum SandboxCommandOutput {
+    #[allow(unused)]
     All,
     Stdout,
     Stderr,
+    #[allow(unused)]
     Ignore,
 }
 

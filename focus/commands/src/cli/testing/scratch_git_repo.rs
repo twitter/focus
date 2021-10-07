@@ -13,6 +13,7 @@ pub struct ScratchGitRepo {
 
 impl ScratchGitRepo {
     // Create a new fixture repo with a unique random name in the given directory
+    #[allow(unused)]
     pub fn new_fixture(containing_dir: &Path) -> Result<Self> {
         Ok(Self {
             path: Self::create_fixture_repo(containing_dir)?,
@@ -31,6 +32,7 @@ impl ScratchGitRepo {
         })
     }
 
+    #[allow(dead_code)]
     pub fn make_clone(&self) -> Result<Self> {
         Self::new_local_clone(self.path())
     }
@@ -110,6 +112,7 @@ impl ScratchGitRepo {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn commit(&self, filename: &Path, content: &[u8], message: &str) -> Result<git2::Oid> {
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
 
@@ -156,10 +159,12 @@ impl ScratchGitRepo {
         Ok(id)
     }
 
+    #[allow(dead_code)]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
+    #[allow(dead_code)]
     pub fn repo(&self) -> Result<Repository> {
         Ok(Repository::open(&self.path).context("opening repository")?)
     }

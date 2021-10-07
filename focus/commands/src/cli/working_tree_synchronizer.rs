@@ -69,6 +69,7 @@ impl WorkingTreeSynchronizer {
         Ok(output_str.trim().is_empty())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn read_head(&self) -> Result<Vec<u8>> {
         use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;
@@ -99,6 +100,7 @@ impl WorkingTreeSynchronizer {
         ))
     }
 
+    #[allow(dead_code)]
     pub fn read_branch(&self) -> Result<String> {
         use std::process;
         let _progress = ProgressReporter::new(
@@ -125,6 +127,7 @@ impl WorkingTreeSynchronizer {
             .to_owned())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_merge_base(&self, reference: &str) -> Result<Vec<u8>> {
         use crate::temporary_working_directory::TemporaryWorkingDirectory;
         use std::process;

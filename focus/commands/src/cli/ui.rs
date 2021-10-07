@@ -1,7 +1,6 @@
 use std::{
     cell::Cell,
     collections::BTreeMap,
-    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Barrier, Mutex,
@@ -88,19 +87,16 @@ pub enum UserInterfaceEvent {
 
 struct RendererState {
     ui_state: Arc<UserInterfaceState>,
-    invalidated: AtomicBool,
     running: AtomicBool,
 }
 
 impl RendererState {
     pub(crate) fn new(
         ui_state: Arc<UserInterfaceState>,
-        invalidated: AtomicBool,
         running: AtomicBool,
     ) -> Self {
         Self {
             ui_state,
-            invalidated,
             running,
         }
     }
@@ -109,19 +105,8 @@ impl RendererState {
     fn ui_state(&self) -> &Arc<UserInterfaceState> {
         &self.ui_state
     }
-
-    /// Get a reference to the renderer state's invalidated.
-    fn invalidated(&self) -> &AtomicBool {
-        &self.invalidated
-    }
-
-    /// Get a reference to the renderer state's running.
-    fn running(&self) -> &AtomicBool {
-        &self.running
-    }
 }
 pub struct UserInterfaceRenderer {
-    ui_state: Arc<UserInterfaceState>,
     renderer_state: Arc<RendererState>,
     interactive: bool,
     render_thread_exited: Arc<Barrier>,
@@ -129,10 +114,9 @@ pub struct UserInterfaceRenderer {
 
 impl UserInterfaceRenderer {
     pub fn new(ui_state: Arc<UserInterfaceState>, interactive: bool) -> Result<Self> {
-        let invalidated = AtomicBool::new(false);
         let running = AtomicBool::new(true);
         let cloned_ui_state = ui_state.clone();
-        let renderer_state = Arc::from(RendererState::new(cloned_ui_state, invalidated, running));
+        let renderer_state = Arc::from(RendererState::new(cloned_ui_state, running));
 
         let render_thread_exited = Arc::from(Barrier::new(2));
         let cloned_render_thread_exited = render_thread_exited.clone();
@@ -147,7 +131,6 @@ impl UserInterfaceRenderer {
             .context("Launching the render thread failed")?;
 
         Ok(Self {
-            ui_state,
             renderer_state,
             interactive,
             render_thread_exited,
@@ -300,7 +283,7 @@ impl UserInterfaceRenderer {
                         }
 
                         let allowed = screen_width as usize - header_len;
-                        let mut content = item.content.clone();
+                        let mut content = item.content().to_owned();
                         if content.len() > allowed {
                             content.truncate(allowed - 1);
                             content.push('…')
@@ -335,10 +318,6 @@ impl UserInterfaceRenderer {
 
     pub fn interactive(&self) -> bool {
         self.interactive
-    }
-
-    pub fn noninteractive(&self) -> bool {
-        !self.interactive
     }
 
     pub fn stop_and_join(&self) -> Result<()> {
@@ -569,7 +548,6 @@ pub struct ProgressReporter {
     app: Arc<App>,
     task_handle: TaskHandle,
     description: String,
-    log_path: Option<PathBuf>,
 }
 
 impl ProgressReporter {
@@ -585,27 +563,6 @@ impl ProgressReporter {
             app: app,
             task_handle,
             description,
-            log_path: None,
-        })
-    }
-
-    pub fn new_with_log(
-        app: Arc<App>,
-        description: String,
-        log_path: Option<PathBuf>,
-    ) -> Result<Self> {
-        let ui = app.ui();
-
-        let task = Task::new(description.clone(), 0, 1);
-        let task_handle = ui
-            .new_task(task)
-            .context("Registering task with UI failed")?;
-
-        Ok(Self {
-            app,
-            task_handle,
-            description,
-            log_path,
         })
     }
 }
