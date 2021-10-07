@@ -12,8 +12,8 @@ mod temporary_working_directory;
 mod testing;
 mod tracker;
 mod ui;
-mod working_tree_synchronizer;
 mod util;
+mod working_tree_synchronizer;
 
 use anyhow::{bail, Context, Result};
 use backed_up_file::BackedUpFile;
@@ -330,7 +330,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let repo_subcommand = RepoSubcommand::from_iter(args.iter());
             match repo_subcommand.verb {
                 RepoOpts::List {} => subcommands::repo::list(),
-                RepoOpts::Repair {  } => subcommands::repo::repair(app.clone()),
+                RepoOpts::Repair {} => subcommands::repo::repair(app.clone()),
             }
         }
         Subcommand::DetectBuildGraphChanges { repo } => {

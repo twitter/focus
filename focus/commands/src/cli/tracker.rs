@@ -37,11 +37,14 @@ impl TrackedRepo {
     pub(crate) fn read_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
         let uuid = git_helper::read_config(repo_path, "twitter.focus.uuid", app.clone())?;
         let uuid = Uuid::from_str(uuid.trim()).context("parsing uuid")?;
-        app.ui().log(String::from("Tracker"), format!(
-            "Read existing UUID {} for repo at path {}",
-            uuid.borrow(),
-            repo_path.display()
-        ));
+        app.ui().log(
+            String::from("Tracker"),
+            format!(
+                "Read existing UUID {} for repo at path {}",
+                uuid.borrow(),
+                repo_path.display()
+            ),
+        );
 
         Ok(uuid)
     }

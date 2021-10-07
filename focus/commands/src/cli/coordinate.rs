@@ -127,14 +127,6 @@ mod tests {
             Coordinate::Bazel("//a:b".to_owned())
         );
         assert_eq!(
-            Coordinate::try_from("pants:foo/bar:baz")?,
-            Coordinate::Pants("foo/bar:baz".to_owned())
-        );
-        assert_eq!(
-            Coordinate::try_from("shell:focus/examples/foo.sh")?,
-            Coordinate::Shell("focus/examples/foo.sh".to_owned())
-        );
-        assert_eq!(
             Coordinate::try_from("bogus:whatever").unwrap_err(),
             CoordinateError::UnsupportedScheme("bogus".to_owned())
         );

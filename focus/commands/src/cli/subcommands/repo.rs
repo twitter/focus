@@ -15,5 +15,7 @@ pub fn list() -> Result<()> {
 }
 
 pub fn repair(app: Arc<App>) -> Result<()> {
-    Tracker::default().repair(app).context("Failed to repair repository registry")
+    Tracker::default()
+        .repair(app)
+        .context("Failed to repair repository registry")
 }

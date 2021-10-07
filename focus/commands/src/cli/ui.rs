@@ -91,14 +91,8 @@ struct RendererState {
 }
 
 impl RendererState {
-    pub(crate) fn new(
-        ui_state: Arc<UserInterfaceState>,
-        running: AtomicBool,
-    ) -> Self {
-        Self {
-            ui_state,
-            running,
-        }
+    pub(crate) fn new(ui_state: Arc<UserInterfaceState>, running: AtomicBool) -> Self {
+        Self { ui_state, running }
     }
 
     /// Get a reference to the renderer state's ui state.
@@ -437,18 +431,26 @@ impl UserInterfaceState {
                 locked_log_entries.push(entry);
             }
             Err(e) => {
-                log::warn!("Failed to obtain lock; could not add log entry {:?}: {}", entry, e);
+                log::warn!(
+                    "Failed to obtain lock; could not add log entry {:?}: {}",
+                    entry,
+                    e
+                );
             }
         }
     }
 
-    pub fn set_status(&self, status: String)  {
+    pub fn set_status(&self, status: String) {
         match self.status.lock() {
             Ok(mut locked_status) => {
                 *locked_status = status;
             }
             Err(e) => {
-                log::warn!("Failed to obtain lock; could not set status to {}: {}", status, e);
+                log::warn!(
+                    "Failed to obtain lock; could not set status to {}: {}",
+                    status,
+                    e
+                );
             }
         }
     }
@@ -485,10 +487,7 @@ impl UserInterface {
     }
 
     pub fn update_progress(&self, handle: TaskHandle, current: usize) {
-        let task = self
-            .state
-            .get_task(handle)
-            .expect("Retreiving task failed");
+        let task = self.state.get_task(handle).expect("Retreiving task failed");
         if let Some(task) = task {
             task.update_progress(current);
             self.renderer
@@ -535,7 +534,7 @@ impl UserInterface {
         self.state.add_log_entry(entry);
     }
 
-    pub fn status(&self, status: String){
+    pub fn status(&self, status: String) {
         self.state.set_status(status);
     }
 }

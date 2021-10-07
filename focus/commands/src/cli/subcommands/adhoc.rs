@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::{PathBuf},
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -48,12 +48,18 @@ impl Adhoc {
                 mutated_coordinates,
             );
             let updated_set = LayerSet::new(vec![layer]);
-            self.app.ui().log(String::from("Ad-hoc Coordinate Stack"), String::from("Saving ad-hoc coordinate stack"));
+            self.app.ui().log(
+                String::from("Ad-hoc Coordinate Stack"),
+                String::from("Saving ad-hoc coordinate stack"),
+            );
             sets.store_adhoc_layers(&updated_set)
                 .context("Failed storing the ad-hoc coordinate stack layer set")?;
             Ok(true)
         } else {
-            self.app.ui().log(String::from("Ad-hoc Coordinate Stack"), String::from("Skipped saving unchanged ad-hoc coordinate stack"));
+            self.app.ui().log(
+                String::from("Ad-hoc Coordinate Stack"),
+                String::from("Skipped saving unchanged ad-hoc coordinate stack"),
+            );
             Ok(false)
         }
     }

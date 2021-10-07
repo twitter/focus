@@ -48,11 +48,10 @@ pub fn run(app: Arc<App>) -> Result<()> {
 
     let cloned_ui = app.ui();
     for handle in handles {
-        cloned_ui
-            .log(
-                format!("Thread Butler"),
-                format!("Waiting on thread {:?}", handle.thread()),
-            );
+        cloned_ui.log(
+            format!("Thread Butler"),
+            format!("Waiting on thread {:?}", handle.thread()),
+        );
         handle.join().expect("Thread failed");
     }
 

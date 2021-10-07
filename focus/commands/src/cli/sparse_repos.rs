@@ -630,11 +630,14 @@ fn resolve_involved_directories(
     }
 
     let difference = into.len() - before;
-    app.ui().log(String::from("Resolver"), format!(
-        "Dependency query yielded {} directories ({} total)",
-        difference,
-        &result.paths().len()
-    ));
+    app.ui().log(
+        String::from("Resolver"),
+        format!(
+            "Dependency query yielded {} directories ({} total)",
+            difference,
+            &result.paths().len()
+        ),
+    );
 
     Ok(difference)
 }
