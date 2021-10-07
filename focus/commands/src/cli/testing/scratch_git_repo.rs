@@ -172,13 +172,13 @@ impl ScratchGitRepo {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
     use crate::testing::scratch_git_repo::ScratchGitRepo;
     use git2::Repository;
-    use internals::error::AppError;
     use tempfile::tempdir;
 
     #[test]
-    fn test_git_test_helper() -> Result<(), AppError> {
+    fn test_git_test_helper() -> Result<()> {
         let containing_dir = tempdir()?;
         if let Ok(repo) = ScratchGitRepo::new_fixture(containing_dir.path()) {
             let repo = Repository::open(repo.path());
