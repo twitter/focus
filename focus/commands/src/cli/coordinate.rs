@@ -149,6 +149,8 @@ mod tests {
         Ok(())
     }
 
+    // TODO: Enable this again when there are more coordinate types.
+    #[cfg(disabled_test)]
     #[test]
     pub fn non_uniform_sets() -> Result<()> {
         // Sets containing different coordinate types are non-uniform

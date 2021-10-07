@@ -204,21 +204,9 @@ mod tests {
     use anyhow::Result;
     use std::fs::File;
     use std::io::Write;
-    use std::sync::Once;
-
-    static INIT_LOGGING_ONCE: Once = Once::new();
-
-    fn init_logging() {
-        INIT_LOGGING_ONCE.call_once(|| {
-            let _ =
-                env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-                    .init();
-        });
-    }
 
     #[test]
     fn sandboxed_command_capture_all() -> Result<()> {
-        init_logging();
         let app = Arc::from(App::new(false, false)?);
         let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app)?;
         cmd.arg("-n").arg("hey").arg("there").status()?;
@@ -231,7 +219,6 @@ mod tests {
 
     #[test]
     fn sandboxed_command_specific_stdin() -> Result<()> {
-        init_logging();
         let app = Arc::from(App::new(false, false)?);
         let sandbox = app.sandbox();
         let path = {
