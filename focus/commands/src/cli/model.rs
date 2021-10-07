@@ -768,6 +768,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(unused)]
     fn selected_layers() -> Result<()> {
         init_logging();
 
