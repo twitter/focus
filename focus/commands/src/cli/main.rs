@@ -74,7 +74,7 @@ enum Subcommand {
         sparse_repo: PathBuf,
 
         /// The name of the branch to clone.
-        #[structopt(long)]
+        #[structopt(long, default_value = "master")]
         branch: String,
 
         /// Bazel build coordinates to include as an ad-hoc layer set, cannot be specified in combination with 'layers'.
