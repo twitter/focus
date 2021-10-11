@@ -350,8 +350,21 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             args.insert(0, format!("{} layer", the_name_of_this_binary()));
             let layer_subcommand = LayerSubcommand::from_iter(args.iter());
 
-            subcommands::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+            let should_check_tree_cleanliness = match layer_subcommand.verb {
+                LayersOpts::Available {} => true,
+                LayersOpts::List {} => true,
+                LayersOpts::Push { names: _ } => false,
+                LayersOpts::Pop { count: _ } => false,
+                LayersOpts::Remove { names: _ } => false,
+            };
+            if should_check_tree_cleanliness {
+                subcommands::sync::ensure_working_trees_are_clean(
+                    app.clone(),
+                    repo.as_path(),
+                    None,
+                )
                 .context("Ensuring working trees are clean failed")?;
+            }
 
             let selected_layer_stack_backup = {
                 let sets = LayerSets::new(&repo);
@@ -393,8 +406,20 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
             let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
 
-            subcommands::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+            let should_check_tree_cleanliness = match adhoc_subcommand.verb {
+                AdhocOpts::List {} => false,
+                AdhocOpts::Push { names: _ } => true,
+                AdhocOpts::Pop { count: _ } => true,
+                AdhocOpts::Remove { names: _ } => true,
+            };
+            if should_check_tree_cleanliness {
+                subcommands::sync::ensure_working_trees_are_clean(
+                    app.clone(),
+                    repo.as_path(),
+                    None,
+                )
                 .context("Ensuring working trees are clean failed")?;
+            }
 
             let adhoc_layer_set_backup = {
                 let sets = LayerSets::new(&repo);
@@ -414,7 +439,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
             if mutated {
                 app.ui().log(
-                    String::from("Adhoc Cooordinate Stack Update"),
+                    String::from("Ad-hoc Coordinate Stack"),
                     String::from("Syncing focused paths since the selected content has changed"),
                 );
                 app.ui().set_enabled(interactive);
