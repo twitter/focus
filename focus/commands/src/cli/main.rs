@@ -351,11 +351,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let layer_subcommand = LayerSubcommand::from_iter(args.iter());
 
             let should_check_tree_cleanliness = match layer_subcommand.verb {
-                LayersOpts::Available {} => true,
-                LayersOpts::List {} => true,
-                LayersOpts::Push { names: _ } => false,
-                LayersOpts::Pop { count: _ } => false,
-                LayersOpts::Remove { names: _ } => false,
+                LayersOpts::Available {} => false,
+                LayersOpts::List {} => false,
+                LayersOpts::Push { names: _ } => true,
+                LayersOpts::Pop { count: _ } => true,
+                LayersOpts::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
                 subcommands::sync::ensure_working_trees_are_clean(
