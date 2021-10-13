@@ -131,6 +131,6 @@ pub fn run(app: Arc<App>, repo: &PathBuf) -> Result<()> {
         eprintln!("Uncommitted changes affect the build graph, you must run `focus sync` to update the sparse checkout!");
         std::process::exit(1);
     }
-    log::info!("No changes to files affecting the build graph were detected");
+    log::debug!("No changes to files affecting the build graph were detected");
     Ok(())
 }

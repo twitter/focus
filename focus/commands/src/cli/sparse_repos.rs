@@ -83,6 +83,8 @@ pub fn config_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App
 
 // Set git config key focus.sync-point to HEAD
 fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result<()> {
+    use std::os::unix::prelude::PermissionsExt;
+
     let sparse_focus_dir = sparse_repo.join(".focus");
     if !sparse_focus_dir.is_dir() {
         std::fs::create_dir(sparse_focus_dir.as_path()).with_context(|| {
@@ -90,16 +92,26 @@ fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result
         })?;
     }
     let preflight_script_path = sparse_focus_dir.join("preflight");
-    let mut preflight_script_file = BufWriter::new(
-        File::create(preflight_script_path).context("writing the build preflight script")?,
-    );
+    {
+        let mut preflight_script_file = BufWriter::new(
+            File::create(preflight_script_path.as_path())
+                .context("writing the build preflight script")?,
+        );
 
-    writeln!(preflight_script_file, "#!/bin/sh")?;
-    writeln!(preflight_script_file, "")?;
-    writeln!(
-        preflight_script_file,
-        "exec focus detect-build-graph-changes"
-    )?;
+        writeln!(preflight_script_file, "#!/bin/sh")?;
+        writeln!(preflight_script_file, "")?;
+        writeln!(
+            preflight_script_file,
+            "exec focus detect-build-graph-changes"
+        )?;
+    }
+
+    let mut perms = std::fs::metadata(preflight_script_path.as_path())
+        .context("Reading permissions of the preflight script failed")?
+        .permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(preflight_script_path, perms)
+        .context("Setting permissions of the preflight script failed")?;
 
     Ok(())
 }
