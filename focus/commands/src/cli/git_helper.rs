@@ -47,7 +47,7 @@ pub fn write_config<P: AsRef<Path>>(
     val: &str,
     app: Arc<App>,
 ) -> Result<()> {
-    let description = format!("git config {} {}", key, val);
+    let description = format!("Setting Git config {} {}", key, val);
     let (mut cmd, scmd) = git_command(description, app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(repo_path).arg("config").arg(key).arg(val),
@@ -58,7 +58,7 @@ pub fn write_config<P: AsRef<Path>>(
 }
 
 pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> Result<String> {
-    let description = format!("git config {}", key);
+    let description = format!("Reading Git config {}", key);
     let (mut cmd, scmd) = git_command(description, app)?;
     let mut output_string = String::new();
     scmd.ensure_success_or_log(
@@ -119,5 +119,116 @@ pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
             "Could not canonicalize repository path '{}'",
             &path.display()
         );
+    }
+}
+
+pub fn get_current_revision(app: Arc<App>, repo: &Path) -> Result<String> {
+    run_git_command_consuming_stdout(
+        format!("Determining the current commit in repo {}", repo.display()),
+        repo,
+        vec!["rev-parse", "HEAD"],
+        app,
+    )
+}
+
+pub fn get_current_branch(app: Arc<App>, repo: &Path) -> Result<String> {
+    run_git_command_consuming_stdout(
+        format!("Determining the current branch in repo {}", repo.display()),
+        repo,
+        vec!["branch", "--show-current"],
+        app,
+    )
+}
+
+// Switches to a branch in a given repository, switching back to the previous branch afterwards
+pub struct BranchSwitch {
+    app: Arc<App>,
+    repo: PathBuf,
+    refname: String,
+    alternate: Option<PathBuf>,
+    switch_back: Option<String>,
+}
+
+impl BranchSwitch {
+    #[allow(unused)]
+    pub fn permanent(
+        app: Arc<App>,
+        repo: PathBuf,
+        refname: String,
+        alternate: Option<PathBuf>,
+    ) -> Result<Self> {
+        let instance = Self {
+            app,
+            repo,
+            refname,
+            alternate,
+            switch_back: None,
+        };
+
+        instance
+            .switch(&instance.refname, true)
+            .context("Switching branches failed")?;
+
+        Ok(instance)
+    }
+
+    pub fn temporary(
+        app: Arc<App>,
+        repo: PathBuf,
+        refname: String,
+        alternate: Option<PathBuf>,
+    ) -> Result<Self> {
+        let current_branch = get_current_branch(app.clone(), repo.as_path())?;
+
+        let instance = Self {
+            app,
+            repo,
+            refname,
+            alternate,
+            switch_back: Some(current_branch),
+        };
+
+        instance
+            .switch(&instance.refname, true)
+            .context("Switching branches failed")?;
+
+        Ok(instance)
+    }
+
+    fn switch(&self, refname_or_start_point: &str, detach: bool) -> Result<()> {
+        // What branch are we on now?
+        let attachment_description = if detach { "detached" } else { "attached" };
+        let description = format!(
+            "Switching to {} in {} ({})",
+            &refname_or_start_point,
+            self.repo.display(),
+            attachment_description,
+        );
+        let (mut cmd, scmd) = git_command(description.clone(), self.app.clone())?;
+        let cmd = cmd
+            .arg("switch")
+            .arg(&refname_or_start_point)
+            .current_dir(&self.repo);
+        if detach {
+            cmd.arg("--detach");
+        }
+        if let Some(alternate_path) = &self.alternate {
+            cmd.env(
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                alternate_path.as_os_str(),
+            );
+        }
+        scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr, &description)?;
+
+        Ok(())
+    }
+}
+
+impl Drop for BranchSwitch {
+    fn drop(&mut self) {
+        if let Some(refname_to_switch_back_to) = &self.switch_back {
+            self.switch(&refname_to_switch_back_to, false)
+                .expect("Switching back to the original branch failed");
+        }
     }
 }

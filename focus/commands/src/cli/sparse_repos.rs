@@ -17,6 +17,7 @@ use crate::coordinate_resolver::ResolutionRequest;
 use crate::coordinate_resolver::Resolver;
 use crate::coordinate_resolver::RoutingResolver;
 use crate::git_helper;
+use crate::git_helper::BranchSwitch;
 use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::tracker::Tracker;
 use crate::util::lock_file::LockFile;
@@ -77,6 +78,7 @@ pub fn configure_sparse_sync_point(sparse_repo: &Path, app: Arc<App>) -> Result<
 }
 
 // Disable filesystem monitor
+#[allow(unused)]
 pub fn config_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     git_helper::unset_config(sparse_repo, "core.fsmonitor", app)
 }
@@ -321,8 +323,9 @@ pub fn create_or_update_sparse_clone(
         }
     }
 
-    // Being on the right branch in the dense repository is a prerequisite for any work.
-    switch_to_detached_branch_discarding_changes(&dense_repo, &branch, None, app.clone())?;
+    // Switch to the requested branch in the dense repo. Afterwards, we will switch back.
+    let _dense_switch =
+        BranchSwitch::temporary(app.clone(), dense_repo.clone(), branch.to_owned(), None)?;
 
     let profile_generation_handle = {
         let cloned_app = app.clone();
@@ -577,36 +580,6 @@ pub fn create_empty_sparse_clone(
         writeln!(buffer, "")?;
         buffer.flush()?;
     }
-
-    Ok(())
-}
-
-pub fn switch_to_detached_branch_discarding_changes(
-    repo: &Path,
-    refname: &str,
-    alternate: Option<&Path>,
-    app: Arc<App>,
-) -> Result<()> {
-    let description = format!("Switching to {} in {}", refname, repo.display());
-    let (mut cmd, scmd) = git_helper::git_command(description, app)?;
-    let cmd = cmd
-        .arg("switch")
-        .arg(refname)
-        .arg("--quiet")
-        .arg("--detach")
-        .arg("--discard-changes")
-        .current_dir(&repo);
-    if let Some(alternate_path) = alternate {
-        cmd.env(
-            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-            alternate_path.as_os_str(),
-        );
-    }
-    scmd.ensure_success_or_log(
-        cmd,
-        SandboxCommandOutput::Stderr,
-        &format!("switching to ref '{}' in repo {}", refname, &repo.display()),
-    )?;
 
     Ok(())
 }

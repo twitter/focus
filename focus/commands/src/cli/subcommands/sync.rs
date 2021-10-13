@@ -1,6 +1,8 @@
 use crate::app::App;
 use crate::coordinate::CoordinateSet;
 use crate::git_helper;
+use crate::git_helper::get_current_revision;
+use crate::git_helper::BranchSwitch;
 use crate::model::Layer;
 use crate::model::LayerSets;
 use crate::util::sandbox_command::SandboxCommand;
@@ -86,6 +88,7 @@ pub fn ensure_working_trees_are_clean(
 }
 
 pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
+    // TODO(wilhelm): Make this multi-threaded where possible.
     use crate::sparse_repos;
     let ui = app.ui();
     let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
@@ -140,23 +143,8 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
         CoordinateSet::try_from(coordinates.as_ref()).context("constructing coordinate set")?;
 
     let cloned_app = app.clone();
-    let dense_revision = perform("Determining the current commit in the dense repo", || {
-        git_helper::run_git_command_consuming_stdout(
-            "Determining the current commit in the dense repo".to_owned(),
-            &dense_repo,
-            vec!["rev-parse", "HEAD"],
-            cloned_app,
-        )
-    })?;
-
-    let cloned_app = app.clone();
     let sparse_revision = perform("Determining the current commit in the sparse repo", || {
-        git_helper::run_git_command_consuming_stdout(
-            "Determining the current commit in the sparse repo".to_owned(),
-            &sparse_repo,
-            vec!["rev-parse", "HEAD"],
-            cloned_app,
-        )
+        get_current_revision(cloned_app, sparse_repo.as_path())
     })?;
 
     perform("Backing up the current sparse checkout file", || {
@@ -171,36 +159,30 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
         .join(".git")
         .join("objects");
 
-    let cloned_app = app.clone();
-    perform("Switching in the dense repo", || {
-        // When checking out in the dense repo, we make the sparse repo objects available as an alternate so as to not need to push to the dense repo.
-        sparse_repos::switch_to_detached_branch_discarding_changes(
-            &dense_repo,
-            &sparse_revision.as_str(),
-            Some(sparse_objects_directory.as_ref()),
-            cloned_app,
-        )
-    })?;
+    {
+        let cloned_app = app.clone();
+        let _dense_switch = perform("Switching in the dense repo", || {
+            // When checking out in the dense repo, we make the sparse repo objects available as an alternate so as to not need to push to the dense repo.
+            BranchSwitch::temporary(
+                cloned_app,
+                dense_repo.clone(),
+                sparse_revision,
+                Some(sparse_objects_directory.clone()),
+            )
+        })?;
 
-    let cloned_app = app.clone();
-    perform("Computing the new sparse profile", || {
-        sparse_repos::generate_sparse_profile(
-            &dense_repo,
-            &sparse_profile_output_path,
-            coordinate_set,
-            cloned_app,
-        )
-    })?;
+        let cloned_app = app.clone();
+        perform("Computing the new sparse profile", || {
+            sparse_repos::generate_sparse_profile(
+                &dense_repo,
+                &sparse_profile_output_path,
+                coordinate_set,
+                cloned_app,
+            )
+        })?;
 
-    let cloned_app = app.clone();
-    perform("Resetting in the dense repo", || {
-        git_helper::run_git_command_consuming_stdout(
-            "Resetting in the dense repo".to_owned(),
-            &dense_repo,
-            vec!["reset", "--hard", &dense_revision],
-            cloned_app,
-        )
-    })?;
+        // The dense switch will go out of scope and that repo will switch back.
+    }
 
     let cloned_app = app.clone();
     if let Err(_e) = perform("Applying the sparse profile", || {
@@ -254,11 +236,6 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     let cloned_app = app.clone();
     perform("Updating the sync point", || {
         sparse_repos::configure_sparse_sync_point(&sparse_repo, cloned_app)
-    })?;
-
-    let cloned_app = app.clone();
-    perform("Disabling the filesystem monitor", || {
-        sparse_repos::config_sparse_disable_filesystem_monitor(&sparse_repo, cloned_app)
     })?;
 
     Ok(())
