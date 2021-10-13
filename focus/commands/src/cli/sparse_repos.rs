@@ -102,7 +102,7 @@ fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result
         writeln!(preflight_script_file, "")?;
         writeln!(
             preflight_script_file,
-            "exec focus detect-build-graph-changes"
+            "RUST_LOG=error exec focus detect-build-graph-changes"
         )?;
     }
 
