@@ -1,5 +1,4 @@
 mod app;
-mod backed_up_file;
 mod coordinate;
 mod coordinate_resolver;
 mod git_helper;
@@ -13,7 +12,6 @@ mod util;
 mod working_tree_synchronizer;
 
 use anyhow::{bail, Context, Result};
-use backed_up_file::BackedUpFile;
 use env_logger::{self, Env};
 
 use tracker::Tracker;
@@ -28,11 +26,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::{
-    app::App,
-    model::LayerSets,
-    subcommands::{adhoc, layer},
-};
+use crate::{app::App, model::LayerSets, subcommands::{adhoc, layer}, util::backed_up_file::BackedUpFile};
 
 fn the_name_of_this_binary() -> String {
     std::env::args_os()
