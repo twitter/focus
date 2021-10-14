@@ -178,7 +178,24 @@ impl BranchSwitch {
         refname: String,
         alternate: Option<PathBuf>,
     ) -> Result<Self> {
-        let current_branch = get_current_branch(app.clone(), repo.as_path())?;
+        let current_branch = {
+            let hint = get_current_branch(app.clone(), repo.as_path())?
+                .trim()
+                .to_owned();
+            if hint.is_empty() {
+                app.ui().log(
+                    String::from("Branch Switch"),
+                    format!(
+                        "Couldn't determine the current branch in {}, using the default 'master'.",
+                        repo.display()
+                    ),
+                );
+                
+                String::from("master")
+            } else {
+                hint
+            }
+        };
 
         let instance = Self {
             app,
