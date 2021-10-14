@@ -9,6 +9,7 @@ use std::{
     collections::{BTreeSet, HashSet},
     fmt::Display,
     io::BufRead,
+    iter::FromIterator,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -153,12 +154,14 @@ pub trait Resolver {
 
 pub struct RoutingResolver {
     bazel_resolver: BazelResolver,
+    directory_resolver: DirectoryResolver,
 }
 
 impl Resolver for RoutingResolver {
     fn new(cache_root: &Path) -> Self {
         Self {
             bazel_resolver: BazelResolver::new(cache_root),
+            directory_resolver: DirectoryResolver::new(cache_root),
         }
     }
 
@@ -186,6 +189,10 @@ impl Resolver for RoutingResolver {
             let result = match coordinate {
                 Coordinate::Bazel(_) => {
                     self.bazel_resolver
+                        .resolve(&subrequest, &cache_options, app_clone)
+                }
+                Coordinate::Directory(_) => {
+                    self.directory_resolver
                         .resolve(&subrequest, &cache_options, app_clone)
                 }
             }
@@ -237,6 +244,7 @@ impl Resolver for BazelResolver {
                 // TODO: Consider parameterizing depth
                 match coordinate {
                     Coordinate::Bazel(inner) => Some(format!("buildfiles(deps({}))", inner)),
+                    _ => unreachable!(),
                 }
             })
             .collect();
@@ -267,6 +275,44 @@ impl Resolver for BazelResolver {
                 }
             }
         }
+
+        Ok(ResolutionResult::from(directories))
+    }
+}
+
+/// Resolves directories verbatim
+struct DirectoryResolver {
+    #[allow(unused)]
+    cache_root: PathBuf,
+}
+
+impl Resolver for DirectoryResolver {
+    fn new(cache_root: &Path) -> Self {
+        Self {
+            cache_root: cache_root.join("directory").to_owned(),
+        }
+    }
+
+    fn resolve(
+        &self,
+        request: &ResolutionRequest,
+        _cache_options: &CacheOptions,
+        _app: Arc<App>,
+    ) -> Result<ResolutionResult> {
+        let directories = BTreeSet::<PathBuf>::from_iter(
+            request
+                .coordinate_set()
+                .underlying()
+                .iter()
+                .filter_map(|coordinate| {
+                    match coordinate {
+                        Coordinate::Directory(inner) => {
+                            Some(PathBuf::from(inner))
+                        },
+                        _ => unreachable!(),
+                    }
+                }),
+        );
 
         Ok(ResolutionResult::from(directories))
     }

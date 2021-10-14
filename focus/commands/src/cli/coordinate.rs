@@ -20,11 +20,12 @@ impl CoordinateSet {
     }
 
     pub fn determine_uniformity(set: &HashSet<Coordinate>) -> bool {
-        let mut count_by_type = [0 as usize; 3];
+        let mut count_by_type = [0 as usize; 2];
 
         for coordinate in set {
             match coordinate {
                 Coordinate::Bazel(_) => count_by_type[0] += 1,
+                Coordinate::Directory(_) =>  count_by_type[1] += 1,
             }
         }
 
@@ -75,12 +76,14 @@ impl TryFrom<&Vec<String>> for CoordinateSet {
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum Coordinate {
     Bazel(String),
+    Directory(String),
 }
 
 impl Display for Coordinate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Coordinate::Bazel(c) => write!(f, "{}", c),
+            Coordinate::Directory(c) =>  write!(f, "{}", c),
         }
     }
 }
@@ -103,6 +106,8 @@ impl TryFrom<&str> for Coordinate {
                 let rest = rest.to_owned();
                 if prefix.eq_ignore_ascii_case("bazel") {
                     return Ok(Coordinate::Bazel(rest));
+                } else if prefix.eq_ignore_ascii_case("directory") {
+                    return Ok(Coordinate::Directory(rest));
                 } else {
                     return Err(CoordinateError::UnsupportedScheme(prefix.to_owned()));
                 }
@@ -150,13 +155,13 @@ mod tests {
     }
 
     // TODO: Enable this again when there are more coordinate types.
-    #[cfg(disabled_test)]
+    // #[cfg(disabled_test)]
     #[test]
     pub fn non_uniform_sets() -> Result<()> {
         // Sets containing different coordinate types are non-uniform
         assert!(!CoordinateSet::try_from(&vec![
             String::from("bazel://a:b"),
-            String::from("pants:x/y/::"),
+            String::from("directory:/foo"),
         ])?
         .is_uniform());
 

@@ -602,15 +602,19 @@ fn resolve_involved_directories(
 
     let result = resolver
         .resolve(&request, &cache_options, app.clone())
-        .context("resolving coordinates")?;
+        .context("Failed to resolve coordinates")?;
 
     let before = into.len();
     for path in result.paths() {
         let qualified_path = repo.join(path);
-        if let Some(path) = find_closest_directory_with_build_file(&qualified_path, repo)
+        if let Some(path_to_closest_build_file) = find_closest_directory_with_build_file(&qualified_path, repo)
             .context("locating closest build file")?
         {
-            into.insert(path);
+            log::debug!("Adding directory with closest build definiton: {}", path_to_closest_build_file.display());
+            into.insert(path_to_closest_build_file);
+        } else {
+            log::debug!("Adding directory verbatim: {}", qualified_path.display());
+            into.insert(qualified_path);
         }
     }
 
@@ -618,7 +622,7 @@ fn resolve_involved_directories(
     app.ui().log(
         String::from("Resolver"),
         format!(
-            "Dependency query yielded {} directories ({} total)",
+            "Resolution yielded {} directories ({} total)",
             difference,
             &result.paths().len()
         ),
