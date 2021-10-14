@@ -292,7 +292,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let coordinates = filter_empty_strings(coordinates.0);
 
             if coordinates.is_empty() && layers.is_empty() {
-                bail!("No coordinates or layers specfiied");
+                bail!("No coordinates or layers specified");
             }
 
             let ui = cloned_app.ui();
