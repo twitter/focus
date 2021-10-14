@@ -66,7 +66,7 @@ enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build coordinates
     Clone {
         /// Path to the existing dense repository that the sparse clone shall be based upon.
-        #[structopt(long, parse(from_os_str))]
+        #[structopt(long, parse(from_os_str), default_value = "~/workspace/source")]
         dense_repo: PathBuf,
 
         /// Path where the new sparse repository should be created.
