@@ -26,7 +26,12 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::{app::App, model::LayerSets, subcommands::{adhoc, layer}, util::backed_up_file::BackedUpFile};
+use crate::{
+    app::App,
+    model::LayerSets,
+    subcommands::{adhoc, layer},
+    util::backed_up_file::BackedUpFile,
+};
 
 fn the_name_of_this_binary() -> String {
     std::env::args_os()

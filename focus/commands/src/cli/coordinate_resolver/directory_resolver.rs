@@ -1,4 +1,7 @@
-use std::{iter::FromIterator, path::{Path, PathBuf}};
+use std::{
+    iter::FromIterator,
+    path::{Path, PathBuf},
+};
 
 use super::*;
 

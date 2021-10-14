@@ -1,4 +1,7 @@
-use std::{io::BufRead, path::{Path, PathBuf}};
+use std::{
+    io::BufRead,
+    path::{Path, PathBuf},
+};
 
 use crate::util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
 
@@ -79,4 +82,3 @@ impl Resolver for BazelResolver {
         Ok(ResolutionResult::from(directories))
     }
 }
-
