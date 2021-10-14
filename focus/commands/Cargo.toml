@@ -28,7 +28,8 @@ thiserror = "1.0.28"
 url = "2.2.2"
 uuid = { version = "0.8.2", features = ["v4"] }
 walkdir = "2.3.2"
-nix = "0.22.1"
+nix = "0.22"
+rayon = "1.5"
 
 ##
 ## Focus CLI: The primary UI for Project Focused Development

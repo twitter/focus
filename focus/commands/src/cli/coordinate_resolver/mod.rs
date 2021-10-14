@@ -134,35 +134,43 @@ impl Resolver for RoutingResolver {
         cache_options: &CacheOptions,
         app: Arc<App>,
     ) -> Result<ResolutionResult> {
-        let coordinate_set = request.coordinate_set().underlying();
+        use rayon::prelude::*;
 
-        let mut aggregated_result = ResolutionResult::new();
-        for (_index, coordinate) in coordinate_set.iter().enumerate() {
-            let app_clone = app.clone();
+        Ok(request
+            .coordinate_set()
+            .underlying()
+            .par_iter()
+            .map(|coordinate| {
+                let app_clone = app.clone();
 
-            let mut set = HashSet::<Coordinate>::new();
-            set.insert(coordinate.to_owned());
+                let mut set = HashSet::<Coordinate>::new();
+                set.insert(coordinate.to_owned());
 
-            let subrequest = ResolutionRequest::new(
-                request.repo(),
-                request.repo_state().clone(),
-                CoordinateSet::from(set),
-            );
+                let subrequest = ResolutionRequest::new(
+                    request.repo(),
+                    request.repo_state().clone(),
+                    CoordinateSet::from(set),
+                );
 
-            let result = match coordinate {
-                Coordinate::Bazel(_) => {
-                    self.bazel_resolver
-                        .resolve(&subrequest, &cache_options, app_clone)
+                match coordinate {
+                    Coordinate::Bazel(_) => {
+                        self.bazel_resolver
+                            .resolve(&subrequest, &cache_options, app_clone)
+                    }
+                    Coordinate::Directory(_) => {
+                        self.directory_resolver
+                            .resolve(&subrequest, &cache_options, app_clone)
+                    }
                 }
-                Coordinate::Directory(_) => {
-                    self.directory_resolver
-                        .resolve(&subrequest, &cache_options, app_clone)
-                }
-            }
-            .with_context(|| format!("failed to resolve coordinate {}", coordinate))?;
-            aggregated_result.merge(&result);
-        }
-
-        Ok(aggregated_result)
+                .with_context(|| format!("failed to resolve coordinate {}", coordinate))
+            })
+            .try_reduce(
+                || ResolutionResult::new(),
+                |mut acc, result| {
+                    acc.merge(&result);
+                    Ok(acc)
+                },
+            )
+            .context("Resolving coordinates failed")?)
     }
 }
