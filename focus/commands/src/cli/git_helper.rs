@@ -108,7 +108,7 @@ pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
     if let Ok(path) = std::fs::canonicalize(path) {
         Ok(PathBuf::from(
             run_consuming_stdout(
-                "Finding the repo's top level".to_owned(),
+                format!("Finding top level of repo in {}", path.display()),
                 path,
                 vec!["rev-parse", "--show-toplevel"],
                 app,
