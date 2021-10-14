@@ -1,10 +1,10 @@
 use crate::app::App;
 use crate::coordinate::CoordinateSet;
-use crate::git_helper;
-use crate::git_helper::get_current_revision;
-use crate::git_helper::BranchSwitch;
 use crate::model::Layer;
 use crate::model::LayerSets;
+use crate::util::git_helper;
+use crate::util::git_helper::get_current_revision;
+use crate::util::git_helper::BranchSwitch;
 use crate::util::sandbox_command::SandboxCommand;
 use crate::util::sandbox_command::SandboxCommandOutput;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;

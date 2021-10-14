@@ -4,7 +4,7 @@ mod directory_resolver;
 use crate::{
     app::App,
     coordinate::{Coordinate, CoordinateSet},
-    git_helper::RepoState,
+    util::git_helper::RepoState,
 };
 use anyhow::{Context, Result};
 use std::{

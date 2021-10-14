@@ -1,4 +1,5 @@
 pub mod backed_up_file;
+pub mod git_helper;
 pub mod lock_file;
 pub mod periodic;
 pub mod sandbox;

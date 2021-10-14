@@ -1,7 +1,6 @@
 mod app;
 mod coordinate;
 mod coordinate_resolver;
-mod git_helper;
 mod model;
 mod sparse_repos;
 mod subcommands;
@@ -15,6 +14,7 @@ use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
 
 use tracker::Tracker;
+use util::git_helper;
 
 use std::{
     ffi::OsString,

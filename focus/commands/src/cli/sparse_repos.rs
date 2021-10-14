@@ -15,11 +15,9 @@ use crate::coordinate_resolver::CacheOptions;
 use crate::coordinate_resolver::ResolutionRequest;
 use crate::coordinate_resolver::Resolver;
 use crate::coordinate_resolver::RoutingResolver;
-use crate::git_helper;
-use crate::git_helper::BranchSwitch;
-use crate::git_helper::RepoState;
 use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::tracker::Tracker;
+use crate::util::git_helper;
 use crate::util::lock_file::LockFile;
 use crate::util::sandbox_command::SandboxCommand;
 use crate::util::sandbox_command::SandboxCommandOutput;
@@ -324,8 +322,12 @@ pub fn create_or_update_sparse_clone(
     }
 
     // Switch to the requested branch in the dense repo. Afterwards, we will switch back.
-    let _dense_switch =
-        BranchSwitch::temporary(app.clone(), dense_repo.clone(), branch.to_owned(), None)?;
+    let _dense_switch = git_helper::BranchSwitch::temporary(
+        app.clone(),
+        dense_repo.clone(),
+        branch.to_owned(),
+        None,
+    )?;
 
     let profile_generation_handle = {
         let cloned_app = app.clone();
@@ -596,7 +598,7 @@ fn resolve_involved_directories(
         .join("cache");
     let resolver = RoutingResolver::new(cache_dir.as_path());
 
-    let repo_state = RepoState::new(&repo, app.clone())?;
+    let repo_state = git_helper::RepoState::new(&repo, app.clone())?;
     let request = ResolutionRequest::new(repo, repo_state, coordinate_set);
     let cache_options = CacheOptions::default();
 
