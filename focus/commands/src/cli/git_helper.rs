@@ -83,7 +83,7 @@ pub fn unset_config<P: AsRef<Path>>(_repo_path: P, key: &str, app: Arc<App>) -> 
     Ok(())
 }
 
-pub fn run_git_command_consuming_stdout<P, I, S>(
+pub fn run_consuming_stdout<P, I, S>(
     description: String,
     repo: P,
     args: I,
@@ -107,7 +107,7 @@ where
 pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
     if let Ok(path) = std::fs::canonicalize(path) {
         Ok(PathBuf::from(
-            run_git_command_consuming_stdout(
+            run_consuming_stdout(
                 "Finding the repo's top level".to_owned(),
                 path,
                 vec!["rev-parse", "--show-toplevel"],
@@ -124,7 +124,7 @@ pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
 }
 
 pub fn get_current_revision(app: Arc<App>, repo: &Path) -> Result<String> {
-    run_git_command_consuming_stdout(
+    run_consuming_stdout(
         format!("Determining the current commit in repo {}", repo.display()),
         repo,
         vec!["rev-parse", "HEAD"],
@@ -133,7 +133,7 @@ pub fn get_current_revision(app: Arc<App>, repo: &Path) -> Result<String> {
 }
 
 pub fn get_current_branch(app: Arc<App>, repo: &Path) -> Result<String> {
-    run_git_command_consuming_stdout(
+    run_consuming_stdout(
         format!("Determining the current branch in repo {}", repo.display()),
         repo,
         vec!["branch", "--show-current"],
@@ -260,7 +260,7 @@ pub struct RepoState {
 
 impl RepoState {
     pub fn new(repo_path: &dyn AsRef<Path>, app: Arc<App>) -> Result<Self> {
-        let origin_url = run_git_command_consuming_stdout(
+        let origin_url = run_consuming_stdout(
             "Obtaining origin URL".to_owned(),
             repo_path,
             vec!["remote", "get-url", "origin"],
@@ -268,7 +268,7 @@ impl RepoState {
         )
         .context("failed determining origin URL")?;
 
-        let commit_id = run_git_command_consuming_stdout(
+        let commit_id = run_consuming_stdout(
             "Determining commit ID".to_owned(),
             repo_path,
             vec!["rev-parse", "HEAD"],

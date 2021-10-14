@@ -67,7 +67,7 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
 
 // Set git config key focus.sync-point to HEAD
 pub fn configure_sparse_sync_point(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
-    let head_str = git_helper::run_git_command_consuming_stdout(
+    let head_str = git_helper::run_consuming_stdout(
         "Reading the current revision to use as a sync point".to_owned(),
         &sparse_repo,
         vec!["rev-parse", "HEAD"],

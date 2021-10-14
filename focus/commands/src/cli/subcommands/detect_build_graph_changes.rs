@@ -29,7 +29,7 @@ fn find_committed_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
         "Finding committed changes since the last sync point ({})",
         &revspec
     );
-    let output = git_helper::run_git_command_consuming_stdout(
+    let output = git_helper::run_consuming_stdout(
         description,
         repo,
         vec!["diff", "--name-only", revspec.as_str()],
@@ -48,7 +48,7 @@ fn find_committed_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
 }
 
 fn find_uncommitted_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
-    let output = git_helper::run_git_command_consuming_stdout(
+    let output = git_helper::run_consuming_stdout(
         "Finding uncommitted changes".to_owned(),
         repo,
         vec!["status", "--porcelain", "--no-renames"],
