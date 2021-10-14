@@ -1,5 +1,6 @@
 use std::{
     ffi::{OsStr, OsString},
+    fmt::Display,
     path::PathBuf,
     sync::Arc,
 };
@@ -190,7 +191,7 @@ impl BranchSwitch {
                         repo.display()
                     ),
                 );
-                
+
                 String::from("master")
             } else {
                 hint
@@ -247,5 +248,43 @@ impl Drop for BranchSwitch {
             self.switch(&refname_to_switch_back_to, false)
                 .expect("Switching back to the original branch failed");
         }
+    }
+}
+
+/// The state of a repository encompassing its origin URL and current commit ID.
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+pub struct RepoState {
+    origin_url: String,
+    commit_id: String,
+}
+
+impl RepoState {
+    pub fn new(repo_path: &dyn AsRef<Path>, app: Arc<App>) -> Result<Self> {
+        let origin_url = run_git_command_consuming_stdout(
+            "Obtaining origin URL".to_owned(),
+            repo_path,
+            vec!["remote", "get-url", "origin"],
+            app.clone(),
+        )
+        .context("failed determining origin URL")?;
+
+        let commit_id = run_git_command_consuming_stdout(
+            "Determining commit ID".to_owned(),
+            repo_path,
+            vec!["rev-parse", "HEAD"],
+            app.clone(),
+        )
+        .context("failed determining commit ID")?;
+
+        Ok(Self {
+            origin_url,
+            commit_id,
+        })
+    }
+}
+
+impl Display for RepoState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}?@={}", self.origin_url, self.commit_id)
     }
 }

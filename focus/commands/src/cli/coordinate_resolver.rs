@@ -1,56 +1,17 @@
 use crate::{
     app::App,
     coordinate::{Coordinate, CoordinateSet},
-    git_helper,
+    git_helper::RepoState,
     util::sandbox_command::{SandboxCommand, SandboxCommandOutput},
 };
 use anyhow::{Context, Result};
 use std::{
     collections::{BTreeSet, HashSet},
-    fmt::Display,
     io::BufRead,
     iter::FromIterator,
     path::{Path, PathBuf},
     sync::Arc,
 };
-
-/// The state of a repository encompassing its origin URL and current commit ID.
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub struct RepoState {
-    origin_url: String,
-    commit_id: String,
-}
-
-impl RepoState {
-    pub fn new(repo_path: &dyn AsRef<Path>, app: Arc<App>) -> Result<Self> {
-        let origin_url = git_helper::run_git_command_consuming_stdout(
-            "Obtaining origin URL".to_owned(),
-            repo_path,
-            vec!["remote", "get-url", "origin"],
-            app.clone(),
-        )
-        .context("failed determining origin URL")?;
-
-        let commit_id = git_helper::run_git_command_consuming_stdout(
-            "Determining commit ID".to_owned(),
-            repo_path,
-            vec!["rev-parse", "HEAD"],
-            app.clone(),
-        )
-        .context("failed determining commit ID")?;
-
-        Ok(Self {
-            origin_url,
-            commit_id,
-        })
-    }
-}
-
-impl Display for RepoState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}?@={}", self.origin_url, self.commit_id)
-    }
-}
 
 /// A request to resolve coordinates in a particular repository.
 pub struct ResolutionRequest {
@@ -300,18 +261,12 @@ impl Resolver for DirectoryResolver {
         _app: Arc<App>,
     ) -> Result<ResolutionResult> {
         let directories = BTreeSet::<PathBuf>::from_iter(
-            request
-                .coordinate_set()
-                .underlying()
-                .iter()
-                .filter_map(|coordinate| {
-                    match coordinate {
-                        Coordinate::Directory(inner) => {
-                            Some(PathBuf::from(inner))
-                        },
-                        _ => unreachable!(),
-                    }
-                }),
+            request.coordinate_set().underlying().iter().filter_map(
+                |coordinate| match coordinate {
+                    Coordinate::Directory(inner) => Some(PathBuf::from(inner)),
+                    _ => unreachable!(),
+                },
+            ),
         );
 
         Ok(ResolutionResult::from(directories))
