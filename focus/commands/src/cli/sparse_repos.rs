@@ -607,10 +607,14 @@ fn resolve_involved_directories(
     let before = into.len();
     for path in result.paths() {
         let qualified_path = repo.join(path);
-        if let Some(path_to_closest_build_file) = find_closest_directory_with_build_file(&qualified_path, repo)
-            .context("locating closest build file")?
+        if let Some(path_to_closest_build_file) =
+            find_closest_directory_with_build_file(&qualified_path, repo)
+                .context("locating closest build file")?
         {
-            log::debug!("Adding directory with closest build definiton: {}", path_to_closest_build_file.display());
+            log::debug!(
+                "Adding directory with closest build definiton: {}",
+                path_to_closest_build_file.display()
+            );
             into.insert(path_to_closest_build_file);
         } else {
             log::debug!("Adding directory verbatim: {}", qualified_path.display());

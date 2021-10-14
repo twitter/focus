@@ -25,7 +25,7 @@ impl CoordinateSet {
         for coordinate in set {
             match coordinate {
                 Coordinate::Bazel(_) => count_by_type[0] += 1,
-                Coordinate::Directory(_) =>  count_by_type[1] += 1,
+                Coordinate::Directory(_) => count_by_type[1] += 1,
             }
         }
 
@@ -83,7 +83,7 @@ impl Display for Coordinate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Coordinate::Bazel(c) => write!(f, "{}", c),
-            Coordinate::Directory(c) =>  write!(f, "{}", c),
+            Coordinate::Directory(c) => write!(f, "{}", c),
         }
     }
 }
