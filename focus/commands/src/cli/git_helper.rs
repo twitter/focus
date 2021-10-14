@@ -261,12 +261,12 @@ pub struct RepoState {
 impl RepoState {
     pub fn new(repo_path: &dyn AsRef<Path>, app: Arc<App>) -> Result<Self> {
         let origin_url = run_consuming_stdout(
-            "Obtaining origin URL".to_owned(),
+            "Reading origin URL".to_owned(),
             repo_path,
             vec!["remote", "get-url", "origin"],
             app.clone(),
         )
-        .context("failed determining origin URL")?;
+        .context("Failed to determine the origin URL")?;
 
         let commit_id = run_consuming_stdout(
             "Determining commit ID".to_owned(),
@@ -274,7 +274,7 @@ impl RepoState {
             vec!["rev-parse", "HEAD"],
             app.clone(),
         )
-        .context("failed determining commit ID")?;
+        .context("Failed to determine the commit ID")?;
 
         Ok(Self {
             origin_url,
