@@ -7,6 +7,7 @@ use std::io::BufWriter;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::thread;
+use std::thread::JoinHandle;
 use std::{collections::BTreeSet, path::PathBuf, process::Stdio, sync::Arc};
 
 use crate::app::App;
@@ -358,7 +359,7 @@ pub fn create_or_update_sparse_clone(
             })
     }?;
 
-    let clone_handle = {
+    let clone_handle: JoinHandle<Result<()>> = {
         if !create {
             return Ok(());
         }
@@ -381,16 +382,18 @@ pub fn create_or_update_sparse_clone(
                     &cloned_branch,
                     cloned_app.clone(),
                 )
-                .expect("failed to create an empty sparse clone");
+                .context("failed to create an empty sparse clone")?;
                 configure_sparse_repo_initial(&cloned_sparse_repo, cloned_app.clone())
-                    .expect("failed to configure sparse clone");
+                    .context("failed to configure sparse clone")?;
                 cloned_app.ui().log(
                     String::from("Profile Generation"),
                     String::from("Finished creating a template clone"),
                 );
                 // N.B. For now, we set up alternates because they allow for journaled fetches
                 set_up_alternates(&cloned_sparse_repo, &cloned_dense_repo)
-                    .expect("Setting up object database alternates failed");
+                    .context("Setting up object database alternates failed")?;
+
+                Ok(())
             })
     }?;
 

@@ -94,7 +94,10 @@ impl LayerSet {
         for layer in &self.layers {
             let name = &layer.name.to_owned();
             if name.contains(':') {
-                bail!("Layer name '{}' contains a colon (:); colons are not allowed in layer names", name);
+                bail!(
+                    "Layer name '{}' contains a colon (:); colons are not allowed in layer names",
+                    name
+                );
             } else if let Some(existing_index) = visited_names.insert(name.to_owned(), index) {
                 bail!(
                     "Layer named '{}' at index {} has the same name as existing layer at index {}",

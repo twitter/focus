@@ -55,8 +55,11 @@ impl Resolver for BazelResolver {
 
         // Run Bazel query
         let description = format!("bazel query '{}'", &query);
-        let (mut cmd, scmd) =
-            SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app.clone())?;
+        let (mut cmd, scmd) = SandboxCommand::new(
+            description.clone(),
+            Self::locate_bazel_binary(request),
+            app.clone(),
+        )?;
         scmd.ensure_success_or_log(
             cmd.arg("query")
                 .arg(query)
