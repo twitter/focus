@@ -330,7 +330,7 @@ pub fn create_or_update_sparse_clone(
         None,
     )?;
 
-    let profile_generation_handle = {
+    let profile_generation_handle: JoinHandle<Result<()>> = {
         let cloned_app = app.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
@@ -350,12 +350,14 @@ pub fn create_or_update_sparse_clone(
                     cloned_coordinate_set,
                     cloned_app.clone(),
                 )
-                .expect("failed to generate a sparse profile");
+                .context("failed to generate a sparse profile")?;
 
                 cloned_app.ui().log(
                     String::from("Profile Generation"),
                     String::from("Finished generating sparse profile"),
                 );
+
+                Ok(())
             })
     }?;
 
@@ -403,7 +405,7 @@ pub fn create_or_update_sparse_clone(
     }
 
     if let Err(e) = profile_generation_handle.join() {
-        bail!("Profile Generation failed: {:?}", e);
+        bail!("Profile generation failed: {:?}", e);
     }
 
     {
