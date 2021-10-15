@@ -56,14 +56,14 @@ impl Resolver for BazelResolver {
         // Run Bazel query
         let description = format!("bazel query '{}'", &query);
         let (mut cmd, scmd) =
-            SandboxCommand::new(description, Self::locate_bazel_binary(request), app.clone())?;
+            SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app.clone())?;
         scmd.ensure_success_or_log(
             cmd.arg("query")
                 .arg(query)
                 .arg("--output=package")
                 .current_dir(request.repo()),
             SandboxCommandOutput::Stderr,
-            "bazel query",
+            &description,
         )?;
 
         let reader = scmd.read_buffered(SandboxCommandOutput::Stdout)?;
