@@ -17,10 +17,10 @@ use tracker::Tracker;
 use util::git_helper;
 
 use std::{
+    convert::TryFrom,
+    env,
     ffi::OsString,
-    fmt::Display,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
     time::Instant,
 };
@@ -28,6 +28,7 @@ use structopt::StructOpt;
 
 use crate::{
     app::App,
+    coordinate::Coordinate,
     model::LayerSets,
     subcommands::{adhoc, layer},
     util::backed_up_file::BackedUpFile,
@@ -42,47 +43,24 @@ fn the_name_of_this_binary() -> String {
         .to_owned()
 }
 
-#[derive(Debug)]
-struct CommaSeparatedStrings(Vec<String>);
-
-impl FromStr for CommaSeparatedStrings {
-    type Err = std::string::ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let splayed: Vec<_> = s.split(",").map(|s| s.to_owned()).collect();
-        Ok(CommaSeparatedStrings(splayed))
-    }
-}
-
-impl Display for CommaSeparatedStrings {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.join(", "))
-    }
-}
-
 #[derive(StructOpt, Debug)]
 enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build coordinates
     Clone {
-        /// Path to the existing dense repository that the sparse clone shall be based upon.
+        /// Path to the dense repository to base the clone on.
         #[structopt(long, parse(from_os_str), default_value = "~/workspace/source")]
         dense_repo: PathBuf,
 
         /// Path where the new sparse repository should be created.
-        #[structopt(long, parse(from_os_str))]
+        #[structopt(parse(from_os_str))]
         sparse_repo: PathBuf,
 
         /// The name of the branch to clone.
         #[structopt(long, default_value = "master")]
         branch: String,
 
-        /// Bazel build coordinates to include as an ad-hoc layer set, cannot be specified in combination with 'layers'.
-        #[structopt(long, default_value = "")]
-        coordinates: CommaSeparatedStrings,
-
-        /// Named layers to include. Comma separated, loaded from the dense repository's `focus/projects` directory), cannot be specified in combination with 'coordinates'.
-        #[structopt(long, default_value = "")]
-        layers: CommaSeparatedStrings,
+        /// Named layers and ad-hoc coordinates to include in the clone. Named layers are loaded from the dense repo's `focus/projects` directory.
+        coordinates_and_layers: Vec<String>,
     },
 
     /// Update the sparse checkout to reflect changes to the build graph.
@@ -220,19 +198,6 @@ struct FocusOpts {
     cmd: Subcommand,
 }
 
-fn filter_empty_strings(string_list: Vec<String>) -> Vec<String> {
-    string_list
-        .iter()
-        .filter_map(|s| {
-            if !s.is_empty() {
-                Some(s.to_owned())
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
 fn ensure_directories_exist() -> Result<()> {
     Tracker::default()
         .ensure_directories_exist()
@@ -279,21 +244,27 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             dense_repo,
             sparse_repo,
             branch,
-            layers,
-            coordinates,
+            coordinates_and_layers,
         } => {
-            let dense_repo = expand_tilde(dense_repo)?;
-            let sparse_repo = expand_tilde(sparse_repo)?;
+            let dense_repo =
+                expand_tilde(dense_repo).context("Failed to expand dense repo path")?;
+            let sparse_repo = {
+                let current_dir =
+                    env::current_dir().context("Failed to obtain current directory")?;
+                let expanded =
+                    expand_tilde(sparse_repo).context("Failed to expand sparse repo path")?;
+                current_dir.join(expanded)
+            };
+            log::info!("Sparse repo path: {}", sparse_repo.display());
 
             let dense_repo = git_helper::find_top_level(cloned_app.clone(), &dense_repo)
                 .context("Failed to canonicalize dense repo path")?;
 
-            let layers = filter_empty_strings(layers.0);
-            let coordinates = filter_empty_strings(coordinates.0);
-
-            if coordinates.is_empty() && layers.is_empty() {
-                bail!("No coordinates or layers specified");
-            }
+            let (coordinates, layers): (Vec<&String>, Vec<&String>) = coordinates_and_layers
+                .iter()
+                .partition(|&item| Coordinate::try_from(item.as_str()).is_ok());
+            let coordinates = coordinates.iter().map(|&item| item.to_owned()).collect();
+            let layers = layers.iter().map(|&item| item.to_owned()).collect();
 
             let ui = cloned_app.ui();
             ui.status(format!(
