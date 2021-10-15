@@ -194,6 +194,9 @@ struct FocusOpts {
     #[structopt(long)]
     ugly: bool,
 
+    #[structopt(long, default_value = "1")]
+    task_threads: usize,
+
     #[structopt(subcommand)]
     cmd: Subcommand,
 }
@@ -427,9 +430,17 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
     }
 }
 
+fn setup_thread_pool(task_threads: usize) -> Result<()> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(task_threads)
+        .build_global().context("Failed to create the task thread pool")?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let started_at = Instant::now();
     let options = FocusOpts::from_args();
+    setup_thread_pool(options.task_threads)?;
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
