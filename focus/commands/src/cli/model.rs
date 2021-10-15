@@ -93,14 +93,15 @@ impl LayerSet {
         let mut index: usize = 0;
         for layer in &self.layers {
             let name = &layer.name.to_owned();
-            if let Some(existing_index) = visited_names.insert(name.to_owned(), index) {
+            if name.contains(':') {
+                bail!("Layer name '{}' contains a colon (:); colons are not allowed in layer names", name);
+            } else if let Some(existing_index) = visited_names.insert(name.to_owned(), index) {
                 bail!(
                     "Layer named '{}' at index {} has the same name as existing layer at index {}",
                     &name,
                     index,
                     existing_index
                 );
-            } else {
             }
 
             index += 1;
@@ -606,7 +607,7 @@ mod tests {
     }
 
     #[test]
-    fn validate() -> Result<()> {
+    fn validate_no_duplicate_layer_names() -> Result<()> {
         init_logging();
 
         {
@@ -628,6 +629,34 @@ mod tests {
             };
             let e = layer_set.validate().unwrap_err();
             assert_eq!("Layer named 'baseline/loglens' at index 4 has the same name as existing layer at index 2",e.to_string());
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn validate_no_colons() -> Result<()> {
+        init_logging();
+
+        {
+            let layer_set = layer_set();
+            assert!(layer_set.validate().is_ok());
+        }
+
+        {
+            let mut layers = layers();
+            layers.push(Layer {
+                name: "beep:boop".to_owned(),
+                description: "".to_owned(),
+                mandatory: false,
+                coordinates: vec!["blah".to_owned()],
+            });
+            let layer_set = LayerSet {
+                layers,
+                content_hash: None,
+            };
+            let e = layer_set.validate().unwrap_err();
+            assert_eq!("Layer name 'beep:boop' contains a colon (:); colons are not allowed in layer names",e.to_string());
         }
 
         Ok(())
