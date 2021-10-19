@@ -239,6 +239,23 @@ fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Result<PathBuf> {
     }
 }
 
+fn path_has_ancestor(subject: &Path, ancestor: &Path) -> Result<bool> {
+    if subject == ancestor {
+        return Ok(true);
+    }
+
+    let mut subject = subject;
+    while let Some(parent) = subject.parent() {
+        if parent == ancestor {
+            return Ok(true);
+        }
+
+        subject = parent;
+    }
+
+    Ok(false)
+}
+
 fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Result<()> {
     let cloned_app = app.clone();
 
@@ -249,6 +266,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             branch,
             coordinates_and_layers,
         } => {
+            let ui = cloned_app.ui();
             let dense_repo =
                 expand_tilde(dense_repo).context("Failed to expand dense repo path")?;
             let sparse_repo = {
@@ -258,7 +276,16 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     expand_tilde(sparse_repo).context("Failed to expand sparse repo path")?;
                 current_dir.join(expanded)
             };
-            log::info!("Sparse repo path: {}", sparse_repo.display());
+            ui.log(
+                String::from("Clone"),
+                format!("Using the dense repo in {}", dense_repo.display()),
+            );
+
+            if path_has_ancestor(&sparse_repo, &dense_repo)
+                .context("Could not determine if the sparse repo is in the dense repo")?
+            {
+                bail!("The sparse repo ({}) must not be be inside the dense repo ({}). Note: the sparse repo path is treated as relative to the current directory.", sparse_repo.display(), dense_repo.display())
+            }
 
             let dense_repo = git_helper::find_top_level(cloned_app.clone(), &dense_repo)
                 .context("Failed to canonicalize dense repo path")?;
@@ -269,7 +296,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let coordinates = coordinates.iter().map(|&item| item.to_owned()).collect();
             let layers = layers.iter().map(|&item| item.to_owned()).collect();
 
-            let ui = cloned_app.ui();
             ui.status(format!(
                 "Cloning {} into {}",
                 dense_repo.display(),
@@ -433,7 +459,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 fn setup_thread_pool(task_threads: usize) -> Result<()> {
     rayon::ThreadPoolBuilder::new()
         .num_threads(task_threads)
-        .build_global().context("Failed to create the task thread pool")?;
+        .build_global()
+        .context("Failed to create the task thread pool")?;
     Ok(())
 }
 
