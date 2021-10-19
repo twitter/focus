@@ -5,6 +5,7 @@ use crate::model::LayerSets;
 use crate::util::git_helper;
 use crate::util::git_helper::get_current_revision;
 use crate::util::git_helper::BranchSwitch;
+use crate::util::repo_paths;
 use crate::util::sandbox_command::SandboxCommand;
 use crate::util::sandbox_command::SandboxCommandOutput;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
@@ -93,12 +94,17 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     let ui = app.ui();
     let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
         .context("canonicalizing sparse repo path")?;
+    repo_paths::assert_focused_repo(&sparse_repo)?;
+
     let dense_repo = find_dense_repo(app.clone(), &sparse_repo)?;
 
     let sparse_profile_path = sparse_repo
         .join(".git")
         .join("info")
         .join("sparse-checkout");
+    if !sparse_profile_path.is_file() {
+        bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
+    }
 
     let (sparse_profile_output_file, sparse_profile_output_path) =
         app.sandbox().create_file(Some("sparse-profile"), None)?;

@@ -31,7 +31,7 @@ use crate::{
     coordinate::Coordinate,
     model::LayerSets,
     subcommands::{adhoc, layer},
-    util::backed_up_file::BackedUpFile,
+    util::{backed_up_file::BackedUpFile, repo_paths},
 };
 
 fn the_name_of_this_binary() -> String {
@@ -84,7 +84,7 @@ enum Subcommand {
         args: Vec<String>,
     },
 
-    /// Interact with the ad-hoc coordinate stack. Run `focus selection help` for more information.
+    /// Interact with the ad-hoc coordinate stack. Run `focus adhoc help` for more information.
     Adhoc {
         /// Path to the repository.
         #[structopt(long, parse(from_os_str), default_value = ".")]
@@ -344,6 +344,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Layer { repo, args } => {
+            repo_paths::assert_focused_repo(&repo)?;
+
             // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
             let mut args = args.clone();
             args.insert(0, format!("{} layer", the_name_of_this_binary()));
@@ -401,6 +403,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Adhoc { repo, args } => {
+            repo_paths::assert_focused_repo(&repo)?;
+
             let mut args = args.clone();
             args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
             let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
