@@ -213,23 +213,34 @@ impl BranchSwitch {
         Ok(instance)
     }
 
-    fn switch(&self, refname_or_start_point: &str, detach: bool) -> Result<()> {
-        // What branch are we on now?
+    fn switch(&self, branch_name: &str, detach: bool) -> Result<()> {
+        let branch_exists = run_consuming_stdout(
+            format!("Checking whether branch {} exists", branch_name),
+            &self.repo,
+            vec!["branch", "-l", branch_name],
+            self.app.clone(),
+        )?
+        .trim()
+        .len()
+            >= branch_name.len();
+
+        if !branch_exists {
+            bail!("The specified branch ({}) does not exist. If you're trying to specify a remote reference, please create a matching branch first with `git switch -c <branch> --track <remote>/<branch>` in the repo and try again.", &branch_name);
+        }
         let attachment_description = if detach { "detached" } else { "attached" };
         let description = format!(
             "Switching to {} in {} ({})",
-            &refname_or_start_point,
+            &branch_name,
             self.repo.display(),
             attachment_description,
         );
         let (mut cmd, scmd) = git_command(description.clone(), self.app.clone())?;
-        let cmd = cmd
-            .arg("switch")
-            .arg(&refname_or_start_point)
-            .current_dir(&self.repo);
+        let cmd = cmd.arg("switch").current_dir(&self.repo);
         if detach {
             cmd.arg("--detach");
         }
+        cmd.arg(&branch_name);
+
         if let Some(alternate_path) = &self.alternate {
             cmd.env(
                 "GIT_ALTERNATE_OBJECT_DIRECTORIES",
