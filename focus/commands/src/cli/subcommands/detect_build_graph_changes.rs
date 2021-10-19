@@ -122,13 +122,13 @@ pub fn run(app: Arc<App>, repo: &PathBuf) -> Result<()> {
         .expect("thread crashed detecting uncommitted changes");
 
     if has_committed_changes && has_uncommitted_changes {
-        eprintln!("Committed and uncommitted changes affect the build graph, you must run `focus sync` to update the sparse checkout!");
+        eprintln!("Committed and uncommitted changes affect the build graph, please run `focus sync` to update the sparse checkout!");
         std::process::exit(1);
     } else if has_committed_changes {
-        eprintln!("Committed changes affect the build graph, you must run `focus sync` to update the sparse checkout!");
+        eprintln!("Committed changes affect the build graph, please run `focus sync` to update the sparse checkout!");
         std::process::exit(1);
     } else if has_uncommitted_changes {
-        eprintln!("Uncommitted changes affect the build graph, you must run `focus sync` to update the sparse checkout!");
+        eprintln!("Uncommitted changes affect the build graph, please run `focus sync` to update the sparse checkout!");
         std::process::exit(1);
     }
     log::debug!("No changes to files affecting the build graph were detected");
