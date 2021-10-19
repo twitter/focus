@@ -23,7 +23,6 @@ fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
     }
     ui.log(String::from("Error"), format!("End '{}'", title));
 
-
     Ok(())
 }
 
@@ -109,7 +108,10 @@ impl SandboxCommand {
         let cloned_app_for_progress_reporter = cloned_app.clone();
         Ok(Self {
             app: cloned_app,
-            progress_reporter: ProgressReporter::new(cloned_app_for_progress_reporter, description)?,
+            progress_reporter: ProgressReporter::new(
+                cloned_app_for_progress_reporter,
+                description,
+            )?,
             stdout_path,
             stderr_path,
         })
@@ -149,7 +151,8 @@ impl SandboxCommand {
         };
 
         for (title, path) in items {
-            exhibit_file(self.app.clone(), path, title.as_str()).with_context(|| format!("exhibiting {}", title))?
+            exhibit_file(self.app.clone(), path, title.as_str())
+                .with_context(|| format!("exhibiting {}", title))?
         }
 
         Ok(())

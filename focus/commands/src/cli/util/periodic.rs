@@ -79,7 +79,6 @@ impl Periodic {
     pub fn cancel(&self) {
         let _yolo = self.invoke_tx.send(false);
         let _ = self.stop_tx.send(());
-        
     }
 
     #[allow(dead_code)]

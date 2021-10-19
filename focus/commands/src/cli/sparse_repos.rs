@@ -150,12 +150,7 @@ fn configure_sparse_repo_final(
         .join("origin")
         .join("state.bin.lock");
 
-    let paths_to_copy = vec![
-        "config",
-        "hooks",
-        "hooks_multi",
-        "repo.d",
-    ];
+    let paths_to_copy = vec!["config", "hooks", "hooks_multi", "repo.d"];
     // TODO(wilhelm): Add 'objects/journals' back if we stop doing local clones.
 
     for name in paths_to_copy {
