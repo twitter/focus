@@ -155,8 +155,8 @@ fn configure_sparse_repo_final(
         "hooks",
         "hooks_multi",
         "repo.d",
-        "objects/journals",
     ];
+    // TODO(wilhelm): Add 'objects/journals' back if we stop doing local clones.
 
     for name in paths_to_copy {
         let app = app.clone();
@@ -164,11 +164,26 @@ fn configure_sparse_repo_final(
         if !from.exists() {
             continue;
         }
-        let to = sparse_git_dir.join(name);
+        // If the 'to' path is a directory, copy to its parent.
+        let to = {
+            let path = sparse_git_dir.join(name);
+            if path.is_dir() {
+                if let Some(parent) = path.parent() {
+                    parent.to_owned()
+                } else {
+                    bail!(
+                        "{} is a directory, however it has no parent",
+                        path.display()
+                    );
+                }
+            } else {
+                path.to_owned()
+            }
+        };
         let description = format!("Copying {} -> {}", &from.display(), &to.display());
         let (mut cmd, scmd) = SandboxCommand::new(description.clone(), "cp", app)?;
         scmd.ensure_success_or_log(
-            cmd.arg("-r").arg(&from).arg(&to),
+            cmd.arg("-R").arg(&from).arg(&to),
             SandboxCommandOutput::Stderr,
             &description,
         )?;
