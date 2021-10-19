@@ -9,22 +9,27 @@ use std::{
     sync::Arc,
 };
 
-fn exhibit_file(file: &Path, title: &str) -> Result<()> {
+fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
     use std::io::{self, BufRead};
 
     let file = File::open(file)?;
     let lines = io::BufReader::new(file).lines();
+    let ui = app.ui();
+    ui.log(String::from("Error"), format!("Begin '{}'", title));
     for line in lines {
         if let Ok(line) = line {
-            log::info!("[{}]: {}", title, line);
+            ui.log(String::from("Error"), line);
         }
     }
+    ui.log(String::from("Error"), format!("End '{}'", title));
+
 
     Ok(())
 }
 
 // SandboxCommandRunner is a command that captures stdout and stderr into sandbox logs unless other destinations are specified.
 pub struct SandboxCommand {
+    app: Arc<App>,
     #[allow(unused)]
     progress_reporter: ProgressReporter,
     stdout_path: PathBuf,
@@ -78,7 +83,8 @@ impl SandboxCommand {
         stderr: Option<&Path>,
         app: Arc<App>,
     ) -> Result<Self> {
-        let sandbox = app.sandbox();
+        let cloned_app = app.clone();
+        let sandbox = cloned_app.sandbox();
         let output_file = |extension: &str| -> Result<(Stdio, PathBuf)> {
             let (file, path) = sandbox.create_file(Some("sandboxed_command"), Some(extension))?;
             let mut description_path = path.clone();
@@ -100,8 +106,10 @@ impl SandboxCommand {
 
         command.stdin(stdin).stdout(stdout).stderr(stderr);
 
+        let cloned_app_for_progress_reporter = cloned_app.clone();
         Ok(Self {
-            progress_reporter: ProgressReporter::new(app.clone(), description)?,
+            app: cloned_app,
+            progress_reporter: ProgressReporter::new(cloned_app_for_progress_reporter, description)?,
             stdout_path,
             stderr_path,
         })
@@ -141,7 +149,7 @@ impl SandboxCommand {
         };
 
         for (title, path) in items {
-            exhibit_file(path, title.as_str()).with_context(|| format!("exhibiting {}", title))?
+            exhibit_file(self.app.clone(), path, title.as_str()).with_context(|| format!("exhibiting {}", title))?
         }
 
         Ok(())
