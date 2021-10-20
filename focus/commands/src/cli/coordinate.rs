@@ -20,12 +20,13 @@ impl CoordinateSet {
     }
 
     pub fn determine_uniformity(set: &HashSet<Coordinate>) -> bool {
-        let mut count_by_type = [0 as usize; 2];
+        let mut count_by_type = [0 as usize; 3];
 
         for coordinate in set {
             match coordinate {
                 Coordinate::Bazel(_) => count_by_type[0] += 1,
                 Coordinate::Directory(_) => count_by_type[1] += 1,
+                Coordinate::Pants(_) => count_by_type[2] += 1,
             }
         }
 
@@ -77,6 +78,7 @@ impl TryFrom<&Vec<String>> for CoordinateSet {
 pub enum Coordinate {
     Bazel(String),
     Directory(String),
+    Pants(String),
 }
 
 impl Display for Coordinate {
@@ -84,6 +86,7 @@ impl Display for Coordinate {
         match self {
             Coordinate::Bazel(c) => write!(f, "{}", c),
             Coordinate::Directory(c) => write!(f, "{}", c),
+            Coordinate::Pants(c) => write!(f, "{}", c),
         }
     }
 }
@@ -108,6 +111,8 @@ impl TryFrom<&str> for Coordinate {
                     return Ok(Coordinate::Bazel(rest));
                 } else if prefix.eq_ignore_ascii_case("directory") {
                     return Ok(Coordinate::Directory(rest));
+                } else if prefix.eq_ignore_ascii_case("pants") {
+                    return Ok(Coordinate::Pants(rest));
                 } else {
                     return Err(CoordinateError::UnsupportedScheme(prefix.to_owned()));
                 }

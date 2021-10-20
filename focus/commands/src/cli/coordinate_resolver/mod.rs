@@ -1,5 +1,6 @@
 mod bazel_resolver;
 mod directory_resolver;
+mod pants_resolver;
 
 use crate::{
     app::App,
@@ -13,7 +14,10 @@ use std::{
     sync::Arc,
 };
 
-use self::{bazel_resolver::BazelResolver, directory_resolver::DirectoryResolver};
+use self::{
+    bazel_resolver::BazelResolver, directory_resolver::DirectoryResolver,
+    pants_resolver::PantsResolver,
+};
 
 /// A request to resolve coordinates in a particular repository.
 pub struct ResolutionRequest {
@@ -118,6 +122,7 @@ pub trait Resolver {
 pub struct RoutingResolver {
     bazel_resolver: BazelResolver,
     directory_resolver: DirectoryResolver,
+    pants_resolver: PantsResolver,
 }
 
 impl Resolver for RoutingResolver {
@@ -125,6 +130,7 @@ impl Resolver for RoutingResolver {
         Self {
             bazel_resolver: BazelResolver::new(cache_root),
             directory_resolver: DirectoryResolver::new(cache_root),
+            pants_resolver: PantsResolver::new(cache_root),
         }
     }
 
@@ -159,6 +165,10 @@ impl Resolver for RoutingResolver {
                     }
                     Coordinate::Directory(_) => {
                         self.directory_resolver
+                            .resolve(&subrequest, &cache_options, app_clone)
+                    }
+                    Coordinate::Pants(_) => {
+                        self.pants_resolver
                             .resolve(&subrequest, &cache_options, app_clone)
                     }
                 }
