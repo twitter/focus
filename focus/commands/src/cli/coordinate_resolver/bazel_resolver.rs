@@ -1,9 +1,12 @@
 use std::{
     io::BufRead,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use crate::util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
+
+use anyhow::{bail, Result};
 
 use super::*;
 
@@ -11,6 +14,8 @@ use super::*;
 pub struct BazelResolver {
     #[allow(unused)]
     cache_root: PathBuf,
+
+    mutex: Mutex<()>,
 }
 
 impl BazelResolver {
@@ -29,6 +34,7 @@ impl Resolver for BazelResolver {
     fn new(cache_root: &Path) -> Self {
         Self {
             cache_root: cache_root.join("bazel").to_owned(),
+            mutex: Mutex::new(()),
         }
     }
 
@@ -38,6 +44,11 @@ impl Resolver for BazelResolver {
         _cache_options: &CacheOptions,
         app: Arc<App>,
     ) -> Result<ResolutionResult> {
+        let lock = self.mutex.lock();
+        if let Err(e) = lock {
+            bail!("Failed to lock mutex: {}", e);
+        }
+
         let mut directories = BTreeSet::<PathBuf>::new();
         let clauses: Vec<String> = request
             .coordinate_set()
