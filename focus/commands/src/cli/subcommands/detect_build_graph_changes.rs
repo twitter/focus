@@ -21,8 +21,14 @@ fn build_graph_involved_filename_predicate(name: &Path) -> bool {
 }
 
 fn find_committed_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
-    let sync_state = git_helper::read_config(repo.as_path(), "focus.sync-point", app.clone())
-        .context("reading sync state")?;
+    let sync_state = {
+        if let Some(sync_point) = git_helper::read_config(repo.as_path(), "focus.sync-point", app.clone())
+        .context("reading sync state")? {
+            sync_point
+        } else {
+            bail!("Could not read sync state in repo {}", repo.as_path().display());
+        }
+    };
 
     let revspec = format!("{}..HEAD", &sync_state.trim());
     let description = format!(

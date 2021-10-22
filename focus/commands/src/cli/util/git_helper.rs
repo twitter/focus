@@ -58,10 +58,16 @@ pub fn write_config<P: AsRef<Path>>(
     .map(|_| ())
 }
 
-pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> Result<Option<String>> {
+pub fn read_config<P: AsRef<Path>>(
+    repo_path: P,
+    key: &str,
+    app: Arc<App>,
+) -> Result<Option<String>> {
     let description = format!("Reading Git config {}", key);
-    if let Ok(result) = run_consuming_stdout(description, repo_path, vec!["config", key], app.clone()) {
-        return Ok(Some(result))
+    if let Ok(result) =
+        run_consuming_stdout(description, repo_path, vec!["config", key], app.clone())
+    {
+        return Ok(Some(result));
     }
 
     Ok(None)

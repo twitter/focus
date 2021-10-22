@@ -35,8 +35,13 @@ impl TrackedRepo {
     }
 
     pub(crate) fn read_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
-        let uuid = git_helper::read_config(repo_path, "twitter.focus.uuid", app.clone())?;
-        let uuid = Uuid::from_str(uuid.trim()).context("parsing uuid")?;
+        let uuid = {
+            if let Some(uuid) = git_helper::read_config(repo_path, "twitter.focus.uuid", app.clone())? {
+                Uuid::from_str(uuid.trim()).context(format!("Could not parse UUID from string '{}'", uuid))?
+            } else {
+                bail!("Could not read UUID in repo {}", repo_path.display());
+            }
+        };
         app.ui().log(
             String::from("Tracker"),
             format!(
