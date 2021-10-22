@@ -58,26 +58,22 @@ pub fn write_config<P: AsRef<Path>>(
     .map(|_| ())
 }
 
-pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> Result<String> {
+pub fn read_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> Result<Option<String>> {
     let description = format!("Reading Git config {}", key);
-    let (mut cmd, scmd) = git_command(description, app)?;
-    let mut output_string = String::new();
-    scmd.ensure_success_or_log(
-        cmd.current_dir(repo_path).arg("config").arg(key),
-        SandboxCommandOutput::Stderr,
-        "git config (read)",
-    )?;
-    scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)
-        .with_context(|| format!("reading config key {}", key))?;
-    Ok(output_string)
+    if let Ok(result) = run_consuming_stdout(description, repo_path, vec!["config", key], app.clone()) {
+        return Ok(Some(result))
+    }
+
+    Ok(None)
 }
 
-pub fn unset_config<P: AsRef<Path>>(_repo_path: P, key: &str, app: Arc<App>) -> Result<()> {
+pub fn unset_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> Result<()> {
     let description = format!("git config --unset {}", key);
     let (mut cmd, _scmd) = git_command(description, app)?;
     cmd.arg("config")
         .arg("--unset")
         .arg(key)
+        .current_dir(repo_path)
         .status()
         .with_context(|| format!("Running `git config --unset {}` failed", key))?;
     Ok(())
