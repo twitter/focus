@@ -48,10 +48,6 @@ fn set_up_alternates(sparse_repo: &Path, dense_repo: &Path) -> Result<()> {
     let sparse_pruned_odb = sparse_repo.join(".git").join("pruned-odb").join("objects");
     std::fs::create_dir_all(&sparse_pruned_odb).context("creating sparse pruned-odb")?;
 
-    // Use a relative path to the sparse pruned ODB so that if repo directories are renamed they
-    // continue to function. We can't do much about the dense repository.
-    let sparse_pruned_odb = PathBuf::from("../pruned-odb/objects");
-
     let mut buf = Vec::<u8>::new();
     if dense_odb.is_dir() {
         buf.extend(dense_odb.as_os_str().as_bytes());
