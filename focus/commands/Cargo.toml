@@ -1,6 +1,6 @@
 [package]
 name = "focus-commands"
-version = "0.2.4"
+version = "0.2.5"
 authors = ["Wilhelm Bierbaum <wilhelm@twitter.com>"]
 edition = "2018"
 
