@@ -124,28 +124,23 @@ fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result
 fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) -> Result<()> {
     let cloned_app = app.clone();
     if let Some(ref_name) = ref_name.strip_prefix("refs/heads/") {
-        let description = format!(
-            "branch {} referencing commit {}",
-            ref_name, commit_id
-        );
-        
+        let description = format!("branch {} referencing commit {}", ref_name, commit_id);
+
         // Create the branch
         run_consuming_stdout(
             format!("Creating {}", description),
             repo,
-            vec!["branch",  ref_name, commit_id], // "--track", "--set-upstream-to=origin",
+            vec!["branch", ref_name, commit_id], // "--track", "--set-upstream-to=origin",
             cloned_app.clone(),
         )?;
 
         // Set the branch's upsteam
         run_consuming_stdout(
             format!("Setting upstream for {}", description),
-
             repo,
             vec!["branch", "--set-upstream-to=origin", ref_name], // "--track", "--set-upstream-to=origin",
             cloned_app.clone(),
         )?;
-
     } else {
         bail!(format!("Could not strip prefix from ref '{}'", ref_name));
     }
@@ -212,7 +207,7 @@ fn configure_sparse_repo_final(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &str,
-    copy_user_relevant_branches: bool,
+    copy_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
     // TODO: Figure out the remote based on the branch fetch/push config rather than assuming 'origin'. Kinda pedantic, but correct.
@@ -283,9 +278,9 @@ fn configure_sparse_repo_final(
         std::fs::remove_file(sparse_journal_state_lock_path)?;
     }
 
-    if copy_user_relevant_branches {
+    if copy_branches {
         copy_user_relevant_refs_to_sparse_repo(dense_repo, sparse_repo, branch, app.clone())
-        .context("Failed to copy branches to the sparse repo")?;
+            .context("Failed to copy branches to the sparse repo")?;
     }
 
     configure_sparse_sync_point(sparse_repo, app.clone())
@@ -328,7 +323,7 @@ pub fn create_sparse_clone(
     branch: String,
     coordinates: Vec<String>,
     layers: Vec<String>,
-    copy_user_relevant_branches: bool,
+    copy_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
     let dense_sets = LayerSets::new(&dense_repo);
@@ -366,7 +361,7 @@ pub fn create_sparse_clone(
         &branch,
         &coordinates,
         true,
-        copy_user_relevant_branches,
+        copy_branches,
         cloned_app,
     )?;
 
@@ -399,7 +394,7 @@ pub fn create_or_update_sparse_clone(
     branch: &String,
     coordinates: &Vec<String>,
     create: bool,
-    copy_user_relevant_branches: bool,
+    copy_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
     // TODO: Crash harder in threads to prevent extra work.
@@ -535,7 +530,7 @@ pub fn create_or_update_sparse_clone(
                 &cloned_dense_repo,
                 &cloned_sparse_repo,
                 &cloned_branch,
-                copy_user_relevant_branches,
+                copy_branches,
                 cloned_app.clone(),
             )
             .context("failed to perform final configuration in the sparse repo")?;

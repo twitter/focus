@@ -10,7 +10,7 @@ pub fn run(
     branch: String,
     coordinates: Vec<String>,
     layers: Vec<String>,
-    copy_user_relevant_branches: bool,
+    copy_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
     crate::sparse_repos::create_sparse_clone(
@@ -19,7 +19,7 @@ pub fn run(
         branch,
         coordinates,
         layers,
-        copy_user_relevant_branches,
+        copy_branches,
         app,
     )
 }
