@@ -19,6 +19,7 @@ use crate::coordinate_resolver::RoutingResolver;
 use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::tracker::Tracker;
 use crate::util::git_helper;
+use crate::util::git_helper::run_consuming_stdout;
 use crate::util::lock_file::LockFile;
 use crate::util::sandbox_command::SandboxCommand;
 use crate::util::sandbox_command::SandboxCommandOutput;
@@ -120,10 +121,98 @@ fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result
     Ok(())
 }
 
+fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) -> Result<()> {
+    let cloned_app = app.clone();
+    if let Some(ref_name) = ref_name.strip_prefix("refs/heads/") {
+        let description = format!(
+            "branch {} referencing commit {}",
+            ref_name, commit_id
+        );
+        
+        // Create the branch
+        run_consuming_stdout(
+            format!("Creating {}", description),
+            repo,
+            vec!["branch",  ref_name, commit_id], // "--track", "--set-upstream-to=origin",
+            cloned_app.clone(),
+        )?;
+
+        // Set the branch's upsteam
+        run_consuming_stdout(
+            format!("Setting upstream for {}", description),
+
+            repo,
+            vec!["branch", "--set-upstream-to=origin", ref_name], // "--track", "--set-upstream-to=origin",
+            cloned_app.clone(),
+        )?;
+
+    } else {
+        bail!(format!("Could not strip prefix from ref '{}'", ref_name));
+    }
+    Ok(())
+}
+
+fn copy_user_relevant_refs_to_sparse_repo(
+    dense_repo: &PathBuf,
+    sparse_repo: &PathBuf,
+    branch: &str,
+    app: Arc<App>,
+) -> Result<()> {
+    let cloned_app = app.clone();
+    let ui = cloned_app.ui();
+
+    let tokenize_ref_and_commit_ids = |line: &str| -> Result<(String, String)> {
+        if let Some((ref_name, commit_id)) = line.split_once(" ") {
+            Ok((ref_name.to_owned(), commit_id.to_owned()))
+        } else {
+            bail!(format!(
+                "Failed to tokenize ref and commit ID from line '{}'",
+                line
+            ));
+        }
+    };
+
+    let output = run_consuming_stdout(
+        String::from("Retriving the list of personal branches"),
+        dense_repo,
+        vec![
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            "refs/heads/",
+        ],
+        app,
+    )
+    .context(format!(
+        "Failed to list refs in the dense repo ({})",
+        dense_repo.display()
+    ))?;
+
+    for line in output.lines() {
+        match tokenize_ref_and_commit_ids(line) {
+            Ok((ref_name, commit_id)) => {
+                if ref_name == branch {
+                    // Skip it.
+                    ui.log(
+                        String::from("Ref Copy"),
+                        format!("Skipping active ref {}", &ref_name),
+                    );
+                    continue;
+                }
+
+                create_branch(sparse_repo, &ref_name, &commit_id, cloned_app.clone())?;
+            }
+            Err(e) => bail!(e),
+        }
+    }
+
+    Ok(())
+}
+
 fn configure_sparse_repo_final(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
-    _branch: &str,
+    branch: &str,
+    copy_user_relevant_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
     // TODO: Figure out the remote based on the branch fetch/push config rather than assuming 'origin'. Kinda pedantic, but correct.
@@ -194,9 +283,16 @@ fn configure_sparse_repo_final(
         std::fs::remove_file(sparse_journal_state_lock_path)?;
     }
 
-    configure_sparse_sync_point(sparse_repo, app.clone()).context("configuring the sync point")?;
+    if copy_user_relevant_branches {
+        copy_user_relevant_refs_to_sparse_repo(dense_repo, sparse_repo, branch, app.clone())
+        .context("Failed to copy branches to the sparse repo")?;
+    }
 
-    setup_bazel_preflight_script(sparse_repo, app.clone()).context("setting up build hooks")?;
+    configure_sparse_sync_point(sparse_repo, app.clone())
+        .context("Failed to set the sync point")?;
+
+    setup_bazel_preflight_script(sparse_repo, app.clone())
+        .context("Failed to set up build hooks")?;
 
     Ok(())
 }
@@ -232,6 +328,7 @@ pub fn create_sparse_clone(
     branch: String,
     coordinates: Vec<String>,
     layers: Vec<String>,
+    copy_user_relevant_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
     let dense_sets = LayerSets::new(&dense_repo);
@@ -269,6 +366,7 @@ pub fn create_sparse_clone(
         &branch,
         &coordinates,
         true,
+        copy_user_relevant_branches,
         cloned_app,
     )?;
 
@@ -301,6 +399,7 @@ pub fn create_or_update_sparse_clone(
     branch: &String,
     coordinates: &Vec<String>,
     create: bool,
+    copy_user_relevant_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
     // TODO: Crash harder in threads to prevent extra work.
@@ -436,6 +535,7 @@ pub fn create_or_update_sparse_clone(
                 &cloned_dense_repo,
                 &cloned_sparse_repo,
                 &cloned_branch,
+                copy_user_relevant_branches,
                 cloned_app.clone(),
             )
             .context("failed to perform final configuration in the sparse repo")?;
