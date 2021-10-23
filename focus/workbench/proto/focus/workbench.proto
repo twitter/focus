@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package focus.workbench;
+
+import "google/protobuf/timestamp.proto";
+import "common.proto";
+import "repo.proto";
+
+message Workbench {
+  message Handle {
+    uint64 identifer = 1;
+  }
+}
+
+message Create {
+  message Request {
+    // The repo to use.
+    focus.repo.Repo.Identifier repo = 1;
+
+    // Merge base is optional. Otherwise 
+    focus.common.Hash merge_base = 2; 
+  }
+
+  message Response {
+    Workbench.Handle handle = 1;
+  }
+}
+
+message Dispose {
+  message Request {
+    focus.repo.Repo.Handle handle = 1;
+  }
+
+  message Response {
+  }
+}
+
+service WorkbenchService {
+  // Create a workbench to synchronize with
+  rpc Create(Create.Request) returns (Create.Response) {}
+
+  rpc Dispose(Dispose.Request) returns (Dispose.Response) {}
+}

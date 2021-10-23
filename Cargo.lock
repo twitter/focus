@@ -278,6 +278,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "focus-workbench"
+version = "0.2.5"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "env_logger",
+ "git2",
+ "lazy_static",
+ "log",
+ "nix",
+ "pretty-hex",
+ "prost 0.9.0",
+ "protobuf",
+ "rayon",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sha2",
+ "signal-hook",
+ "structopt",
+ "tempfile",
+ "termion",
+ "thiserror",
+ "tokio",
+ "tonic",
+ "tonic-build",
+ "url",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "form_urlencoded"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

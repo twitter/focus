@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package focus.repo;
+
+message Repo {
+  message Identifier {
+    string upstream = 1;
+    string branch_or_tag = 2;
+  }
+
+  message Handle { bytes uuid = 1; }
+}
+
+message List {
+  message Request {}
+
+  message Response {}
+}
+
+service RepoService {
+  // Create a workbench to synchronize with
+  rpc List(List.Request) returns (List.Response) {}
+}
