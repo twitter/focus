@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package focus.repository;
+
+message Repository {
+  message Indicator {
+    string upstream = 1;
+    string branch = 2;
+  }
+}
+
+// message List {
+//   message Request {
+//   }
+
+//   message Response {}
+// }
+
+// service Repositories {
+//   // Create a workbench to synchronize with
+//   rpc List(List.Request) returns (List.Response) {}
+// }

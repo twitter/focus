@@ -4,7 +4,7 @@ package focus.workbench;
 
 import "google/protobuf/timestamp.proto";
 import "common.proto";
-import "repo.proto";
+import "repository.proto";
 
 message Workbench {
   message Handle {
@@ -15,7 +15,7 @@ message Workbench {
 message Create {
   message Request {
     // The repo to use.
-    focus.repo.Repo.Identifier repo = 1;
+    focus.repository.Repository.Indicator repo_indicator = 1;
 
     // Merge base is optional. Otherwise 
     focus.common.Hash merge_base = 2; 
@@ -28,7 +28,7 @@ message Create {
 
 message Dispose {
   message Request {
-    focus.repo.Repo.Handle handle = 1;
+    Workbench.Handle handle = 1;
   }
 
   message Response {
