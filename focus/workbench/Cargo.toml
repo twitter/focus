@@ -36,6 +36,10 @@ tokio = { version = "1.12.0", features = ["macros", "rt-multi-thread"] }
 [build-dependencies]
 tonic-build = "0.6.0"
 
+[lib]
+name = "workbench-common"
+path = "src/common/lib.rs"
+
 [[bin]]
 name = "workbench-server"
 path = "src/server/main.rs"
