@@ -1,8 +1,4 @@
 use tonic::{transport::Server, Request, Response, Status};
-
-// use focus::workbench::Workbenches;
-// use hello_world::{HelloReply, HelloRequest};
-
 pub mod svc {
     tonic::include_proto!("focus.workbench");
 }

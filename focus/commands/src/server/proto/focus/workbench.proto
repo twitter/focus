@@ -18,8 +18,8 @@ message Workbench {
   message Handle { uint64 identifer = 1; }
 }
 
-message Create {
-  message Request {
+message Repository {
+  message Indicator {
     // Upstream URL for the repository.
     string upstream = 1;
 
@@ -29,10 +29,12 @@ message Create {
     // Merge base.
     Hash merge_base = 3;
   }
+}
 
-  message Response {
-    Workbench.Handle handle = 1;
-  }
+message Create {
+  message Request { Repository.Indicator repo_indicator = 1; }
+
+  message Response { Workbench.Handle handle = 1; }
 }
 
 message Dispose {
@@ -46,4 +48,30 @@ service Workbenches {
   rpc Create(Create.Request) returns (Create.Response) {}
 
   rpc Dispose(Dispose.Request) returns (Dispose.Response) {}
+}
+
+// service Outlines { rpc GetOutline() }
+
+message Items {}
+
+message Selection {
+  message Layer {
+    string name = 1;
+  }
+  message Coordinate {
+    string value = 1;
+  }
+
+  repeated Layer layers = 1;
+  repeated Coordinate coordinates = 2;
+}
+
+message Outline {
+  message Request {
+    Repository.Indicator repo_indicator = 1;
+    repeated string layers = 2;
+    // repeated string coordinates = 3;
+  }
+
+  message Response {}
 }

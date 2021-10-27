@@ -30,6 +30,11 @@ uuid = { version = "0.8.2", features = ["v4"] }
 walkdir = "2.3.2"
 nix = "0.22"
 rayon = "1.5"
+tonic = "0.6.0"
+tokio = { version = "1.12.0", features = ["macros", "rt-multi-thread"] }
+
+[build-dependencies]
+tonic-build = "0.6.0"
 
 ##
 ## Focus CLI: The primary UI for Project Focused Development
@@ -37,3 +42,7 @@ rayon = "1.5"
 [[bin]]
 name = "focus"
 path = "src/cli/main.rs"
+
+[lib]
+name = "internals"
+path = "src/common/lib.rs"
