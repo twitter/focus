@@ -216,19 +216,6 @@ impl BranchSwitch {
     }
 
     fn switch(&self, branch_name: &str, detach: bool) -> Result<()> {
-        let branch_exists = run_consuming_stdout(
-            format!("Checking whether branch {} exists", branch_name),
-            &self.repo,
-            vec!["branch", "-l", branch_name],
-            self.app.clone(),
-        )?
-        .trim()
-        .len()
-            >= branch_name.len();
-
-        if !branch_exists {
-            bail!("The specified branch ({}) does not exist. If you're trying to specify a remote reference, please create a matching branch first with `git switch -c <branch> --track <remote>/<branch>` in the repo and try again.", &branch_name);
-        }
         let attachment_description = if detach { "detached" } else { "attached" };
         let description = format!(
             "Switching to {} in {} ({})",
