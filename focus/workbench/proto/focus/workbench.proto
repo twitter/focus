@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package focus.workbench;
+
+import "google/protobuf/timestamp.proto";
+
+message Hash {
+  enum Algorithm {
+    SHA1 = 0;
+    SHA256 = 1;
+  }
+
+  Algorithm algorithm = 1;
+  bytes value = 2;
+}
+
+message Workbench {
+  message Handle { uint64 identifer = 1; }
+}
+
+message Create {
+  message Request {
+    // Upstream URL for the repository.
+    string upstream = 1;
+
+    // Branch to base the workbench on.
+    string branch = 2;
+
+    // Merge base.
+    Hash merge_base = 3;
+  }
+
+  message Response {
+    Workbench.Handle handle = 1;
+  }
+}
+
+message Dispose {
+  message Request { Workbench.Handle handle = 1; }
+
+  message Response {}
+}
+
+service Workbenches {
+  // Create a workbench to synchronize with
+  rpc Create(Create.Request) returns (Create.Response) {}
+
+  rpc Dispose(Dispose.Request) returns (Dispose.Response) {}
+}
