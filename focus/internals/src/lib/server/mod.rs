@@ -1,5 +1,5 @@
 use focus_formats::svc;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::transport::Server;
 
 #[derive(Debug, Default)]
 pub struct WorkbenchesService {}
@@ -27,7 +27,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use svc::workbenches_server::WorkbenchesServer;
 
     let addr = "[::1]:50051".parse()?;
-    // let greeter = MyGreeter::default();
     let service = WorkbenchesService::default();
 
     Server::builder()
