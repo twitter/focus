@@ -245,28 +245,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "focus-formats"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "focus-internals"
 version = "0.2.5"
 dependencies = [
  "anyhow",
  "dirs",
+ "focus-formats",
  "git2",
  "lazy_static",
  "log",
  "nix",
- "pretty-hex",
  "prost",
  "rayon",
  "serde",
  "serde_derive",
  "serde_json",
- "structopt",
  "tempfile",
  "termion",
  "thiserror",
  "tokio",
  "tonic",
- "tonic-build",
  "url",
  "uuid",
  "walkdir",
@@ -701,12 +708,6 @@ name = "ppv-lite86"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed0cfbc8191465bed66e1718596ee0b0b35d5ee1f41c5df2189d0fe8bde535ba"
-
-[[package]]
-name = "pretty-hex"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5c99d529f0d30937f6f4b8a86d988047327bb88d04d2c4afc356de74722131"
 
 [[package]]
 name = "proc-macro-error"

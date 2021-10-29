@@ -1,7 +1,5 @@
+use focus_formats::svc;
 use tonic::{transport::Server, Request, Response, Status};
-pub mod svc {
-    tonic::include_proto!("focus.workbench");
-}
 
 #[derive(Debug, Default)]
 pub struct WorkbenchesService {}
@@ -10,24 +8,20 @@ pub struct WorkbenchesService {}
 impl svc::workbenches_server::Workbenches for WorkbenchesService {
     async fn create(
         &self,
-        request: tonic::Request<svc::create::Request>,
+        _request: tonic::Request<svc::create::Request>,
     ) -> Result<tonic::Response<svc::create::Response>, tonic::Status> {
-        let handle = svc::workbench::Handle { identifer: 5 };
-        let response = svc::create::Response {
-            handle: Some(handle),
-        };
-        
-        Ok(tonic::Response::new(response))
+        todo!()
     }
 
     async fn dispose(
         &self,
-        request: tonic::Request<svc::dispose::Request>,
+        _request: tonic::Request<svc::dispose::Request>,
     ) -> Result<tonic::Response<svc::dispose::Response>, tonic::Status> {
         todo!()
     }
 }
 
+#[allow(dead_code)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use svc::workbenches_server::WorkbenchesServer;
