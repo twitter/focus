@@ -1,8 +1,7 @@
 use anyhow::Result;
+use focus_internals::{app::App, sparse_repos};
 
 use std::{path::PathBuf, sync::Arc};
-
-use crate::app::App;
 
 pub fn run(
     dense_repo: PathBuf,
@@ -13,7 +12,7 @@ pub fn run(
     copy_branches: bool,
     app: Arc<App>,
 ) -> Result<()> {
-    crate::sparse_repos::create_sparse_clone(
+    sparse_repos::create_sparse_clone(
         dense_repo,
         sparse_repo,
         branch,

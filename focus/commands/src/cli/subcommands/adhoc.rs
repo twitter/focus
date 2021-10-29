@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 
-use crate::{
+use focus_internals::{
     app::App,
     model::{Layer, LayerSet, LayerSets},
 };

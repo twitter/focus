@@ -1,20 +1,14 @@
-mod app;
-mod coordinate;
-mod coordinate_resolver;
-mod model;
-mod sparse_repos;
 mod subcommands;
-mod testing;
-mod tracker;
-mod ui;
-mod util;
-mod working_tree_synchronizer;
 
 use anyhow::{bail, Context, Result};
 use env_logger::{self, Env};
-
-use tracker::Tracker;
-use util::git_helper;
+use focus_internals::{
+    app::App,
+    coordinate::Coordinate,
+    model::LayerSets,
+    tracker::Tracker,
+    util::{backed_up_file::BackedUpFile, git_helper, repo_paths},
+};
 
 use std::{
     convert::TryFrom,
@@ -26,13 +20,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::{
-    app::App,
-    coordinate::Coordinate,
-    model::LayerSets,
-    subcommands::{adhoc, layer},
-    util::{backed_up_file::BackedUpFile, repo_paths},
-};
+use crate::subcommands::{adhoc, layer};
 
 fn the_name_of_this_binary() -> String {
     std::env::args_os()

@@ -1,14 +1,14 @@
-use crate::app::App;
-use crate::coordinate::CoordinateSet;
-use crate::model::Layer;
-use crate::model::LayerSets;
-use crate::util::git_helper;
-use crate::util::git_helper::get_current_revision;
-use crate::util::git_helper::BranchSwitch;
-use crate::util::repo_paths;
-use crate::util::sandbox_command::SandboxCommand;
-use crate::util::sandbox_command::SandboxCommandOutput;
-use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
+use focus_internals::app::App;
+use focus_internals::coordinate::CoordinateSet;
+use focus_internals::model::Layer;
+use focus_internals::model::LayerSets;
+use focus_internals::util::git_helper;
+use focus_internals::util::git_helper::get_current_revision;
+use focus_internals::util::git_helper::BranchSwitch;
+use focus_internals::util::repo_paths;
+use focus_internals::util::sandbox_command::SandboxCommand;
+use focus_internals::util::sandbox_command::SandboxCommandOutput;
+use focus_internals::working_tree_synchronizer::WorkingTreeSynchronizer;
 use std::convert::TryFrom;
 use std::fs::File;
 
@@ -90,7 +90,7 @@ pub fn ensure_working_trees_are_clean(
 
 pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     // TODO(wilhelm): Make this multi-threaded where possible.
-    use crate::sparse_repos;
+    use focus_internals::sparse_repos;
     let ui = app.ui();
     let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
         .context("canonicalizing sparse repo path")?;

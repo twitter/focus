@@ -1,5 +1,5 @@
 [package]
-name = "focus-commands"
+name = "focus-internals"
 version = "0.2.5"
 authors = ["Wilhelm Bierbaum <wilhelm@twitter.com>"]
 edition = "2021"
@@ -32,14 +32,10 @@ nix = "0.23.0"
 rayon = "1.5.1"
 tonic = "0.6.1"
 tokio = { version = "1.12.0", features = ["macros", "rt-multi-thread"] }
-focus-internals = { path = "../internals" }
 
 [build-dependencies]
 tonic-build = "0.6.0"
 
-##
-## Focus CLI: The primary UI for Project Focused Development
-##
-[[bin]]
-name = "focus"
-path = "src/cli/main.rs"
+[lib]
+name = "focus_internals"
+path = "src/lib/lib.rs"

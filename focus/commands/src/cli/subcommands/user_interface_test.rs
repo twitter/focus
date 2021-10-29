@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{app::App, ui::ProgressReporter};
+use focus_internals::{app::App, ui::ProgressReporter};
 
 pub fn run(app: Arc<App>) -> Result<()> {
     let sandbox = app.sandbox();

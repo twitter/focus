@@ -24,7 +24,7 @@ pub struct WorkingTreeSynchronizer {
 }
 
 impl WorkingTreeSynchronizer {
-    pub(crate) fn new(path: &Path, app: Arc<App>) -> Result<Self> {
+    pub fn new(path: &Path, app: Arc<App>) -> Result<Self> {
         if !path.is_dir() {
             return Err(Error::new(SyncError::RepoPath));
         }

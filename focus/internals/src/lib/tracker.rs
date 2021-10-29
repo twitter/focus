@@ -11,7 +11,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use uuid::Uuid;
 
-use crate::{app::App, git_helper, ui::ProgressReporter};
+use crate::{app::App, ui::ProgressReporter, util::git_helper};
 
 fn focus_config_dir() -> PathBuf {
     dirs::config_dir()
