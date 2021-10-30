@@ -7,7 +7,7 @@ use focus_internals::{
     coordinate::Coordinate,
     model::LayerSets,
     tracker::Tracker,
-    util::{backed_up_file::BackedUpFile, git_helper, repo_paths},
+    util::{backed_up_file::BackedUpFile, git_helper, paths},
 };
 
 use std::{
@@ -93,6 +93,17 @@ enum Subcommand {
     },
 
     UserInterfaceTest {},
+
+    /// Serve repositories.
+    Server {
+        /// gRPC endpoint address to listen on.
+        #[structopt(default_value = "::1:36287")]
+        listen_address: String,
+
+        /// Path to the directory containing repositories to serve.
+        #[structopt(long, parse(from_os_str), default_value = "~/workspace/repos")]
+        repos: PathBuf,
+    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -339,7 +350,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Layer { repo, args } => {
-            repo_paths::assert_focused_repo(&repo)?;
+            paths::assert_focused_repo(&repo)?;
 
             // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
             let mut args = args.clone();
@@ -398,7 +409,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Adhoc { repo, args } => {
-            repo_paths::assert_focused_repo(&repo)?;
+            paths::assert_focused_repo(&repo)?;
 
             let mut args = args.clone();
             args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
@@ -451,6 +462,20 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             });
 
             Ok(())
+        }
+
+        Subcommand::Server {
+            listen_address,
+            repos,
+        } => {
+            let ui = cloned_app.ui();
+            ui.status(format!(
+                "Serving Repos in {} on {}",
+                repos.display(),
+                listen_address
+            ));
+            ui.set_enabled(interactive);
+            subcommands::server::run(listen_address, repos.as_path(), app)
         }
     }
 }

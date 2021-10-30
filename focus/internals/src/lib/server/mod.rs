@@ -22,17 +22,21 @@ impl svc::workbenches_server::Workbenches for WorkbenchesService {
 }
 
 #[allow(dead_code)]
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use svc::workbenches_server::WorkbenchesServer;
+pub fn run(listen_address: &str) -> Result<(), Box<dyn std::error::Error>> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            use svc::workbenches_server::WorkbenchesServer;
+            let addr = listen_address.parse()?;
+            let service = WorkbenchesService::default();
 
-    let addr = "[::1]:50051".parse()?;
-    let service = WorkbenchesService::default();
+            Server::builder()
+                .add_service(WorkbenchesServer::new(service))
+                .serve(addr)
+                .await?;
 
-    Server::builder()
-        .add_service(WorkbenchesServer::new(service))
-        .serve(addr)
-        .await?;
-
-    Ok(())
+            Ok(())
+        })
 }

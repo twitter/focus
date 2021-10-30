@@ -4,20 +4,13 @@ use std::{
     fmt::Display,
     fs::canonicalize,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
 };
 
 use anyhow::{bail, Context, Result};
 use uuid::Uuid;
 
-use crate::{app::App, ui::ProgressReporter, util::git_helper};
-
-fn focus_config_dir() -> PathBuf {
-    dirs::config_dir()
-        .expect("could not determine config dir")
-        .join("focus")
-}
+use crate::{app::App, repository::Repo, util::paths::focus_config_dir};
 
 pub struct TrackedRepo {
     identifier: Uuid,
@@ -34,54 +27,10 @@ impl TrackedRepo {
         })
     }
 
-    pub(crate) fn read_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
-        let uuid = {
-            if let Some(uuid) =
-                git_helper::read_config(repo_path, "twitter.focus.uuid", app.clone())?
-            {
-                Uuid::from_str(uuid.trim())
-                    .context(format!("Could not parse UUID from string '{}'", uuid))?
-            } else {
-                bail!("Could not read UUID in repo {}", repo_path.display());
-            }
-        };
-        app.ui().log(
-            String::from("Tracker"),
-            format!(
-                "Read existing UUID {} for repo at path {}",
-                uuid.borrow(),
-                repo_path.display()
-            ),
-        );
-
-        Ok(uuid)
-    }
-
-    fn write_generated_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
-        let uuid = Uuid::new_v4();
-        let _progress = ProgressReporter::new(
-            app.clone(),
-            format!(
-                "Assigning new UUID {} for repo at path {}",
-                uuid.borrow(),
-                repo_path.display()
-            ),
-        );
-
-        git_helper::write_config(
-            repo_path,
-            "twitter.focus.uuid",
-            uuid.to_string().as_str(),
-            app,
-        )
-        .context("writing generated uuid")?;
-        Ok(uuid)
-    }
-
     pub fn get_or_generate_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
         let cloned_app = app.clone();
-        Self::read_uuid(repo_path, app)
-            .or_else(|_e| Self::write_generated_uuid(repo_path, cloned_app))
+        Repo::read_uuid(repo_path, app)
+            .or_else(|_e| Repo::write_generated_uuid(repo_path, cloned_app))
     }
 
     pub fn identifier(&self) -> &Uuid {
@@ -201,7 +150,7 @@ impl Tracker {
                                             .context("parsing file name as a uuid")?;
 
                                     let uuid_from_config =
-                                        TrackedRepo::read_uuid(&canonical_path, app.clone());
+                                        Repo::read_uuid(&canonical_path, app.clone());
 
                                     let mismatched_uuid = match uuid_from_config {
                                         Ok(configured) => configured != uuid_from_filename,
