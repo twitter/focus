@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
@@ -91,19 +92,67 @@ impl ServedRepo {
     pub fn seek_to_state() -> Result<()> {
         todo!()
     }
+
+    pub fn ensure_has_content(branch: &str, commit_id: git2::Oid) -> Result<()> {
+        todo!()
+    }
 }
 
 pub struct AuthoritiveRepo {}
 
 pub struct RepoManager {
     /// Path to the repositories to be managed.
-    repos: PathBuf,
+    path: PathBuf,
+
+    repos: Arc<Mutex<HashMap<Uuid, ServedRepo>>>,
 }
 
 impl RepoManager {
-    pub fn new(repos: &Path) -> Self {
-        Self {
-            repos: repos.to_owned(),
+    pub fn new(path: &Path, app: Arc<App>) -> Result<Self> {
+        let repos = Arc::new(Mutex::new(Self::scan(path, app.clone())?));
+        Ok(Self {
+            path: path.to_owned(),
+            repos,
+        })
+    }
+
+    fn scan(path: &Path, app: Arc<App>) -> Result<HashMap<Uuid, ServedRepo>> {
+        let mut result = HashMap::new();
+
+        if !path.is_dir() {
+            bail!("{} is not a directory", path.display());
         }
+
+        let mut directory_reader = std::fs::read_dir(path)?;
+        
+        while let Some(entry) = directory_reader.next() {
+            let cloned_app = app.clone();
+            match entry {
+                Ok(directory_entry) => {
+                    let repo_path = directory_entry.path();
+                    let git_dir = repo_path.join(".git");
+                    if !git_dir.is_dir() {
+                        log::warn!("Skipping {} (not a Git repository)", repo_path.display());
+                        continue;
+                    }
+
+                    let uuid = Repo::read_uuid(&repo_path, cloned_app);
+                    if uuid.is_err() {
+                        bail!("Failed to read UUID from repo {}: {}", repo_path.display(), uuid.unwrap_err());
+                    }
+                    let uuid = uuid.unwrap();
+
+                    let repo = ServedRepo::new(&repo_path, None);
+                    if let Some(existing) = result.insert(uuid.clone(), repo) {
+                        bail!("Duplicate repo with UUID {} at {}", uuid, repo_path.display());
+                    }
+                },
+                Err(e) => {
+                    bail!("Failed to read directory {}: {}", path.display(), e);
+                },
+            }
+        }
+
+        Ok(result)
     }
 }
