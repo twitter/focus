@@ -121,20 +121,39 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
     let cloned_app = app.clone();
     if let Some(ref_name) = ref_name.strip_prefix("refs/heads/") {
         let description = format!("branch {} referencing commit {}", ref_name, commit_id);
-
         // Create the branch
         run_consuming_stdout(
             format!("Creating {}", description),
             repo,
-            vec!["branch", ref_name, commit_id], // "--track", "--set-upstream-to=origin",
+            vec!["branch", ref_name, commit_id],
             cloned_app.clone(),
         )?;
 
-        // Set the branch's upsteam
+        // Create the remote ref
         run_consuming_stdout(
-            format!("Setting upstream for {}", description),
+            format!("Creating remote ref for {}", description),
             repo,
-            vec!["branch", "--set-upstream-to=origin", ref_name], // "--track", "--set-upstream-to=origin",
+            vec![String::from("update-ref"), format!("refs/remotes/origin/{}", ref_name), commit_id.to_owned()],
+            cloned_app.clone(),
+        )?;
+        
+        // Set the branch's upsteam remote
+        run_consuming_stdout(
+            format!("Setting upstream remote for {}", description),
+            repo,
+            vec!["branch", "--set-upstream-to=origin", ref_name],
+            cloned_app.clone(),
+        )?;
+
+        // Set the branch's upsteam merge ref
+        run_consuming_stdout(
+            format!("Setting upstream merge for {}", description),
+            repo,
+            vec![
+                String::from("config"),
+                format!("branch.{}.merge", ref_name),
+                format!("refs/heads/{}", ref_name),
+            ],
             cloned_app.clone(),
         )?;
     } else {
@@ -178,10 +197,11 @@ fn copy_user_relevant_refs_to_sparse_repo(
         dense_repo.display()
     ))?;
 
+    let current_branch_with_prefix = format!("refs/heads/{}", branch);
     for line in output.lines() {
         match tokenize_ref_and_commit_ids(line) {
             Ok((ref_name, commit_id)) => {
-                if ref_name == branch {
+                if ref_name == current_branch_with_prefix {
                     // Skip it.
                     ui.log(
                         String::from("Ref Copy"),
@@ -325,7 +345,7 @@ pub fn create_sparse_clone(
     let dense_sets = LayerSets::new(&dense_repo);
     let mut layer_set = dense_sets
         .mandatory_layers()
-        .context("Failed to resolve  mandatory layers")?;
+        .context("Failed to resolve mandatory layers")?;
 
     // Add specified coordinates to an "ad-hoc" set
     let adhoc_set = LayerSet::new(vec![Layer::new(
@@ -421,7 +441,7 @@ pub fn create_or_update_sparse_clone(
             .is_working_tree_clean()
             .context("determining dense repo working tree state")?
         {
-            bail!("Dense repo has uncommitted changes");
+            bail!("Dense repo has uncommitted changes")
         }
     }
 

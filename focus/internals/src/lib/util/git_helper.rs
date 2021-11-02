@@ -226,9 +226,6 @@ impl BranchSwitch {
         .len()
             >= branch_name.len();
 
-        if !branch_exists {
-            bail!("The specified branch ({}) does not exist. If you're trying to specify a remote reference, please create a matching branch first with `git switch -c <branch> --track <remote>/<branch>` in the repo and try again.", &branch_name);
-        }
         let attachment_description = if detach { "detached" } else { "attached" };
         let description = format!(
             "Switching to {} in {} ({})",

@@ -259,6 +259,7 @@ version = "0.2.5"
 dependencies = [
  "anyhow",
  "dirs",
+ "env_logger",
  "focus-formats",
  "git2",
  "lazy_static",

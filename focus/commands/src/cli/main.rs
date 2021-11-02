@@ -35,9 +35,9 @@ fn the_name_of_this_binary() -> String {
 enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build coordinates
     Clone {
-        /// Experimental: Copy branches relevant to you into the new sparse repository.
+        /// Copy only the specified branch rather than all local branches.
         #[structopt(long)]
-        copy_branches: bool,
+        single_branch: bool,
 
         /// Path to the dense repository to base the clone on.
         #[structopt(long, parse(from_os_str), default_value = "~/workspace/source")]
@@ -212,6 +212,7 @@ fn ensure_directories_exist() -> Result<()> {
 
     Ok(())
 }
+
 fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Result<PathBuf> {
     let p = path_user_input.as_ref();
     if !p.starts_with("~") {
@@ -265,7 +266,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
     match options.cmd {
         Subcommand::Clone {
-            copy_branches,
+            single_branch,
             dense_repo,
             sparse_repo,
             branch,
@@ -314,7 +315,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 branch,
                 coordinates,
                 layers,
-                copy_branches,
+                !single_branch,
                 cloned_app.clone(),
             )
         }
