@@ -61,6 +61,8 @@ impl Repo {
 pub struct ServedRepo {
     location: PathBuf,
     parent: Option<Arc<Repo>>,
+
+    #[allow(unused)]
     mutex: Mutex<()>,
 }
 
@@ -93,13 +95,14 @@ impl ServedRepo {
         todo!()
     }
 
-    pub fn ensure_has_content(branch: &str, commit_id: git2::Oid) -> Result<()> {
+    pub fn ensure_has_content(_branch: &str, _commit_id: git2::Oid) -> Result<()> {
         todo!()
     }
 }
 
 pub struct AuthoritiveRepo {}
 
+#[allow(unused)]
 pub struct RepoManager {
     /// Path to the repositories to be managed.
     path: PathBuf,
@@ -143,7 +146,7 @@ impl RepoManager {
                     let uuid = uuid.unwrap();
 
                     let repo = ServedRepo::new(&repo_path, None);
-                    if let Some(existing) = result.insert(uuid.clone(), repo) {
+                    if let Some(_existing) = result.insert(uuid.clone(), repo) {
                         bail!("Duplicate repo with UUID {} at {}", uuid, repo_path.display());
                     }
                 },

@@ -26,7 +26,7 @@ impl svc::workbenches_server::Workbenches for WorkbenchesService {
 }
 
 #[allow(dead_code)]
-pub fn run(listen_address: &str, repos: &Path, app: Arc<App>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(listen_address: &str, _repos: &Path, _app: Arc<App>) -> Result<(), Box<dyn std::error::Error>> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
