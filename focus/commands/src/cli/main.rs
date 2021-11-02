@@ -93,17 +93,6 @@ enum Subcommand {
     },
 
     UserInterfaceTest {},
-
-    /// Serve repositories.
-    Server {
-        /// gRPC endpoint address to listen on.
-        #[structopt(default_value = "::1:36287")]
-        listen_address: String,
-
-        /// Path to the directory containing repositories to serve.
-        #[structopt(long, parse(from_os_str), default_value = "~/workspace/repos")]
-        repos: PathBuf,
-    },
 }
 
 #[derive(StructOpt, Debug)]
@@ -463,20 +452,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             });
 
             Ok(())
-        }
-
-        Subcommand::Server {
-            listen_address,
-            repos,
-        } => {
-            let ui = cloned_app.ui();
-            ui.status(format!(
-                "Serving Repos in {} on {}",
-                repos.display(),
-                listen_address
-            ));
-            ui.set_enabled(interactive);
-            subcommands::server::run(listen_address, repos.as_path(), app)
         }
     }
 }
