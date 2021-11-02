@@ -1,8 +1,8 @@
 [package]
-name = "focus-commands"
+name = "focus-workbench"
 version = "0.2.5"
 authors = ["Wilhelm Bierbaum <wilhelm@twitter.com>"]
-edition = "2021"
+edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -32,14 +32,15 @@ nix = "0.23.0"
 rayon = "1.5.1"
 tonic = "0.5.2"
 tokio = { version = "1.12.0", features = ["macros", "rt-multi-thread"] }
-focus-internals = { path = "../internals"}
 
 [build-dependencies]
 tonic-build = "0.5.2"
 
-##
-## Focus CLI: The primary UI for Project Focused Development
-##
 [[bin]]
-name = "focus"
-path = "src/cli/main.rs"
+name = "workbench-server"
+path = "src/server/main.rs"
+
+# [[bin]]
+# name = "workbench-client"
+# path = "src/client/main.rs"
+

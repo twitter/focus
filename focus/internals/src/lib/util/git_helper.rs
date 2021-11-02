@@ -216,16 +216,6 @@ impl BranchSwitch {
     }
 
     fn switch(&self, branch_name: &str, detach: bool) -> Result<()> {
-        let branch_exists = run_consuming_stdout(
-            format!("Checking whether branch {} exists", branch_name),
-            &self.repo,
-            vec!["branch", "-l", branch_name],
-            self.app.clone(),
-        )?
-        .trim()
-        .len()
-            >= branch_name.len();
-
         let attachment_description = if detach { "detached" } else { "attached" };
         let description = format!(
             "Switching to {} in {} ({})",
