@@ -78,7 +78,7 @@ pub fn configure_sparse_sync_point(sparse_repo: &Path, app: Arc<App>) -> Result<
 
 // Disable filesystem monitor
 #[allow(unused)]
-pub fn configure_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
+pub fn config_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     git_helper::unset_config(sparse_repo, "core.fsmonitor", app)
 }
 
@@ -301,9 +301,6 @@ fn configure_sparse_repo_final(
 
     configure_sparse_sync_point(sparse_repo, app.clone())
         .context("Failed to set the sync point")?;
-
-    configure_sparse_sync_point(sparse_repo, app.clone())
-        .context("Failed to disable filesystem monitor")?;
 
     setup_bazel_preflight_script(sparse_repo, app.clone())
         .context("Failed to set up build hooks")?;
