@@ -88,6 +88,7 @@ fn find_uncommitted_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
 }
 
 pub fn run(app: Arc<App>, repo: &PathBuf) -> Result<()> {
+    // TODO: Consider removing uncommitted change detection since we can't perform operations in repos without a clean working tree anyway.
     let (uncommitted_tx, uncommitted_rx) = mpsc::channel();
     let uncommited_finder_thread = {
         let cloned_repo = repo.clone();
