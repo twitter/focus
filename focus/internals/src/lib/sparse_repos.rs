@@ -133,10 +133,14 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
         run_consuming_stdout(
             format!("Creating remote ref for {}", description),
             repo,
-            vec![String::from("update-ref"), format!("refs/remotes/origin/{}", ref_name), commit_id.to_owned()],
+            vec![
+                String::from("update-ref"),
+                format!("refs/remotes/origin/{}", ref_name),
+                commit_id.to_owned(),
+            ],
             cloned_app.clone(),
         )?;
-        
+
         // Set the branch's upsteam remote
         run_consuming_stdout(
             format!("Setting upstream remote for {}", description),

@@ -127,7 +127,7 @@ impl RepoManager {
         }
 
         let mut directory_reader = std::fs::read_dir(path)?;
-        
+
         while let Some(entry) = directory_reader.next() {
             let cloned_app = app.clone();
             match entry {
@@ -141,18 +141,26 @@ impl RepoManager {
 
                     let uuid = Repo::read_uuid(&repo_path, cloned_app);
                     if uuid.is_err() {
-                        bail!("Failed to read UUID from repo {}: {}", repo_path.display(), uuid.unwrap_err());
+                        bail!(
+                            "Failed to read UUID from repo {}: {}",
+                            repo_path.display(),
+                            uuid.unwrap_err()
+                        );
                     }
                     let uuid = uuid.unwrap();
 
                     let repo = ServedRepo::new(&repo_path, None);
                     if let Some(_existing) = result.insert(uuid.clone(), repo) {
-                        bail!("Duplicate repo with UUID {} at {}", uuid, repo_path.display());
+                        bail!(
+                            "Duplicate repo with UUID {} at {}",
+                            uuid,
+                            repo_path.display()
+                        );
                     }
-                },
+                }
                 Err(e) => {
                     bail!("Failed to read directory {}: {}", path.display(), e);
-                },
+                }
             }
         }
 
