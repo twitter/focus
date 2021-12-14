@@ -1,9 +1,0 @@
-/target
-/.vscode
-*/bazel-*
-**/.DS_Store
-/cli/target
-/bazel-*
-.#*
-*~
-

@@ -1,9 +1,0 @@
-[submodule "3rdparty/fmt"]
-	path = 3rdparty/fmt
-	url = https://github.com/fmtlib/fmt.git
-[submodule "3rdparty/rax"]
-	path = 3rdparty/rax
-	url = https://github.com/antirez/rax.git
-[submodule "3rdparty/libfuse"]
-	path = 3rdparty/libfuse
-	url = https://github.com/bierbaum/libfuse
