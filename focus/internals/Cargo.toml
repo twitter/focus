@@ -24,8 +24,6 @@ uuid = { version = "0.8.2", features = ["v4"] }
 walkdir = "2.3.2"
 nix = "0.23.0"
 rayon = "1.5.1"
-tonic = "0.6.1"
-focus-formats = { path = "../formats" }
 env_logger = "0.9.0"
 
 [lib]
