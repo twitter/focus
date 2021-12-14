@@ -14,7 +14,10 @@ RELEASE_TARGET_ROOT="$(git rev-parse --show-toplevel)/target/release"
 
 pushd $REPO_ROOT
 
-env RUSTFLAGS="-Awarnings" cargo build --bin $ENTRYPOINT --release
+env TARGET=x86_64-apple-darwin \
+    MACOSX_DEPLOYMENT_TARGET=10.16 \
+    RUSTFLAGS="-Awarnings" \
+    cargo build --bin $ENTRYPOINT --release
 
 mkdir -p "$FOCUS_DIST_DIR"
 
