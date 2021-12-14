@@ -678,7 +678,6 @@ pub fn create_empty_sparse_clone(
     scmd.ensure_success_or_log(
         cmd.current_dir(sparse_repo_dir_parent)
             .arg("clone")
-            .arg("--sparse")
             .arg("--local")
             .arg("--no-checkout")
             .arg("--no-tags")
