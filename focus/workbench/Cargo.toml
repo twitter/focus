@@ -1,6 +1,6 @@
 [package]
 name = "focus-workbench"
-version = "0.2.5"
+version = "0.3.1"
 authors = ["Wilhelm Bierbaum <wilhelm@twitter.com>"]
 edition = "2018"
 

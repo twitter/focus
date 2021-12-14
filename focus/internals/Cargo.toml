@@ -1,6 +1,6 @@
 [package]
 name = "focus-internals"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Wilhelm Bierbaum <wilhelm@twitter.com>"]
 edition = "2021"
 
