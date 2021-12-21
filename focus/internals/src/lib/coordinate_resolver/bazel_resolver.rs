@@ -73,7 +73,7 @@ impl Resolver for BazelResolver {
         )?;
         scmd.ensure_success_or_log(
             cmd.arg("query")
-                .arg(query)
+                .arg(&query)
                 .arg("--output=package")
                 .current_dir(request.repo()),
             SandboxCommandOutput::Stderr,
@@ -92,6 +92,7 @@ impl Resolver for BazelResolver {
                 }
             }
         }
+        app.ui().log(String::from("Bazel Resolver"), format!("'{}' requires {} directories", &query, directories.len()));
 
         Ok(ResolutionResult::from(directories))
     }
