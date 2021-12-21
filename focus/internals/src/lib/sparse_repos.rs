@@ -187,7 +187,7 @@ fn copy_user_relevant_refs_to_sparse_repo(
     };
 
     let output = run_consuming_stdout(
-        String::from("Retriving the list of personal branches"),
+        String::from("Retrieving the list of personal branches"),
         dense_repo,
         vec![
             "for-each-ref",
