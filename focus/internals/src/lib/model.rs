@@ -132,7 +132,7 @@ impl LayerSet {
             }
         }
 
-        return Err(Error::new(RemovalError::NotFound));
+        Err(Error::new(RemovalError::NotFound))
     }
 
     #[allow(unused)]
@@ -338,7 +338,7 @@ impl LayerSets {
             }
         }
 
-        return Ok(results);
+        Ok(results)
     }
 
     // Return a layer_set containing all mandatory layers

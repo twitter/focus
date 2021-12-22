@@ -108,16 +108,16 @@ impl TryFrom<&str> for Coordinate {
             Some((prefix, rest)) => {
                 let rest = rest.to_owned();
                 if prefix.eq_ignore_ascii_case("bazel") {
-                    return Ok(Coordinate::Bazel(rest));
+                    Ok(Coordinate::Bazel(rest))
                 } else if prefix.eq_ignore_ascii_case("directory") {
-                    return Ok(Coordinate::Directory(rest));
+                    Ok(Coordinate::Directory(rest))
                 } else if prefix.eq_ignore_ascii_case("pants") {
-                    return Ok(Coordinate::Pants(rest));
+                    Ok(Coordinate::Pants(rest))
                 } else {
-                    return Err(CoordinateError::UnsupportedScheme(prefix.to_owned()));
+                    Err(CoordinateError::UnsupportedScheme(prefix.to_owned()))
                 }
             }
-            _ => return Err(CoordinateError::TokenizationError),
+            None => Err(CoordinateError::TokenizationError),
         }
     }
 }

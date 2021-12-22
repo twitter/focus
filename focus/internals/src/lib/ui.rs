@@ -513,7 +513,7 @@ impl UserInterface {
             .get_task(handle)
             .context("Retreiving task failed")?;
         if let Some(task) = task {
-            return Ok(task.started_at.elapsed());
+            Ok(task.started_at.elapsed())
         } else {
             bail!("Couldn't find task");
         }
