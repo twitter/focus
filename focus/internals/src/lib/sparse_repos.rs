@@ -782,13 +782,11 @@ pub fn generate_sparse_profile(
 fn find_closest_directory_with_build_file(file: &Path, ceiling: &Path) -> Result<Option<PathBuf>> {
     let mut dir = if file.is_dir() {
         file
+    } else if let Some(parent) = file.parent() {
+        parent
     } else {
-        if let Some(parent) = file.parent() {
-            parent
-        } else {
-            log::warn!("Path {} has no parent", file.display());
-            return Ok(None);
-        }
+        log::warn!("Path {} has no parent", file.display());
+        return Ok(None);
     };
     loop {
         if dir == ceiling {

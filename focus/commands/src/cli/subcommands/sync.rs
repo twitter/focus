@@ -40,7 +40,7 @@ fn find_dense_repo(app: Arc<App>, sparse_repo: &Path) -> Result<PathBuf> {
         app.clone(),
     )
     .context("Failed reading the dense repo URL")
-    .map(|path| PathBuf::from(path))?;
+    .map(PathBuf::from)?;
     let dense_repo = git_helper::find_top_level(app.clone(), &dense_repo)
         .context("Failed finding dense repo top level")?;
     Ok(dense_repo)

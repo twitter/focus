@@ -187,10 +187,8 @@ pub struct LayerStack {
 
 impl LayerStack {
     pub fn load(path: &Path) -> Result<LayerStack> {
-        Ok(
-            serde_json::from_slice(&std::fs::read(&path).context("opening file for read")?)
-                .context("loading layer stack")?,
-        )
+        serde_json::from_slice(&std::fs::read(&path).context("opening file for read")?)
+            .context("loading layer stack")
     }
 
     pub fn store(path: &Path, t: &LayerStack) -> Result<()> {
@@ -324,7 +322,7 @@ impl LayerSets {
             &self.project_directory().display()
         );
 
-        for entry in walker.filter_entry(|e| Self::layer_file_filter(e)) {
+        for entry in walker.filter_entry(Self::layer_file_filter) {
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
@@ -472,16 +470,14 @@ impl LayerSets {
             if selected_indexed.contains_key(&name) {
                 // Already have this one
                 eprintln!("{}: Skipped (already selected)", &name)
+            } else if let Some(layer) = available.get(&name) {
+                // let name_clone = name.to_owned().to_owned();
+                user_layers.selected_layer_names.push(name.clone());
+                selected.layers.push(layer.clone());
+                changed = true;
             } else {
-                if let Some(layer) = available.get(&name) {
-                    // let name_clone = name.to_owned().to_owned();
-                    user_layers.selected_layer_names.push(name.clone());
-                    selected.layers.push(layer.clone());
-                    changed = true;
-                } else {
-                    eprintln!("{}: Not found", &name);
-                    bail!("One of the requested layers was not found");
-                }
+                eprintln!("{}: Not found", &name);
+                bail!("One of the requested layers was not found");
             }
         }
 

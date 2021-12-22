@@ -165,9 +165,8 @@ impl ScratchGitRepo {
         &self.path
     }
 
-    #[allow(dead_code)]
     pub fn repo(&self) -> Result<Repository> {
-        Ok(Repository::open(&self.path).context("opening repository")?)
+        Repository::open(&self.path).context("opening repository")
     }
 }
 

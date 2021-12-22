@@ -25,7 +25,7 @@ use crate::subcommands::{adhoc, layer};
 fn the_name_of_this_binary() -> String {
     std::env::args_os()
         .next()
-        .unwrap_or(OsString::from("focus"))
+        .unwrap_or_else(|| OsString::from("focus"))
         .to_str()
         .unwrap()
         .to_owned()
@@ -390,8 +390,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
 
-            // If there was a change, the ssync succeded, so we we can discard the backup.
-            selected_layer_stack_backup.map(|backup| backup.set_restore(false));
+            // If there was a change, the sync succeeded, so we we can discard the backup.
+            if let Some(backup) = selected_layer_stack_backup {
+                backup.set_restore(false);
+            }
 
             Ok(())
         }
@@ -445,9 +447,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             }
 
             // Sync (if necessary) succeeded, so skip reverting the ad-hoc coordinate stack.
-            adhoc_layer_set_backup.map(|backup| {
+            if let Some(backup) = adhoc_layer_set_backup {
                 backup.set_restore(false);
-            });
+            }
 
             Ok(())
         }

@@ -84,11 +84,7 @@ impl ServedRepo {
     }
 
     pub fn parent(self) -> Option<Arc<Repo>> {
-        if let Some(parent) = self.parent {
-            Some(parent.clone())
-        } else {
-            None
-        }
+        self.parent.map(|parent| parent.clone())
     }
 
     pub fn seek_to_state() -> Result<()> {

@@ -83,6 +83,7 @@ impl Resolver for PantsResolver {
         )?;
 
         let reader = scmd.read_buffered(SandboxCommandOutput::Stdout)?;
+        #[allow(clippy::manual_flatten)]
         for line in reader.lines() {
             if let Ok(line) = line {
                 let path = PathBuf::from(&line);

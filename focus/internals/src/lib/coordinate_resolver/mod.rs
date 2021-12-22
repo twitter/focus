@@ -142,7 +142,7 @@ impl Resolver for RoutingResolver {
     ) -> Result<ResolutionResult> {
         use rayon::prelude::*;
 
-        Ok(request
+        request
             .coordinate_set()
             .underlying()
             .par_iter()
@@ -174,13 +174,10 @@ impl Resolver for RoutingResolver {
                 }
                 .with_context(|| format!("failed to resolve coordinate {}", coordinate))
             })
-            .try_reduce(
-                || ResolutionResult::new(),
-                |mut acc, result| {
-                    acc.merge(&result);
-                    Ok(acc)
-                },
-            )
-            .context("Resolving coordinates failed")?)
+            .try_reduce(ResolutionResult::new, |mut acc, result| {
+                acc.merge(&result);
+                Ok(acc)
+            })
+            .context("Resolving coordinates failed")
     }
 }

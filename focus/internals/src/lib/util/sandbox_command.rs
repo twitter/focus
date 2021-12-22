@@ -16,6 +16,7 @@ fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
     let lines = io::BufReader::new(file).lines();
     let ui = app.ui();
     ui.log("Error", format!("Begin '{}'", title));
+    #[allow(clippy::manual_flatten)]
     for line in lines {
         if let Ok(line) = line {
             ui.log("Error", line);
@@ -92,7 +93,7 @@ impl SandboxCommand {
                 .context("writing script description")?;
             Ok((Stdio::from(file), path))
         };
-        let stdin = stdin.unwrap_or(Stdio::null());
+        let stdin = stdin.unwrap_or_else(Stdio::null);
 
         let (stdout, stdout_path) = match stdout {
             Some(path) => (Stdio::from(File::open(&path)?), path.to_owned()),
