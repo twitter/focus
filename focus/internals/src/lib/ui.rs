@@ -559,7 +559,7 @@ impl ProgressReporter {
             .context("Registering task with UI failed")?;
 
         Ok(Self {
-            app: app,
+            app,
             task_handle,
             description,
         })

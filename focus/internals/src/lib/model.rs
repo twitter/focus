@@ -58,7 +58,7 @@ impl Layer {
             name: name.to_owned(),
             description: description.to_owned(),
             mandatory,
-            coordinates: coordinates,
+            coordinates,
         }
     }
 

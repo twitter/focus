@@ -60,11 +60,11 @@ impl Periodic {
 
         (
             Periodic {
-                interval: interval,
-                target: target,
-                stop_tx: stop_tx,
-                invoke_tx: invoke_tx,
-                stopped: stopped.into(),
+                interval,
+                target,
+                stop_tx,
+                invoke_tx,
+                stopped,
             },
             handle,
         )
