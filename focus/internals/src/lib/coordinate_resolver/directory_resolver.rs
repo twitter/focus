@@ -14,7 +14,7 @@ pub struct DirectoryResolver {
 impl Resolver for DirectoryResolver {
     fn new(cache_root: &Path) -> Self {
         Self {
-            cache_root: cache_root.join("directory").to_owned(),
+            cache_root: cache_root.join("directory"),
         }
     }
 

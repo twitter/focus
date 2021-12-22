@@ -83,7 +83,7 @@ impl SandboxCommand {
         stderr: Option<&Path>,
         app: Arc<App>,
     ) -> Result<Self> {
-        let cloned_app = app.clone();
+        let cloned_app = app;
         let sandbox = cloned_app.sandbox();
         let output_file = |extension: &str| -> Result<(Stdio, PathBuf)> {
             let (file, path) = sandbox.create_file(Some("sandboxed_command"), Some(extension))?;

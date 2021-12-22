@@ -16,9 +16,8 @@ pub fn run(app: Arc<App>) -> Result<()> {
         let cloned_app = app.clone();
         let handle = std::thread::spawn(move || {
             let cloned_app_for_reporter = cloned_app.clone();
-            let _report =
-                ProgressReporter::new(cloned_app_for_reporter.clone(), format!("Thread {}", i))
-                    .expect("Instantiating progress reporter failed");
+            let _report = ProgressReporter::new(cloned_app_for_reporter, format!("Thread {}", i))
+                .expect("Instantiating progress reporter failed");
 
             {
                 std::thread::sleep(Duration::from_secs(i));
@@ -27,11 +26,11 @@ pub fn run(app: Arc<App>) -> Result<()> {
         handles.push(handle);
     }
 
-    let cloned_sandbox_for_beer_logger = sandbox.clone();
+    let cloned_sandbox_for_beer_logger = sandbox;
     let cloned_ui = app.ui();
     let _beer_thread = spawn(move || {
         let cloned_ui = cloned_ui.clone();
-        let _cloned_sandbox_for_beer_logger = cloned_sandbox_for_beer_logger.clone();
+        let _cloned_sandbox_for_beer_logger = cloned_sandbox_for_beer_logger;
         for i in (0..999).rev() {
             cloned_ui.log(
                     "Shakespeare's Cousin",

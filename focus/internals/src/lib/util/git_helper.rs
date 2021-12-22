@@ -64,8 +64,7 @@ pub fn read_config<P: AsRef<Path>>(
     app: Arc<App>,
 ) -> Result<Option<String>> {
     let description = format!("Reading Git config {}", key);
-    if let Ok(result) = run_consuming_stdout(description, repo_path, &["config", key], app.clone())
-    {
+    if let Ok(result) = run_consuming_stdout(description, repo_path, &["config", key], app) {
         return Ok(Some(result));
     }
 
@@ -269,7 +268,7 @@ impl RepoState {
             "Determining commit ID".to_owned(),
             repo_path,
             &["rev-parse", "HEAD"],
-            app.clone(),
+            app,
         )
         .context("Failed to determine the commit ID")?;
 

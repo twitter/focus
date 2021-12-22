@@ -118,7 +118,7 @@ fn setup_bazel_preflight_script(sparse_repo: &Path, _app: Arc<App>) -> Result<()
 }
 
 fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) -> Result<()> {
-    let cloned_app = app.clone();
+    let cloned_app = app;
     if let Some(ref_name) = ref_name.strip_prefix("refs/heads/") {
         let description = format!("branch {} referencing commit {}", ref_name, commit_id);
         // Create the branch
@@ -158,7 +158,7 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
                 &format!("branch.{}.merge", ref_name),
                 &format!("refs/heads/{}", ref_name),
             ],
-            cloned_app.clone(),
+            cloned_app,
         )?;
     } else {
         bail!(format!("Could not strip prefix from ref '{}'", ref_name));
@@ -303,8 +303,7 @@ fn configure_sparse_repo_final(
     configure_sparse_sync_point(sparse_repo, app.clone())
         .context("Failed to set the sync point")?;
 
-    setup_bazel_preflight_script(sparse_repo, app.clone())
-        .context("Failed to set up build hooks")?;
+    setup_bazel_preflight_script(sparse_repo, app).context("Failed to set up build hooks")?;
 
     Ok(())
 }
@@ -450,7 +449,7 @@ pub fn create_or_update_sparse_clone(
         let cloned_app = app.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_profile_output = sparse_profile_output.to_owned();
-        let cloned_coordinate_set = coordinate_set.clone();
+        let cloned_coordinate_set = coordinate_set;
 
         thread::Builder::new()
             .name("SparseProfileGeneration".to_owned())
@@ -569,7 +568,7 @@ pub fn create_or_update_sparse_clone(
 
 pub fn set_sparse_config(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     git_helper::write_config(&sparse_repo, "core.sparseCheckout", "true", app.clone())?;
-    git_helper::write_config(&sparse_repo, "core.sparseCheckoutCone", "true", app.clone())?;
+    git_helper::write_config(&sparse_repo, "core.sparseCheckoutCone", "true", app)?;
     Ok(())
 }
 
@@ -637,7 +636,6 @@ pub fn create_empty_sparse_clone(
     branch: &str,
     app: Arc<App>,
 ) -> Result<()> {
-    let app = app.clone();
     let _ui = app.ui();
 
     let sparse_repo_dir_parent = &sparse_repo
@@ -650,7 +648,7 @@ pub fn create_empty_sparse_clone(
         dense_repo.display(),
         sparse_repo.display()
     );
-    let (mut cmd, scmd) = git_helper::git_command(description, app.clone())?;
+    let (mut cmd, scmd) = git_helper::git_command(description, app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(sparse_repo_dir_parent)
             .arg("clone")

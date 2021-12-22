@@ -41,7 +41,7 @@ fn find_dense_repo(app: Arc<App>, sparse_repo: &Path) -> Result<PathBuf> {
     )
     .context("Failed reading the dense repo URL")
     .map(PathBuf::from)?;
-    let dense_repo = git_helper::find_top_level(app.clone(), &dense_repo)
+    let dense_repo = git_helper::find_top_level(app, &dense_repo)
         .context("Failed finding dense repo top level")?;
     Ok(dense_repo)
 }
@@ -61,7 +61,7 @@ pub fn ensure_working_trees_are_clean(
         }
     };
     let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, app.clone())?;
-    let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, app.clone())?;
+    let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, app)?;
 
     if let Ok(clean) = perform("Checking that dense repo is in a clean state", || {
         dense_sync.is_working_tree_clean()
@@ -239,7 +239,7 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
         })?;
     }
 
-    let cloned_app = app.clone();
+    let cloned_app = app;
     perform("Updating the sync point", || {
         sparse_repos::configure_sparse_sync_point(&sparse_repo, cloned_app)
     })?;

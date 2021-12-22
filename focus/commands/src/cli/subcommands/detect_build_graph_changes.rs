@@ -40,7 +40,7 @@ fn find_committed_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
         description,
         repo,
         &["diff", "--name-only", &revspec],
-        app.clone(),
+        app,
     )?;
     let changed_paths: Vec<&str> = output.lines().collect::<_>();
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
@@ -103,7 +103,7 @@ pub fn run(app: Arc<App>, repo: &Path) -> Result<()> {
     let (committed_tx, committed_rx) = mpsc::channel();
     let committed_finder_thread = {
         let cloned_repo = repo.to_path_buf();
-        let cloned_sandbox = app.clone();
+        let cloned_sandbox = app;
 
         std::thread::spawn(move || {
             committed_tx

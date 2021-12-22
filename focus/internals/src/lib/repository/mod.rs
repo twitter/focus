@@ -84,7 +84,7 @@ impl ServedRepo {
     }
 
     pub fn parent(self) -> Option<Arc<Repo>> {
-        self.parent.clone()
+        self.parent
     }
 
     pub fn seek_to_state() -> Result<()> {
@@ -108,7 +108,7 @@ pub struct RepoManager {
 
 impl RepoManager {
     pub fn new(path: &Path, app: Arc<App>) -> Result<Self> {
-        let repos = Arc::new(Mutex::new(Self::scan(path, app.clone())?));
+        let repos = Arc::new(Mutex::new(Self::scan(path, app)?));
         Ok(Self {
             path: path.to_owned(),
             repos,

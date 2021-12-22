@@ -33,7 +33,7 @@ impl PantsResolver {
 impl Resolver for PantsResolver {
     fn new(cache_root: &Path) -> Self {
         Self {
-            cache_root: cache_root.join("bazel").to_owned(),
+            cache_root: cache_root.join("bazel"),
             mutex: Mutex::new(()),
         }
     }
@@ -69,11 +69,8 @@ impl Resolver for PantsResolver {
         let args_description = args.join(" ");
 
         let description = format!("pants {}", &args_description);
-        let (mut cmd, scmd) = SandboxCommand::new(
-            description.clone(),
-            Self::locate_pants_binary(request),
-            app.clone(),
-        )?;
+        let (mut cmd, scmd) =
+            SandboxCommand::new(description.clone(), Self::locate_pants_binary(request), app)?;
         scmd.ensure_success_or_log(
             cmd.env("EE_PANTS_DAEMON_BETA", "0")
                 .args(args)

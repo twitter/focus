@@ -57,7 +57,7 @@ impl ScratchGitRepo {
             .status()
             .expect("git switch failed");
 
-        let mut test_file = repo_path.to_path_buf();
+        let mut test_file = repo_path.clone();
         test_file.push("d_0_0");
         std::fs::create_dir(test_file.as_path()).unwrap();
         test_file.push("f_1.txt");

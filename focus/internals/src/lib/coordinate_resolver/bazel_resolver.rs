@@ -33,7 +33,7 @@ impl BazelResolver {
 impl Resolver for BazelResolver {
     fn new(cache_root: &Path) -> Self {
         Self {
-            cache_root: cache_root.join("bazel").to_owned(),
+            cache_root: cache_root.join("bazel"),
             mutex: Mutex::new(()),
         }
     }

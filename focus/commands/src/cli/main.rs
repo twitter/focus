@@ -303,7 +303,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 coordinates,
                 layers,
                 !single_branch,
-                cloned_app.clone(),
+                cloned_app,
             )
         }
 
@@ -315,12 +315,15 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
         Subcommand::Repo { args } => {
             // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
-            let mut args = args.clone();
-            args.insert(0, format!("{} repo", the_name_of_this_binary()));
+            let args = {
+                let mut args = args;
+                args.insert(0, format!("{} repo", the_name_of_this_binary()));
+                args
+            };
             let repo_subcommand = RepoSubcommand::from_iter(args.iter());
             match repo_subcommand.verb {
                 RepoOpts::List {} => subcommands::repo::list(),
-                RepoOpts::Repair {} => subcommands::repo::repair(app.clone()),
+                RepoOpts::Repair {} => subcommands::repo::repair(app),
             }
         }
         Subcommand::DetectBuildGraphChanges { repo } => {
@@ -341,8 +344,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             paths::assert_focused_repo(&repo)?;
 
             // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
-            let mut args = args.clone();
-            args.insert(0, format!("{} layer", the_name_of_this_binary()));
+            let args = {
+                let mut args = args;
+                args.insert(0, format!("{} layer", the_name_of_this_binary()));
+                args
+            };
             let layer_subcommand = LayerSubcommand::from_iter(args.iter());
 
             let should_check_tree_cleanliness = match layer_subcommand.verb {
@@ -401,8 +407,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         Subcommand::Adhoc { repo, args } => {
             paths::assert_focused_repo(&repo)?;
 
-            let mut args = args.clone();
-            args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
+            let args = {
+                let mut args = args;
+                args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
+                args
+            };
             let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
 
             let should_check_tree_cleanliness = match adhoc_subcommand.verb {

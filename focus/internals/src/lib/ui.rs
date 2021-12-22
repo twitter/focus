@@ -109,7 +109,7 @@ pub struct UserInterfaceRenderer {
 impl UserInterfaceRenderer {
     pub fn new(ui_state: Arc<UserInterfaceState>, interactive: bool) -> Result<Self> {
         let running = AtomicBool::new(true);
-        let cloned_ui_state = ui_state.clone();
+        let cloned_ui_state = ui_state;
         let renderer_state = Arc::from(RendererState::new(cloned_ui_state, running));
 
         let render_thread_exited = Arc::from(Barrier::new(2));
