@@ -272,7 +272,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 current_dir.join(expanded)
             };
             ui.log(
-                String::from("Clone"),
+                "Clone",
                 format!("Using the dense repo in {}", dense_repo.display()),
             );
 
@@ -384,8 +384,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
             if mutated {
                 app.ui().log(
-                    String::from("Layer Stack Update"),
-                    String::from("Syncing focused paths since the selected content has changed"),
+                    "Layer Stack Update",
+                    "Syncing focused paths since the selected content has changed",
                 );
                 app.ui().set_enabled(interactive);
                 subcommands::sync::run(app, repo.as_path())
@@ -438,8 +438,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
             if mutated {
                 app.ui().log(
-                    String::from("Ad-hoc Coordinate Stack"),
-                    String::from("Syncing focused paths since the selected content has changed"),
+                    "Ad-hoc Coordinate Stack",
+                    "Syncing focused paths since the selected content has changed",
                 );
                 app.ui().set_enabled(interactive);
                 subcommands::sync::run(app, repo.as_path())

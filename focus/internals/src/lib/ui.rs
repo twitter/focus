@@ -519,8 +519,8 @@ impl UserInterface {
         }
     }
 
-    pub fn log(&self, subject: String, content: String) {
-        let entry = LogEntry::new(subject, content, None);
+    pub fn log(&self, subject: impl Into<String>, content: impl Into<String>) {
+        let entry = LogEntry::new(subject.into(), content.into(), None);
         self.state.add_log_entry(entry);
     }
 

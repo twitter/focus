@@ -15,13 +15,13 @@ fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
     let file = File::open(file)?;
     let lines = io::BufReader::new(file).lines();
     let ui = app.ui();
-    ui.log(String::from("Error"), format!("Begin '{}'", title));
+    ui.log("Error", format!("Begin '{}'", title));
     for line in lines {
         if let Ok(line) = line {
-            ui.log(String::from("Error"), line);
+            ui.log("Error", line);
         }
     }
-    ui.log(String::from("Error"), format!("End '{}'", title));
+    ui.log("Error", format!("End '{}'", title));
 
     Ok(())
 }

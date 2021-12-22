@@ -187,7 +187,7 @@ impl BranchSwitch {
                 .to_owned();
             if hint.is_empty() {
                 app.ui().log(
-                    String::from("Branch Switch"),
+                    "Branch Switch",
                     format!(
                         "Couldn't determine the current branch in {}, using the default 'master'.",
                         repo.display()

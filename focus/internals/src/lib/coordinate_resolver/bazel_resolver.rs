@@ -92,7 +92,10 @@ impl Resolver for BazelResolver {
                 }
             }
         }
-        app.ui().log(String::from("Bazel Resolver"), format!("'{}' requires {} directories", &query, directories.len()));
+        app.ui().log(
+            "Bazel Resolver",
+            format!("'{}' requires {} directories", &query, directories.len()),
+        );
 
         Ok(ResolutionResult::from(directories))
     }

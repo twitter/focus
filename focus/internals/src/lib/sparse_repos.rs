@@ -207,10 +207,7 @@ fn copy_user_relevant_refs_to_sparse_repo(
             Ok((ref_name, commit_id)) => {
                 if ref_name == current_branch_with_prefix {
                     // Skip it.
-                    ui.log(
-                        String::from("Ref Copy"),
-                        format!("Skipping active ref {}", &ref_name),
-                    );
+                    ui.log("Ref Copy", format!("Skipping active ref {}", &ref_name));
                     continue;
                 }
 
@@ -386,10 +383,7 @@ pub fn create_sparse_clone(
     )?;
 
     // Write the ad-hoc set
-    app.ui().log(
-        String::from("Clone"),
-        String::from("writing the ad-hoc layer set"),
-    );
+    app.ui().log("Clone", "writing the ad-hoc layer set");
     write_adhoc_layer_set(&sparse_repo, &adhoc_set)
         .context("Failed writing the adhoc layer set")?;
     let layer_names: Vec<String> = layer_backed_set
@@ -397,10 +391,8 @@ pub fn create_sparse_clone(
         .iter()
         .map(|layer| layer.name().to_owned())
         .collect();
-    app.ui().log(
-        String::from("Clone"),
-        String::from("writing the stack of selected layers"),
-    );
+    app.ui()
+        .log("Clone", "writing the stack of selected layers");
     LayerSets::new(&sparse_repo)
         .push_as_selection(layer_names)
         .context("Failed to write the selected layer set to the sparse repo")?;
@@ -466,10 +458,9 @@ pub fn create_or_update_sparse_clone(
         thread::Builder::new()
             .name("SparseProfileGeneration".to_owned())
             .spawn(move || {
-                cloned_app.ui().log(
-                    String::from("Profile Generation"),
-                    String::from("Generating sparse profile"),
-                );
+                cloned_app
+                    .ui()
+                    .log("Profile Generation", "Generating sparse profile");
 
                 generate_sparse_profile(
                     &cloned_dense_repo,
@@ -479,10 +470,9 @@ pub fn create_or_update_sparse_clone(
                 )
                 .context("failed to generate a sparse profile")?;
 
-                cloned_app.ui().log(
-                    String::from("Profile Generation"),
-                    String::from("Finished generating sparse profile"),
-                );
+                cloned_app
+                    .ui()
+                    .log("Profile Generation", "Finished generating sparse profile");
 
                 Ok(())
             })
@@ -501,10 +491,9 @@ pub fn create_or_update_sparse_clone(
         thread::Builder::new()
             .name("CloneRepository".to_owned())
             .spawn(move || {
-                cloned_app.ui().log(
-                    String::from("Profile Generation"),
-                    String::from("Creating a template clone"),
-                );
+                cloned_app
+                    .ui()
+                    .log("Profile Generation", "Creating a template clone");
                 create_empty_sparse_clone(
                     &cloned_dense_repo,
                     &cloned_sparse_repo,
@@ -514,10 +503,9 @@ pub fn create_or_update_sparse_clone(
                 .context("failed to create an empty sparse clone")?;
                 configure_sparse_repo_initial(&cloned_sparse_repo, cloned_app.clone())
                     .context("failed to configure sparse clone")?;
-                cloned_app.ui().log(
-                    String::from("Profile Generation"),
-                    String::from("Finished creating a template clone"),
-                );
+                cloned_app
+                    .ui()
+                    .log("Profile Generation", "Finished creating a template clone");
                 // N.B. For now, we set up alternates because they allow for journaled fetches
                 set_up_alternates(&cloned_sparse_repo, &cloned_dense_repo)
                     .context("Setting up object database alternates failed")?;
@@ -541,10 +529,9 @@ pub fn create_or_update_sparse_clone(
         let cloned_dense_repo = dense_repo.clone();
         let cloned_branch = branch.clone();
 
-        cloned_app.ui().log(
-            String::from("Repository Setup"),
-            String::from("Copying configuration"),
-        );
+        cloned_app
+            .ui()
+            .log("Repository Setup", "Copying configuration");
         if create {
             configure_sparse_repo_final(
                 &cloned_dense_repo,
@@ -556,28 +543,24 @@ pub fn create_or_update_sparse_clone(
             .context("failed to perform final configuration in the sparse repo")?;
         }
 
-        cloned_app.ui().log(
-            String::from("Repository Setup"),
-            String::from("Configuring visible paths"),
-        );
+        cloned_app
+            .ui()
+            .log("Repository Setup", "Configuring visible paths");
         set_sparse_checkout(sparse_repo, &sparse_profile_output, cloned_app.clone())
             .context("Failed to set the sparse checkout file")?;
 
-        cloned_app.ui().log(
-            String::from("Repository Setup"),
-            String::from("Checking out the working copy"),
-        );
+        cloned_app
+            .ui()
+            .log("Repository Setup", "Checking out the working copy");
         checkout_working_copy(&cloned_sparse_repo, cloned_app.clone())
             .context("Failed to check out the working copy")?;
-        cloned_app.ui().log(
-            String::from("Repository Setup"),
-            String::from("Setting up other branches"),
-        );
+        cloned_app
+            .ui()
+            .log("Repository Setup", "Setting up other branches");
 
-        cloned_app.ui().log(
-            String::from("Repository Setup"),
-            String::from("Moving the project view into place"),
-        );
+        cloned_app
+            .ui()
+            .log("Repository Setup", "Moving the project view into place");
     }
 
     Tracker::default()

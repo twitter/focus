@@ -34,7 +34,7 @@ pub fn run(app: Arc<App>) -> Result<()> {
         let _cloned_sandbox_for_beer_logger = cloned_sandbox_for_beer_logger.clone();
         for i in (0..999).rev() {
             cloned_ui.log(
-                    format!("Shakespeare's Cousin"),
+                    "Shakespeare's Cousin",
                     format!(
                         "{} bottles of beer on the wall, {} bottles of beer, take one down, pass it around, {} bottles of beer on the wall",
                         i,
@@ -49,7 +49,7 @@ pub fn run(app: Arc<App>) -> Result<()> {
     let cloned_ui = app.ui();
     for handle in handles {
         cloned_ui.log(
-            format!("Thread Butler"),
+            "Thread Butler",
             format!("Waiting on thread {:?}", handle.thread()),
         );
         handle.join().expect("Thread failed");

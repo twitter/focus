@@ -25,7 +25,7 @@ impl Repo {
             }
         };
         app.ui().log(
-            String::from("Repository"),
+            "Repository",
             format!(
                 "Read existing UUID {} for repo at path {}",
                 &uuid,
