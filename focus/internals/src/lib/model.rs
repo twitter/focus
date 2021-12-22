@@ -90,8 +90,7 @@ impl LayerSet {
     pub fn validate(&self) -> Result<()> {
         // Find duplicate names
         let mut visited_names = HashMap::<String, usize>::new();
-        let mut index: usize = 0;
-        for layer in &self.layers {
+        for (index, layer) in self.layers.iter().enumerate() {
             let name = &layer.name.to_owned();
             if name.contains(':') {
                 bail!(
@@ -106,8 +105,6 @@ impl LayerSet {
                     existing_index
                 );
             }
-
-            index += 1;
         }
         Ok(())
     }
@@ -137,11 +134,7 @@ impl LayerSet {
 
     #[allow(unused)]
     pub fn optional_layers(&self) -> Result<Vec<&Layer>> {
-        Ok(self
-            .layers
-            .iter()
-            .filter_map(|l| if !l.mandatory { Some(l) } else { None })
-            .collect())
+        Ok(self.layers.iter().filter(|l| !l.mandatory).collect())
     }
 
     fn load(path: &Path) -> Result<LayerSet> {

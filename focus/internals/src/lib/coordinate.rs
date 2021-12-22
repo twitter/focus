@@ -30,13 +30,7 @@ impl CoordinateSet {
             }
         }
 
-        let mut distinct_types_in_counts: usize = 0;
-        for i in 0..count_by_type.len() {
-            if count_by_type[i] > 0 {
-                distinct_types_in_counts += 1;
-            }
-        }
-
+        let distinct_types_in_counts = count_by_type.into_iter().filter(|count| *count > 0).count();
         distinct_types_in_counts < 2
     }
 }

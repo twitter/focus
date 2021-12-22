@@ -248,8 +248,7 @@ impl UserInterfaceRenderer {
 
                 if let Ok(locked_logs) = ui_state.log_entries.lock() {
                     let mut line_budget = area_height;
-                    let mut iterator = locked_logs.iter().rev().take(area_height as usize);
-                    while let Some(item) = iterator.next() {
+                    for item in locked_logs.iter().rev().take(area_height as usize) {
                         if line_budget == 0 {
                             break;
                         }

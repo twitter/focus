@@ -84,7 +84,7 @@ impl ServedRepo {
     }
 
     pub fn parent(self) -> Option<Arc<Repo>> {
-        self.parent.map(|parent| parent.clone())
+        self.parent.clone()
     }
 
     pub fn seek_to_state() -> Result<()> {
@@ -122,9 +122,7 @@ impl RepoManager {
             bail!("{} is not a directory", path.display());
         }
 
-        let mut directory_reader = std::fs::read_dir(path)?;
-
-        while let Some(entry) = directory_reader.next() {
+        for entry in std::fs::read_dir(path)? {
             let cloned_app = app.clone();
             match entry {
                 Ok(directory_entry) => {
