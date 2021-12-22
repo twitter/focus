@@ -404,7 +404,7 @@ pub fn create_or_update_sparse_clone(
     dense_repo: &PathBuf,
     sparse_repo: &PathBuf,
     branch: &String,
-    coordinates: &Vec<String>,
+    coordinates: &[String],
     create: bool,
     copy_branches: bool,
     app: Arc<App>,

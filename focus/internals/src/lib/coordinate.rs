@@ -51,10 +51,10 @@ impl From<HashSet<Coordinate>> for CoordinateSet {
     }
 }
 
-impl TryFrom<&Vec<String>> for CoordinateSet {
+impl TryFrom<&[String]> for CoordinateSet {
     type Error = CoordinateError;
 
-    fn try_from(coordinates: &Vec<String>) -> Result<Self, Self::Error> {
+    fn try_from(coordinates: &[String]) -> Result<Self, Self::Error> {
         let mut underlying = HashSet::<Coordinate>::new();
 
         for coordinate in coordinates {
@@ -152,7 +152,7 @@ mod tests {
     pub fn sets_from_strings_of_coordinates() -> Result<()> {
         let coordinates = vec![String::from("bazel://a:b"), String::from("bazel://x/y:z")];
 
-        let set = CoordinateSet::try_from(&coordinates);
+        let set = CoordinateSet::try_from(coordinates.as_slice());
         let set = set.unwrap();
         assert_eq!(set.underlying().len(), 2);
         assert!(set.is_uniform());
@@ -164,14 +164,14 @@ mod tests {
     #[test]
     pub fn non_uniform_sets() -> Result<()> {
         // Sets containing different coordinate types are non-uniform
-        assert!(!CoordinateSet::try_from(&vec![
+        assert!(!CoordinateSet::try_from(&[
             String::from("bazel://a:b"),
             String::from("directory:/foo"),
-        ])?
+        ] as &[String])?
         .is_uniform());
 
         // Empty sets are uniform
-        assert!(CoordinateSet::try_from(&vec![])?.is_uniform());
+        assert!(CoordinateSet::try_from(&[] as &[String])?.is_uniform());
 
         Ok(())
     }
@@ -179,11 +179,11 @@ mod tests {
     #[test]
     pub fn failed_conversion_of_sets() -> Result<()> {
         assert_eq!(
-            CoordinateSet::try_from(&vec![String::from("whatever")]).unwrap_err(),
+            CoordinateSet::try_from(&[String::from("whatever")] as &[String]).unwrap_err(),
             CoordinateError::TokenizationError
         );
         assert_eq!(
-            CoordinateSet::try_from(&vec![String::from("foo:bar")]).unwrap_err(),
+            CoordinateSet::try_from(&[String::from("foo:bar")] as &[String]).unwrap_err(),
             CoordinateError::UnsupportedScheme("foo".to_owned())
         );
 
