@@ -29,11 +29,11 @@ use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
 const SPARSE_PROFILE_PRELUDE: &str =
     "/tools\n/pants-plugins/\n/pants-support/\n/3rdparty/\n/focus/\n";
 
-pub fn configure_dense_repo(dense_repo: &PathBuf, app: Arc<App>) -> Result<()> {
+pub fn configure_dense_repo(dense_repo: &Path, app: Arc<App>) -> Result<()> {
     git_helper::write_config(dense_repo, "uploadPack.allowFilter", "true", app)
 }
 
-pub fn configure_sparse_repo_initial(_sparse_repo: &PathBuf, _app: Arc<App>) -> Result<()> {
+pub fn configure_sparse_repo_initial(_sparse_repo: &Path, _app: Arc<App>) -> Result<()> {
     Ok(())
 }
 
@@ -83,7 +83,7 @@ pub fn config_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App
 }
 
 // Set git config key focus.sync-point to HEAD
-fn setup_bazel_preflight_script(sparse_repo: &PathBuf, _app: Arc<App>) -> Result<()> {
+fn setup_bazel_preflight_script(sparse_repo: &Path, _app: Arc<App>) -> Result<()> {
     use std::os::unix::prelude::PermissionsExt;
 
     let sparse_focus_dir = sparse_repo.join(".focus");
@@ -167,8 +167,8 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
 }
 
 fn copy_user_relevant_refs_to_sparse_repo(
-    dense_repo: &PathBuf,
-    sparse_repo: &PathBuf,
+    dense_repo: &Path,
+    sparse_repo: &Path,
     branch: &str,
     app: Arc<App>,
 ) -> Result<()> {
@@ -221,8 +221,8 @@ fn copy_user_relevant_refs_to_sparse_repo(
 }
 
 fn configure_sparse_repo_final(
-    dense_repo: &PathBuf,
-    sparse_repo: &PathBuf,
+    dense_repo: &Path,
+    sparse_repo: &Path,
     branch: &str,
     copy_branches: bool,
     app: Arc<App>,
@@ -309,7 +309,7 @@ fn configure_sparse_repo_final(
     Ok(())
 }
 
-pub fn set_containing_layers(repo: &PathBuf, layer_names: &Vec<String>) -> Result<LayerSet> {
+pub fn set_containing_layers(repo: &Path, layer_names: &Vec<String>) -> Result<LayerSet> {
     let layer_sets = LayerSets::new(&repo);
     let rich_layer_set = RichLayerSet::new(
         layer_sets
@@ -329,7 +329,7 @@ pub fn set_containing_layers(repo: &PathBuf, layer_names: &Vec<String>) -> Resul
     Ok(LayerSet::new(layers.into_iter().collect()))
 }
 
-pub fn write_adhoc_layer_set(sparse_repo: &PathBuf, layer_set: &LayerSet) -> Result<()> {
+pub fn write_adhoc_layer_set(sparse_repo: &Path, layer_set: &LayerSet) -> Result<()> {
     let layer_sets = LayerSets::new(sparse_repo);
     layer_sets.store_adhoc_layers(layer_set)
 }
@@ -401,8 +401,8 @@ pub fn create_sparse_clone(
 }
 
 pub fn create_or_update_sparse_clone(
-    dense_repo: &PathBuf,
-    sparse_repo: &PathBuf,
+    dense_repo: &Path,
+    sparse_repo: &Path,
     branch: &String,
     coordinates: &[String],
     create: bool,
@@ -442,12 +442,8 @@ pub fn create_or_update_sparse_clone(
     }
 
     // Switch to the requested branch in the dense repo. Afterwards, we will switch back.
-    let _dense_switch = git_helper::BranchSwitch::temporary(
-        app.clone(),
-        dense_repo.clone(),
-        branch.to_owned(),
-        None,
-    )?;
+    let _dense_switch =
+        git_helper::BranchSwitch::temporary(app.clone(), dense_repo, branch.to_owned(), None)?;
 
     let profile_generation_handle: JoinHandle<Result<()>> = {
         let cloned_app = app.clone();
@@ -525,8 +521,8 @@ pub fn create_or_update_sparse_clone(
 
     {
         let cloned_app = app.clone();
-        let cloned_sparse_repo = sparse_repo.clone();
-        let cloned_dense_repo = dense_repo.clone();
+        let cloned_sparse_repo = sparse_repo;
+        let cloned_dense_repo = dense_repo;
         let cloned_branch = branch.clone();
 
         cloned_app
@@ -576,11 +572,7 @@ pub fn set_sparse_config(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     Ok(())
 }
 
-pub fn set_sparse_checkout(
-    sparse_repo: &PathBuf,
-    sparse_profile: &PathBuf,
-    app: Arc<App>,
-) -> Result<()> {
+pub fn set_sparse_checkout(sparse_repo: &Path, sparse_profile: &Path, app: Arc<App>) -> Result<()> {
     set_sparse_config(&sparse_repo, app.clone())?;
     {
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
@@ -626,7 +618,7 @@ pub fn set_sparse_checkout(
     Ok(())
 }
 
-pub fn checkout_working_copy(sparse_repo: &PathBuf, app: Arc<App>) -> Result<()> {
+pub fn checkout_working_copy(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
     let (mut cmd, scmd) = git_helper::git_command("Checking out a working copy".to_owned(), app)?;
     scmd.ensure_success_or_log(
@@ -639,8 +631,8 @@ pub fn checkout_working_copy(sparse_repo: &PathBuf, app: Arc<App>) -> Result<()>
 }
 
 pub fn create_empty_sparse_clone(
-    dense_repo: &PathBuf,
-    sparse_repo: &PathBuf,
+    dense_repo: &Path,
+    sparse_repo: &Path,
     branch: &String,
     app: Arc<App>,
 ) -> Result<()> {

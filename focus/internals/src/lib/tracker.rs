@@ -37,12 +37,12 @@ impl TrackedRepo {
         self.identifier.borrow()
     }
 
-    pub fn location(&self) -> &PathBuf {
+    pub fn location(&self) -> &Path {
         self.location.borrow()
     }
 
     #[allow(dead_code)]
-    pub fn link_path(&self) -> &PathBuf {
+    pub fn link_path(&self) -> &Path {
         self.link_path.borrow()
     }
 }

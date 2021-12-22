@@ -20,18 +20,14 @@ fn build_graph_involved_filename_predicate(name: &Path) -> bool {
     false
 }
 
-fn find_committed_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
+fn find_committed_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     let sync_state = {
-        if let Some(sync_point) =
-            git_helper::read_config(repo.as_path(), "focus.sync-point", app.clone())
-                .context("reading sync state")?
+        if let Some(sync_point) = git_helper::read_config(repo, "focus.sync-point", app.clone())
+            .context("reading sync state")?
         {
             sync_point
         } else {
-            bail!(
-                "Could not read sync state in repo {}",
-                repo.as_path().display()
-            );
+            bail!("Could not read sync state in repo {}", repo.display());
         }
     };
 
@@ -58,7 +54,7 @@ fn find_committed_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
     Ok(!&changed_paths.is_empty())
 }
 
-fn find_uncommitted_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
+fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     let output = git_helper::run_consuming_stdout(
         "Finding uncommitted changes".to_owned(),
         repo,
@@ -87,11 +83,11 @@ fn find_uncommitted_changes(app: Arc<App>, repo: &PathBuf) -> Result<bool> {
     Ok(!&build_involved_changed_paths.is_empty())
 }
 
-pub fn run(app: Arc<App>, repo: &PathBuf) -> Result<()> {
+pub fn run(app: Arc<App>, repo: &Path) -> Result<()> {
     // TODO: Consider removing uncommitted change detection since we can't perform operations in repos without a clean working tree anyway.
     let (uncommitted_tx, uncommitted_rx) = mpsc::channel();
     let uncommited_finder_thread = {
-        let cloned_repo = repo.clone();
+        let cloned_repo = repo.to_path_buf();
         let cloned_sandbox = app.clone();
 
         std::thread::spawn(move || {
@@ -106,7 +102,7 @@ pub fn run(app: Arc<App>, repo: &PathBuf) -> Result<()> {
 
     let (committed_tx, committed_rx) = mpsc::channel();
     let committed_finder_thread = {
-        let cloned_repo = repo.clone();
+        let cloned_repo = repo.to_path_buf();
         let cloned_sandbox = app.clone();
 
         std::thread::spawn(move || {

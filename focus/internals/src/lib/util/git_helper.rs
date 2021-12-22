@@ -177,14 +177,12 @@ impl BranchSwitch {
 
     pub fn temporary(
         app: Arc<App>,
-        repo: PathBuf,
+        repo: &Path,
         refname: String,
         alternate: Option<PathBuf>,
     ) -> Result<Self> {
         let current_branch = {
-            let hint = get_current_branch(app.clone(), repo.as_path())?
-                .trim()
-                .to_owned();
+            let hint = get_current_branch(app.clone(), repo)?.trim().to_owned();
             if hint.is_empty() {
                 app.ui().log(
                     "Branch Switch",
@@ -202,7 +200,7 @@ impl BranchSwitch {
 
         let instance = Self {
             app,
-            repo,
+            repo: repo.to_path_buf(),
             refname,
             alternate,
             switch_back: Some(current_branch),

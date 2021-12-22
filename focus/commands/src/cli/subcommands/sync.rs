@@ -171,7 +171,7 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
             // When checking out in the dense repo, we make the sparse repo objects available as an alternate so as to not need to push to the dense repo.
             BranchSwitch::temporary(
                 cloned_app,
-                dense_repo.clone(),
+                &dense_repo,
                 sparse_revision,
                 Some(sparse_objects_directory.clone()),
             )
