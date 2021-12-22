@@ -6,20 +6,19 @@ use std::time::Duration;
 
 use log::debug;
 
-#[allow(dead_code)]
 enum InvocationKind {
     Timed,
     Direct,
 }
 
-#[allow(dead_code)]
 trait PeriodicInvocationTarget: Send + Sync {
     fn run(&self, invocation_kind: InvocationKind);
 }
 
-#[allow(dead_code)]
 struct Periodic {
+    #[allow(dead_code)]
     interval: Duration,
+    #[allow(dead_code)]
     target: Arc<dyn PeriodicInvocationTarget>,
     stop_tx: mpsc::Sender<()>,
     invoke_tx: mpsc::Sender<bool>,

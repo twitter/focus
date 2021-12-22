@@ -41,7 +41,6 @@ impl TrackedRepo {
         self.location.borrow()
     }
 
-    #[allow(dead_code)]
     pub fn link_path(&self) -> &Path {
         self.link_path.borrow()
     }
@@ -80,7 +79,6 @@ impl Snapshot {
         &self.repos
     }
 
-    #[allow(dead_code)]
     pub fn find_repo_by_id(&self, id: &[u8]) -> Option<&TrackedRepo> {
         self.index_by_identifier
             .get(id)

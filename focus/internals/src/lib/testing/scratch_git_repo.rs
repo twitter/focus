@@ -7,7 +7,6 @@ use uuid::Uuid;
 
 use crate::util::temporary_working_directory::TemporaryWorkingDirectory;
 
-#[allow(dead_code)]
 pub struct ScratchGitRepo {
     path: PathBuf,
 }
@@ -33,12 +32,10 @@ impl ScratchGitRepo {
         })
     }
 
-    #[allow(dead_code)]
     pub fn make_clone(&self) -> Result<Self> {
         Self::new_local_clone(self.path())
     }
 
-    #[allow(dead_code)]
     pub(crate) fn create_fixture_repo(containing_dir: &Path) -> Result<PathBuf> {
         let name = format!("repo_{}", Uuid::new_v4().to_string());
         Command::new("git")
@@ -113,7 +110,6 @@ impl ScratchGitRepo {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn commit(&self, filename: &Path, content: &[u8], message: &str) -> Result<git2::Oid> {
         let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
 
@@ -160,7 +156,6 @@ impl ScratchGitRepo {
         Ok(id)
     }
 
-    #[allow(dead_code)]
     pub fn path(&self) -> &Path {
         &self.path
     }

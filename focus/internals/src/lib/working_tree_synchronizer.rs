@@ -101,7 +101,6 @@ impl WorkingTreeSynchronizer {
         ))
     }
 
-    #[allow(dead_code)]
     pub fn read_branch(&self) -> Result<String> {
         use std::process;
         let _progress = ProgressReporter::new(
