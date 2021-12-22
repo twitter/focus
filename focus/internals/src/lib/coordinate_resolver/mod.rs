@@ -49,6 +49,7 @@ impl ResolutionRequest {
 }
 
 /// Result of resolving a set of coordinates; namely a set of paths.
+#[derive(Default)]
 pub struct ResolutionResult {
     paths: BTreeSet<PathBuf>,
 }
@@ -70,14 +71,6 @@ impl ResolutionResult {
 impl From<BTreeSet<PathBuf>> for ResolutionResult {
     fn from(paths: BTreeSet<PathBuf>) -> Self {
         Self { paths }
-    }
-}
-
-impl Default for ResolutionResult {
-    fn default() -> Self {
-        Self {
-            paths: Default::default(),
-        }
     }
 }
 

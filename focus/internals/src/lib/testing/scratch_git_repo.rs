@@ -61,19 +61,19 @@ impl ScratchGitRepo {
         test_file.push("d_0_0");
         std::fs::create_dir(test_file.as_path()).unwrap();
         test_file.push("f_1.txt");
-        std::fs::write(test_file.as_path(), &"This is test file 1"[..]).unwrap();
+        std::fs::write(test_file.as_path(), "This is test file 1").unwrap();
         test_file.pop();
         test_file.push("d_0_1");
         std::fs::create_dir(test_file.as_path())?;
         test_file.push("f_2.txt");
-        std::fs::write(test_file.as_path(), &"This is test file 2"[..]).unwrap();
+        std::fs::write(test_file.as_path(), "This is test file 2").unwrap();
         test_file.pop();
         test_file.pop();
         test_file.pop();
         test_file.push("d_1_0");
         std::fs::create_dir(test_file.as_path())?;
         test_file.push("f_3.txt");
-        std::fs::write(test_file.as_path(), &"This is test file 3"[..]).unwrap();
+        std::fs::write(test_file.as_path(), "This is test file 3").unwrap();
 
         Command::new("git")
             .arg("add")

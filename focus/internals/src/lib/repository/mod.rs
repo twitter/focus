@@ -146,7 +146,7 @@ impl RepoManager {
                     let uuid = uuid.unwrap();
 
                     let repo = ServedRepo::new(&repo_path, None);
-                    if let Some(_existing) = result.insert(uuid.clone(), repo) {
+                    if let Some(_existing) = result.insert(uuid, repo) {
                         bail!(
                             "Duplicate repo with UUID {} at {}",
                             uuid,

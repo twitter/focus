@@ -199,9 +199,9 @@ impl UserInterfaceRenderer {
                 );
                 used += 1;
                 write!(stdout, "{}", termion::clear::CurrentLine).unwrap();
-                write!(
+                writeln!(
                     stdout,
-                    "{}{}{}\n",
+                    "{}{}{}",
                     termion::style::Underline,
                     task_status,
                     termion::style::NoUnderline
@@ -214,16 +214,16 @@ impl UserInterfaceRenderer {
                 for task in active_tasks.iter().take(area_height as usize) {
                     used_height += 1;
                     write!(stdout, "{}", termion::clear::CurrentLine).unwrap();
-                    write!(
+                    writeln!(
                         stdout,
-                        "{:>7.2}s {}\n",
+                        "{:>7.2}s {}",
                         task.elapsed().as_secs_f32(),
                         task.description()
                     )
                     .unwrap();
                 }
                 for _ in 0..(area_height - used_height) + 1 {
-                    write!(stdout, "{}\n", termion::clear::CurrentLine).unwrap();
+                    writeln!(stdout, "{}", termion::clear::CurrentLine).unwrap();
                 }
                 used += area_height;
             }
@@ -235,9 +235,9 @@ impl UserInterfaceRenderer {
                 let title = "Log Entries";
                 used += 1;
                 write!(stdout, "{}", termion::clear::CurrentLine).unwrap();
-                write!(
+                writeln!(
                     stdout,
-                    "{}{}{}\n",
+                    "{}{}{}",
                     termion::style::Underline,
                     title,
                     termion::style::NoUnderline
@@ -282,7 +282,7 @@ impl UserInterfaceRenderer {
                             content.truncate(allowed - 1);
                             content.push('…')
                         }
-                        write!(stdout, "{} {}\n", header, content).unwrap();
+                        writeln!(stdout, "{} {}", header, content).unwrap();
                         line_budget -= 1;
                     }
 
@@ -296,7 +296,7 @@ impl UserInterfaceRenderer {
             stdout.flush().unwrap();
         }
 
-        write!(stdout, "\n").unwrap();
+        writeln!(stdout).unwrap();
         stdout.flush().unwrap();
     }
 

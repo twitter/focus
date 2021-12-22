@@ -100,7 +100,7 @@ fn setup_bazel_preflight_script(sparse_repo: &Path, _app: Arc<App>) -> Result<()
         );
 
         writeln!(preflight_script_file, "#!/bin/sh")?;
-        writeln!(preflight_script_file, "")?;
+        writeln!(preflight_script_file)?;
         writeln!(
             preflight_script_file,
             "RUST_LOG=error exec focus detect-build-graph-changes"
@@ -688,7 +688,7 @@ pub fn create_empty_sparse_clone(
         writeln!(buffer, "*_focus.bzl")?;
         writeln!(buffer, "focus-*.bazelproject")?;
         writeln!(buffer, "focus-*.bazelrc")?;
-        writeln!(buffer, "")?;
+        writeln!(buffer)?;
         buffer.flush()?;
     }
 

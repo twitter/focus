@@ -20,7 +20,7 @@ impl CoordinateSet {
     }
 
     pub fn determine_uniformity(set: &HashSet<Coordinate>) -> bool {
-        let mut count_by_type = [0 as usize; 3];
+        let mut count_by_type = [0_usize; 3];
 
         for coordinate in set {
             match coordinate {
