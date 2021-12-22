@@ -534,8 +534,8 @@ impl UserInterface {
         self.state.add_log_entry(entry);
     }
 
-    pub fn status(&self, status: String) {
-        self.state.set_status(status);
+    pub fn status(&self, status: impl Into<String>) {
+        self.state.set_status(status.into());
     }
 }
 

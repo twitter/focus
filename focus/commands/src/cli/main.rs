@@ -334,7 +334,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
         Subcommand::UserInterfaceTest {} => {
             let ui = cloned_app.ui();
-            ui.status(format!("UI Test"));
+            ui.status("UI Test");
             ui.set_enabled(interactive);
             subcommands::user_interface_test::run(app)
         }
