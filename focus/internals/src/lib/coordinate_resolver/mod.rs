@@ -161,15 +161,15 @@ impl Resolver for RoutingResolver {
                 match coordinate {
                     Coordinate::Bazel(_) => {
                         self.bazel_resolver
-                            .resolve(&subrequest, &cache_options, app_clone)
+                            .resolve(&subrequest, cache_options, app_clone)
                     }
                     Coordinate::Directory(_) => {
                         self.directory_resolver
-                            .resolve(&subrequest, &cache_options, app_clone)
+                            .resolve(&subrequest, cache_options, app_clone)
                     }
                     Coordinate::Pants(_) => {
                         self.pants_resolver
-                            .resolve(&subrequest, &cache_options, app_clone)
+                            .resolve(&subrequest, cache_options, app_clone)
                     }
                 }
                 .with_context(|| format!("failed to resolve coordinate {}", coordinate))

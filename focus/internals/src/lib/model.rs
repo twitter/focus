@@ -147,7 +147,7 @@ impl LayerSet {
     fn load(path: &Path) -> Result<LayerSet> {
         let slice = &std::fs::read(&path).context("opening file for read")?;
 
-        let mut layer_set: LayerSet = serde_json::from_slice(&slice)
+        let mut layer_set: LayerSet = serde_json::from_slice(slice)
             .with_context(|| format!("loading layer set from {}", &path.display()))?;
 
         // let mut hasher = Sha256::new();
@@ -253,7 +253,7 @@ impl<'a> RichLayerSet {
     }
 
     pub fn get(&self, name: &str) -> Option<&Layer> {
-        if let Some(ix) = self.find_index(&name) {
+        if let Some(ix) = self.find_index(name) {
             let layer: &Layer = &self.underlying.layers[ix];
             return Some(layer);
         }
@@ -324,7 +324,7 @@ impl LayerSets {
             &self.project_directory().display()
         );
 
-        for entry in walker.filter_entry(|e| Self::layer_file_filter(&e)) {
+        for entry in walker.filter_entry(|e| Self::layer_file_filter(e)) {
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
@@ -374,7 +374,7 @@ impl LayerSets {
 
         for path in &paths {
             layer.extend(
-                LayerSet::load(&path)
+                LayerSet::load(path)
                     .with_context(|| format!("loading layer_set from {}", &path.display()))?,
             );
         }
@@ -453,7 +453,7 @@ impl LayerSets {
     fn store_selected_layers(&self, stack: &LayerStack) -> Result<()> {
         std::fs::create_dir_all(self.user_directory())
             .context("creating the directory to store user layers")?;
-        LayerStack::store(&self.selected_layer_stack_path(), &stack)
+        LayerStack::store(&self.selected_layer_stack_path(), stack)
             .context("storing user layer stack")
     }
 

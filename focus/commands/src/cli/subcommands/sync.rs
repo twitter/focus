@@ -51,7 +51,7 @@ pub fn ensure_working_trees_are_clean(
     sparse_repo: &Path,
     dense_repo: Option<PathBuf>,
 ) -> Result<()> {
-    let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
+    let sparse_repo = git_helper::find_top_level(app.clone(), sparse_repo)
         .context("canonicalizing sparse repo path")?;
     let dense_repo = {
         if let Some(dense_repo) = dense_repo {
@@ -92,7 +92,7 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     // TODO(wilhelm): Make this multi-threaded where possible.
     use focus_internals::sparse_repos;
     let ui = app.ui();
-    let sparse_repo = git_helper::find_top_level(app.clone(), &sparse_repo)
+    let sparse_repo = git_helper::find_top_level(app.clone(), sparse_repo)
         .context("canonicalizing sparse repo path")?;
     paths::assert_focused_repo(&sparse_repo)?;
 

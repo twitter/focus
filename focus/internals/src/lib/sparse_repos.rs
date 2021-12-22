@@ -310,7 +310,7 @@ fn configure_sparse_repo_final(
 }
 
 pub fn set_containing_layers(repo: &Path, layer_names: &[String]) -> Result<LayerSet> {
-    let layer_sets = LayerSets::new(&repo);
+    let layer_sets = LayerSets::new(repo);
     let rich_layer_set = RichLayerSet::new(
         layer_sets
             .available_layers()
@@ -426,13 +426,13 @@ pub fn create_or_update_sparse_clone(
 
     let sparse_profile_output = sandbox.path().join("sparse-checkout");
 
-    configure_dense_repo(&dense_repo, app.clone())
+    configure_dense_repo(dense_repo, app.clone())
         .context("setting configuration options in the dense repo")?;
 
     // Make sure that the dense repo is in a clean state
     {
         let cloned_app = app.clone();
-        let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, cloned_app)
+        let dense_sync = WorkingTreeSynchronizer::new(dense_repo, cloned_app)
             .context("creating working tree synchronizer for dense repository")?;
         if !dense_sync
             .is_working_tree_clean()
@@ -531,9 +531,9 @@ pub fn create_or_update_sparse_clone(
             .log("Repository Setup", "Copying configuration");
         if create {
             configure_sparse_repo_final(
-                &cloned_dense_repo,
-                &cloned_sparse_repo,
-                &cloned_branch,
+                cloned_dense_repo,
+                cloned_sparse_repo,
+                cloned_branch,
                 copy_branches,
                 cloned_app.clone(),
             )
@@ -549,7 +549,7 @@ pub fn create_or_update_sparse_clone(
         cloned_app
             .ui()
             .log("Repository Setup", "Checking out the working copy");
-        checkout_working_copy(&cloned_sparse_repo, cloned_app.clone())
+        checkout_working_copy(cloned_sparse_repo, cloned_app.clone())
             .context("Failed to check out the working copy")?;
         cloned_app
             .ui()
@@ -561,7 +561,7 @@ pub fn create_or_update_sparse_clone(
     }
 
     Tracker::default()
-        .ensure_registered(&sparse_repo, app)
+        .ensure_registered(sparse_repo, app)
         .context("adding sparse repo to the list of tracked repos")?;
 
     Ok(())
@@ -574,7 +574,7 @@ pub fn set_sparse_config(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
 }
 
 pub fn set_sparse_checkout(sparse_repo: &Path, sparse_profile: &Path, app: Arc<App>) -> Result<()> {
-    set_sparse_config(&sparse_repo, app.clone())?;
+    set_sparse_config(sparse_repo, app.clone())?;
     {
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
         let (mut cmd, scmd) = git_helper::git_command(
@@ -755,7 +755,7 @@ pub fn generate_sparse_profile(
     let mut directories = BTreeSet::<PathBuf>::new();
 
     let mut f = File::create(&sparse_profile_output).context("creating output file")?;
-    f.write_all(&SPARSE_PROFILE_PRELUDE.as_bytes())
+    f.write_all(SPARSE_PROFILE_PRELUDE.as_bytes())
         .context("writing sparse profile prelude")?;
     resolve_involved_directories(repo, coordinate_set, app, &mut directories)
         .context("resolving involved directories")?;

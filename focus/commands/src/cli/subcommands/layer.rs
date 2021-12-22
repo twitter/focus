@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use focus_internals::model::{self, LayerSets};
 
 pub fn available(repo: &Path) -> Result<bool> {
-    let layer_sets = model::LayerSets::new(&repo);
+    let layer_sets = model::LayerSets::new(repo);
     let set = &layer_sets.available_layers()?;
     for layer in set.layers() {
         println!("{}", layer);
@@ -15,7 +15,7 @@ pub fn available(repo: &Path) -> Result<bool> {
 }
 
 pub fn list(repo: &Path) -> Result<bool> {
-    let sets = LayerSets::new(&repo);
+    let sets = LayerSets::new(repo);
 
     if let Some(selected) = sets.selected_layers().context("loading selected layers")? {
         // TODO: Extract printing and re-use
@@ -41,7 +41,7 @@ pub fn list(repo: &Path) -> Result<bool> {
 
 pub fn push(repo: &Path, names: Vec<String>) -> Result<bool> {
     // Push a layer
-    let sets = model::LayerSets::new(&repo);
+    let sets = model::LayerSets::new(repo);
 
     let (new_selection, changed) = sets
         .push_as_selection(names)
@@ -60,7 +60,7 @@ pub fn push(repo: &Path, names: Vec<String>) -> Result<bool> {
 
 pub fn pop(repo: &Path, count: usize) -> Result<bool> {
     // Pop a layer
-    let sets = model::LayerSets::new(&repo);
+    let sets = model::LayerSets::new(repo);
 
     let (new_selection, changed) = sets.pop(count).context("popping layers")?;
 
@@ -77,7 +77,7 @@ pub fn pop(repo: &Path, count: usize) -> Result<bool> {
 
 pub fn remove(repo: &Path, names: Vec<String>) -> Result<bool> {
     // Remove a layer
-    let sets = model::LayerSets::new(&repo);
+    let sets = model::LayerSets::new(repo);
 
     let (new_selection, changed) = sets.remove(names).context("removing layers")?;
 

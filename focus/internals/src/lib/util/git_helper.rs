@@ -97,7 +97,7 @@ where
 {
     let (mut cmd, scmd) = git_command(description, app)?;
     if let Err(e) = cmd.current_dir(repo).args(args).status() {
-        scmd.log(SandboxCommandOutput::Stderr, &"git command")?;
+        scmd.log(SandboxCommandOutput::Stderr, "git command")?;
         bail!("git command failed: {}", e);
     }
     let mut stdout_contents = String::new();
@@ -242,7 +242,7 @@ impl BranchSwitch {
 impl Drop for BranchSwitch {
     fn drop(&mut self) {
         if let Some(refname_to_switch_back_to) = &self.switch_back {
-            self.switch(&refname_to_switch_back_to, false)
+            self.switch(refname_to_switch_back_to, false)
                 .expect("Switching back to the original branch failed");
         }
     }
