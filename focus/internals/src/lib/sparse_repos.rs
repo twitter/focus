@@ -404,7 +404,7 @@ pub fn create_sparse_clone(
 pub fn create_or_update_sparse_clone(
     dense_repo: &Path,
     sparse_repo: &Path,
-    branch: &String,
+    branch: &str,
     coordinates: &[String],
     create: bool,
     copy_branches: bool,
@@ -483,7 +483,7 @@ pub fn create_or_update_sparse_clone(
         let cloned_app = app.clone();
         let cloned_dense_repo = dense_repo.to_owned();
         let cloned_sparse_repo = sparse_repo.to_owned();
-        let cloned_branch = branch.clone();
+        let cloned_branch = branch.to_owned();
 
         thread::Builder::new()
             .name("CloneRepository".to_owned())
@@ -524,7 +524,7 @@ pub fn create_or_update_sparse_clone(
         let cloned_app = app.clone();
         let cloned_sparse_repo = sparse_repo;
         let cloned_dense_repo = dense_repo;
-        let cloned_branch = branch.clone();
+        let cloned_branch = branch;
 
         cloned_app
             .ui()
@@ -634,7 +634,7 @@ pub fn checkout_working_copy(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
 pub fn create_empty_sparse_clone(
     dense_repo: &Path,
     sparse_repo: &Path,
-    branch: &String,
+    branch: &str,
     app: Arc<App>,
 ) -> Result<()> {
     let app = app.clone();
@@ -660,7 +660,7 @@ pub fn create_empty_sparse_clone(
             .arg("--no-tags")
             .arg("--single-branch")
             .arg("-b")
-            .arg(branch.as_str())
+            .arg(branch)
             .arg(dense_repo)
             .arg(sparse_repo),
         SandboxCommandOutput::Stderr,

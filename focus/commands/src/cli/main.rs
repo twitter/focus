@@ -285,11 +285,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let dense_repo = git_helper::find_top_level(cloned_app.clone(), &dense_repo)
                 .context("Failed to canonicalize dense repo path")?;
 
-            let (coordinates, layers): (Vec<&String>, Vec<&String>) = coordinates_and_layers
-                .iter()
-                .partition(|&item| Coordinate::try_from(item.as_str()).is_ok());
-            let coordinates = coordinates.iter().map(|&item| item.to_owned()).collect();
-            let layers = layers.iter().map(|&item| item.to_owned()).collect();
+            let (coordinates, layers): (Vec<String>, Vec<String>) = coordinates_and_layers
+                .into_iter()
+                .partition(|item| Coordinate::try_from(item.as_str()).is_ok());
 
             ui.status(format!(
                 "Cloning {} into {}",
