@@ -14,7 +14,6 @@ impl CoordinateSet {
         &self.underlying
     }
 
-    #[allow(unused)]
     pub fn is_uniform(&self) -> bool {
         self.uniform
     }

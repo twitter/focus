@@ -62,7 +62,7 @@ pub struct ServedRepo {
     location: PathBuf,
     parent: Option<Arc<Repo>>,
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     mutex: Mutex<()>,
 }
 
@@ -98,7 +98,7 @@ impl ServedRepo {
 
 pub struct AuthoritiveRepo {}
 
-#[allow(unused)]
+#[allow(dead_code)]
 pub struct RepoManager {
     /// Path to the repositories to be managed.
     path: PathBuf,

@@ -7,7 +7,7 @@ use super::*;
 
 /// Resolves directories verbatim
 pub struct DirectoryResolver {
-    #[allow(unused)]
+    #[allow(dead_code)]
     cache_root: PathBuf,
 }
 

@@ -13,7 +13,6 @@ pub struct ScratchGitRepo {
 
 impl ScratchGitRepo {
     // Create a new fixture repo with a unique random name in the given directory
-    #[allow(unused)]
     pub fn new_fixture(containing_dir: &Path) -> Result<Self> {
         Ok(Self {
             path: Self::create_fixture_repo(containing_dir)?,

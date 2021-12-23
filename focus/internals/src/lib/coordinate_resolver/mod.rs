@@ -76,14 +76,13 @@ impl From<BTreeSet<PathBuf>> for ResolutionResult {
 
 /// Dictates whether the resolver can retrieve or store responses to a cache.
 pub struct CacheOptions {
-    #[allow(unused)]
+    #[allow(dead_code)]
     accept_cached_response: bool,
-    #[allow(unused)]
+    #[allow(dead_code)]
     store_response_in_cache: bool,
 }
 
 impl CacheOptions {
-    #[allow(unused)]
     pub fn new(accept_cached_response: bool, store_response_in_cache: bool) -> Self {
         Self {
             accept_cached_response,

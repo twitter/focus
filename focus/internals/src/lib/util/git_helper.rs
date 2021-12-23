@@ -151,7 +151,6 @@ pub struct BranchSwitch {
 }
 
 impl BranchSwitch {
-    #[allow(unused)]
     pub fn permanent(
         app: Arc<App>,
         repo: PathBuf,

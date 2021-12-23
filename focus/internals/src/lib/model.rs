@@ -117,7 +117,6 @@ impl LayerSet {
         self.layers.extend(other.layers);
     }
 
-    #[allow(unused)]
     pub fn remove_named_layer(&mut self, name: &str) -> Result<()> {
         for (ix, l) in self.layers.iter().enumerate() {
             if l.name.eq(&name) {
@@ -132,7 +131,6 @@ impl LayerSet {
         Err(Error::new(RemovalError::NotFound))
     }
 
-    #[allow(unused)]
     pub fn optional_layers(&self) -> Result<Vec<&Layer>> {
         Ok(self.layers.iter().filter(|l| !l.mandatory).collect())
     }
@@ -226,7 +224,7 @@ impl<'a> RichLayerSet {
         Ok(())
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn reindex(&self) -> Result<()> {
         let mut new_index = HashMap::<String, usize>::new();
         Self::index(&self.underlying, &mut new_index)?;
@@ -789,7 +787,7 @@ mod tests {
         Ok(())
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn selected_layers() -> Result<()> {
         init_logging();
 

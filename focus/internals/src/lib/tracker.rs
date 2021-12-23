@@ -91,7 +91,6 @@ pub struct Tracker {
 }
 
 impl Tracker {
-    #[allow(unused)]
     pub fn new(directory: &Path) -> Result<Self> {
         std::fs::create_dir_all(directory)
             .with_context(|| format!("creating directory hierarchy '{}'", directory.display()))?;

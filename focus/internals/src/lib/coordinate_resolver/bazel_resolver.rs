@@ -12,7 +12,7 @@ use super::*;
 
 /// Resolves Bazel coordinates to paths
 pub struct BazelResolver {
-    #[allow(unused)]
+    #[allow(dead_code)]
     cache_root: PathBuf,
 
     mutex: Mutex<()>,

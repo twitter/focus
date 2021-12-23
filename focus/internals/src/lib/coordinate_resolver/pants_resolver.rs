@@ -12,7 +12,7 @@ use super::*;
 
 /// Resolves Pants coordinates to paths using the `filedeps` goal.
 pub struct PantsResolver {
-    #[allow(unused)]
+    #[allow(dead_code)]
     cache_root: PathBuf,
 
     mutex: Mutex<()>,
