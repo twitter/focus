@@ -39,7 +39,7 @@ fn find_committed_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     let output = git_helper::run_consuming_stdout(
         description,
         repo,
-        vec!["diff", "--name-only", revspec.as_str()],
+        &["diff", "--name-only", &revspec],
         app.clone(),
     )?;
     let changed_paths: Vec<&str> = output.lines().collect::<_>();
@@ -58,7 +58,7 @@ fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     let output = git_helper::run_consuming_stdout(
         "Finding uncommitted changes".to_owned(),
         repo,
-        vec!["status", "--porcelain", "--no-renames"],
+        &["status", "--porcelain", "--no-renames"],
         app,
     )?;
     let all_changes: Vec<&str> = output.lines().collect::<_>();

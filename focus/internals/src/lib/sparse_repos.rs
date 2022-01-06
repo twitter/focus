@@ -69,7 +69,7 @@ pub fn configure_sparse_sync_point(sparse_repo: &Path, app: Arc<App>) -> Result<
     let head_str = git_helper::run_consuming_stdout(
         "Reading the current revision to use as a sync point".to_owned(),
         &sparse_repo,
-        vec!["rev-parse", "HEAD"],
+        &["rev-parse", "HEAD"],
         app.clone(),
     )?;
 
@@ -125,7 +125,7 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
         run_consuming_stdout(
             format!("Creating {}", description),
             repo,
-            vec!["branch", ref_name, commit_id],
+            &["branch", ref_name, commit_id],
             cloned_app.clone(),
         )?;
 
@@ -133,10 +133,10 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
         run_consuming_stdout(
             format!("Creating remote ref for {}", description),
             repo,
-            vec![
-                String::from("update-ref"),
-                format!("refs/remotes/origin/{}", ref_name),
-                commit_id.to_owned(),
+            &[
+                "update-ref",
+                &format!("refs/remotes/origin/{}", ref_name),
+                commit_id,
             ],
             cloned_app.clone(),
         )?;
@@ -145,7 +145,7 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
         run_consuming_stdout(
             format!("Setting upstream remote for {}", description),
             repo,
-            vec!["branch", "--set-upstream-to=origin", ref_name],
+            &["branch", "--set-upstream-to=origin", ref_name],
             cloned_app.clone(),
         )?;
 
@@ -153,10 +153,10 @@ fn create_branch(repo: &Path, ref_name: &str, commit_id: &str, app: Arc<App>) ->
         run_consuming_stdout(
             format!("Setting upstream merge for {}", description),
             repo,
-            vec![
-                String::from("config"),
-                format!("branch.{}.merge", ref_name),
-                format!("refs/heads/{}", ref_name),
+            &[
+                "config",
+                &format!("branch.{}.merge", ref_name),
+                &format!("refs/heads/{}", ref_name),
             ],
             cloned_app.clone(),
         )?;
@@ -189,7 +189,7 @@ fn copy_user_relevant_refs_to_sparse_repo(
     let output = run_consuming_stdout(
         String::from("Retrieving the list of personal branches"),
         dense_repo,
-        vec![
+        &[
             "for-each-ref",
             "--format=%(refname) %(objectname)",
             "refs/heads/",
@@ -309,7 +309,7 @@ fn configure_sparse_repo_final(
     Ok(())
 }
 
-pub fn set_containing_layers(repo: &Path, layer_names: &Vec<String>) -> Result<LayerSet> {
+pub fn set_containing_layers(repo: &Path, layer_names: &[String]) -> Result<LayerSet> {
     let layer_sets = LayerSets::new(&repo);
     let rich_layer_set = RichLayerSet::new(
         layer_sets
@@ -365,11 +365,12 @@ pub fn create_sparse_clone(
     layer_set.extend(layer_backed_set.clone());
     layer_set.validate().context("Failed to merged layer set")?;
 
-    let mut coordinates = Vec::<String>::new();
-    for layer in layer_set.layers() {
-        let layer_coordinates = layer.coordinates().clone();
-        coordinates.extend(layer_coordinates);
-    }
+    let coordinates: Vec<String> = layer_set
+        .layers()
+        .iter()
+        .flat_map(|layer| layer.coordinates())
+        .cloned()
+        .collect();
 
     let cloned_app = app.clone();
     create_or_update_sparse_clone(

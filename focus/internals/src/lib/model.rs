@@ -66,7 +66,7 @@ impl Layer {
         &self.name
     }
 
-    pub fn coordinates(&self) -> &Vec<String> {
+    pub fn coordinates(&self) -> &[String] {
         &self.coordinates
     }
 }
@@ -112,7 +112,7 @@ impl LayerSet {
         Ok(())
     }
 
-    pub fn layers(&self) -> &Vec<Layer> {
+    pub fn layers(&self) -> &[Layer] {
         &self.layers
     }
 
@@ -382,7 +382,7 @@ impl LayerSets {
         Ok(layer)
     }
 
-    fn find_named_layers(names: &Vec<String>, set: &RichLayerSet) -> Result<Vec<Layer>> {
+    fn find_named_layers(names: &[String], set: &RichLayerSet) -> Result<Vec<Layer>> {
         let mut layers = Vec::<Layer>::new();
 
         for (index, name) in names.iter().enumerate() {

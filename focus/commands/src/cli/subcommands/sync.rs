@@ -36,7 +36,7 @@ fn find_dense_repo(app: Arc<App>, sparse_repo: &Path) -> Result<PathBuf> {
     let dense_repo = git_helper::run_consuming_stdout(
         "Reading dense repo URL".to_owned(),
         &sparse_repo,
-        vec!["remote", "get-url", "dense"],
+        &["remote", "get-url", "dense"],
         app.clone(),
     )
     .context("Failed reading the dense repo URL")

@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use git2::Repository;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
@@ -102,10 +102,10 @@ impl ScratchGitRepo {
         let mut qualified_origin = OsString::from("file://");
         qualified_origin.push(origin.as_os_str());
         Command::new("git")
-            .args(vec![
-                &OsString::from("clone"),
+            .args(&[
+                OsStr::new("clone"),
                 &qualified_origin,
-                &OsString::from(destination.as_os_str()),
+                destination.as_os_str(),
             ])
             .spawn()?
             .wait()

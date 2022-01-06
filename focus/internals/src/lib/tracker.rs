@@ -76,12 +76,12 @@ impl Snapshot {
         }
     }
 
-    pub fn repos(&self) -> &Vec<TrackedRepo> {
-        self.repos.borrow()
+    pub fn repos(&self) -> &[TrackedRepo] {
+        &self.repos
     }
 
     #[allow(dead_code)]
-    pub fn find_repo_by_id(&self, id: &Vec<u8>) -> Option<&TrackedRepo> {
+    pub fn find_repo_by_id(&self, id: &[u8]) -> Option<&TrackedRepo> {
         self.index_by_identifier
             .get(id)
             .and_then(|&index| self.repos.get(index))

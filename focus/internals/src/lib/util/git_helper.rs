@@ -64,8 +64,7 @@ pub fn read_config<P: AsRef<Path>>(
     app: Arc<App>,
 ) -> Result<Option<String>> {
     let description = format!("Reading Git config {}", key);
-    if let Ok(result) =
-        run_consuming_stdout(description, repo_path, vec!["config", key], app.clone())
+    if let Ok(result) = run_consuming_stdout(description, repo_path, &["config", key], app.clone())
     {
         return Ok(Some(result));
     }
@@ -112,7 +111,7 @@ pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
             run_consuming_stdout(
                 format!("Finding top level of repo in {}", path.display()),
                 path,
-                vec!["rev-parse", "--show-toplevel"],
+                &["rev-parse", "--show-toplevel"],
                 app,
             )
             .context("Finding the repo's top level failed")?,
@@ -129,7 +128,7 @@ pub fn get_current_revision(app: Arc<App>, repo: &Path) -> Result<String> {
     run_consuming_stdout(
         format!("Determining the current commit in repo {}", repo.display()),
         repo,
-        vec!["rev-parse", "HEAD"],
+        &["rev-parse", "HEAD"],
         app,
     )
 }
@@ -138,7 +137,7 @@ pub fn get_current_branch(app: Arc<App>, repo: &Path) -> Result<String> {
     run_consuming_stdout(
         format!("Determining the current branch in repo {}", repo.display()),
         repo,
-        vec!["branch", "--show-current"],
+        &["branch", "--show-current"],
         app,
     )
 }
@@ -261,7 +260,7 @@ impl RepoState {
         let origin_url = run_consuming_stdout(
             "Reading origin URL".to_owned(),
             repo_path,
-            vec!["remote", "get-url", "origin"],
+            &["remote", "get-url", "origin"],
             app.clone(),
         )
         .context("Failed to determine the origin URL")?;
@@ -269,7 +268,7 @@ impl RepoState {
         let commit_id = run_consuming_stdout(
             "Determining commit ID".to_owned(),
             repo_path,
-            vec!["rev-parse", "HEAD"],
+            &["rev-parse", "HEAD"],
             app.clone(),
         )
         .context("Failed to determine the commit ID")?;
