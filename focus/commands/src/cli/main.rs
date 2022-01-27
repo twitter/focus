@@ -190,6 +190,10 @@ struct FocusOpts {
     #[structopt(long, default_value = "0")]
     resolution_threads: usize,
 
+    /// Change to the provided directory before doing anything else.
+    #[structopt(short = "C", long = "work-dir")]
+    working_directory: Option<PathBuf>,
+
     #[structopt(subcommand)]
     cmd: Subcommand,
 }
@@ -479,6 +483,9 @@ fn setup_thread_pool(resolution_threads: usize) -> Result<()> {
 fn main() -> Result<()> {
     let started_at = Instant::now();
     let options = FocusOpts::from_args();
+    if let Some(working_directory) = &options.working_directory {
+        std::env::set_current_dir(working_directory).context("Switching working directory")?;
+    }
     setup_thread_pool(options.resolution_threads)?;
 
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
