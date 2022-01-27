@@ -208,8 +208,7 @@ impl UserInterfaceRenderer {
                 )
                 .unwrap(); // Line 3
 
-                let area_height = 10;
-                // let area_height = active_tasks.len().min(area_height as usize) as u16;
+                let area_height = 10u16;
                 let mut used_height = 0u16;
                 for task in active_tasks.iter().take(area_height as usize) {
                     used_height += 1;
@@ -222,8 +221,12 @@ impl UserInterfaceRenderer {
                     )
                     .unwrap();
                 }
-                for _ in 0..(area_height - used_height) + 1 {
-                    writeln!(stdout, "{}", termion::clear::CurrentLine).unwrap();
+                for _ in 0..(area_height
+                    .saturating_sub(used_height)
+                    .checked_add(1)
+                    .unwrap_or(0))
+                {
+                    write!(stdout, "{}\n", termion::clear::CurrentLine).unwrap();
                 }
                 used += area_height;
             }
@@ -244,7 +247,7 @@ impl UserInterfaceRenderer {
                 )
                 .unwrap(); // Line 3
 
-                let area_height = screen_height - used - 2;
+                let area_height = screen_height.saturating_sub(used).saturating_sub(2);
 
                 if let Ok(locked_logs) = ui_state.log_entries.lock() {
                     let mut line_budget = area_height;
