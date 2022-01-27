@@ -1,0 +1,4 @@
+{
+  "base": "git:merge-base(origin/main), arc:amended, arc:prompt",
+  "arc.feature.start.default": "origin/main"
+}
