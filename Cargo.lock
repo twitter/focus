@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "focus-commands"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "dirs",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "focus-internals"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "dirs",
