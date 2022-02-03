@@ -9,6 +9,7 @@ use focus_internals::{
     tracker::Tracker,
     util::{backed_up_file::BackedUpFile, git_helper, paths},
 };
+use git2::Repository;
 
 use std::{
     convert::TryFrom,
@@ -20,7 +21,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-use crate::subcommands::{adhoc, layer};
+use crate::subcommands::{adhoc, refs, layer};
 
 fn the_name_of_this_binary() -> String {
     std::env::args_os()
@@ -92,8 +93,19 @@ enum Subcommand {
         repo: PathBuf,
     },
 
+    /// Utility methods for listing and expiring outdated refs. Used to maintain a time windowed
+    /// repository.
+    Refs {
+        #[structopt(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+
+        args: Vec<String>
+    },
+
     UserInterfaceTest {},
 }
+
+
 
 #[derive(StructOpt, Debug)]
 struct RepoSubcommand {
@@ -176,6 +188,54 @@ struct AdhocSubcommand {
 }
 
 #[derive(StructOpt, Debug)]
+struct RefsSubcommand {
+    #[structopt(subcommand)]
+    verb: RefsOpts
+}
+
+#[derive(StructOpt, Debug)]
+enum RefsOpts {
+    /// Expires refs that are outside the window of "current refs"
+    Delete {
+        #[structopt(long, default_value = "2021-01-01")]
+        cutoff_date: String,
+
+        #[structopt(long)]
+        use_transaction: bool,
+
+        /// If true, then ensure the merge base falls after the cutoff date.
+        /// this avoids the problem of refs that refer to commits that are not
+        /// included in master
+        #[structopt(short = "m", long = "check-merge-base")]
+        check_merge_base: bool,
+    },
+
+    ListExpired {
+        #[structopt(long, default_value = "2021-01-01")]
+        cutoff_date: String,
+
+        /// If true, then ensure the merge base falls after the cutoff date.
+        /// this avoids the problem of refs that refer to commits that are not
+        /// included in master
+        #[structopt(short = "m", long = "check-merge-base")]
+        check_merge_base: bool,
+    },
+
+    /// Output a list of still current (I.e. non-expired) refs
+    ListCurrent {
+        #[structopt(long, default_value = "2021-01-01")]
+        cutoff_date: String,
+
+        /// If true, then ensure the merge base falls after the cutoff date.
+        /// this avoids the problem of refs that refer to commits that are not
+        /// included in master
+        #[structopt(short = "m", long = "check-merge-base")]
+        check_merge_base: bool,
+    },
+}
+
+
+#[derive(StructOpt, Debug)]
 #[structopt(about = "Focused Development Tools")]
 struct FocusOpts {
     /// Preserve the created sandbox directory for inspecting logs and other files.
@@ -197,6 +257,8 @@ struct FocusOpts {
     #[structopt(subcommand)]
     cmd: Subcommand,
 }
+
+
 
 fn ensure_directories_exist() -> Result<()> {
     Tracker::default()
@@ -317,6 +379,50 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             subcommands::sync::run(app, &sparse_repo)
         }
 
+        Subcommand::Refs { repo: repo_path, args } => {
+            // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
+            let args = {
+                let mut args = args;
+                args.insert(0, format!("{} refs", the_name_of_this_binary()));
+                args
+            };
+            let refs_subcommand = RefsSubcommand::from_iter(args.iter());
+            let repo = Repository::open(repo_path).context("opening the repo")?;
+
+            match refs_subcommand.verb {
+                RefsOpts::Delete {cutoff_date, use_transaction, check_merge_base} => {
+                    let cutoff = refs::parse_date(cutoff_date)?;
+                    app.ui().set_enabled(interactive);
+                    refs::expire_old_refs(&repo, cutoff, check_merge_base, use_transaction, app)
+                }
+
+                RefsOpts::ListExpired {
+                    cutoff_date,
+                    check_merge_base,
+                } => {
+                    let cutoff = refs::parse_date(cutoff_date)?;
+
+                    let expired = refs::partition_refs(&repo, cutoff, check_merge_base).context("partition_refs")?.expired;
+
+                    println!("{}", expired.join("\n"));
+
+                    Ok(())
+                }
+
+                RefsOpts::ListCurrent {
+                    cutoff_date,
+                    check_merge_base,
+                } => {
+                    let cutoff = refs::parse_date(cutoff_date)?;
+                    let names = refs::partition_refs(&repo, cutoff, check_merge_base).context("partition_refs")?.current;
+
+                    println!("{}", names.join("\n"));
+
+                    Ok(())
+                }
+            }
+        }
+
         Subcommand::Repo { args } => {
             // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
             let args = {
@@ -330,6 +436,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 RepoOpts::Repair {} => subcommands::repo::repair(app),
             }
         }
+
         Subcommand::DetectBuildGraphChanges { repo } => {
             let repo = expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
