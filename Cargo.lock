@@ -221,6 +221,7 @@ dependencies = [
  "lazy_static",
  "log",
  "nix",
+ "once_cell",
  "pretty-hex",
  "prost",
  "protobuf",
@@ -244,14 +245,17 @@ name = "focus-internals"
 version = "0.3.3"
 dependencies = [
  "anyhow",
+ "chrono",
  "dirs",
  "env_logger",
  "git2",
  "lazy_static",
  "log",
  "nix",
+ "once_cell",
  "prost",
  "rayon",
+ "regex",
  "serde",
  "serde_derive",
  "serde_json",
@@ -479,6 +483,12 @@ name = "numtoa"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8f8bdf33df195859076e54ab11ee78a1b208382d3a26ec40d142ffc1ecc49ef"
+
+[[package]]
+name = "once_cell"
+version = "1.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da32515d9f6e6e489d7bc9d84c71b060db7247dc035bbe44eac88cf87486d8d5"
 
 [[package]]
 name = "opaque-debug"

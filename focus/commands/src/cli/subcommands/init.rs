@@ -35,6 +35,7 @@ pub enum InitOpt {
     Progress,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     shallow_since: Option<NaiveDate>,
     branch_name: Option<String>,

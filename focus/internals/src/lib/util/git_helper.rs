@@ -1,18 +1,26 @@
 use std::{
     ffi::{OsStr, OsString},
-    fmt::Display,
+    fmt::{self, Display},
     path::PathBuf,
+    process::Stdio,
     sync::Arc,
 };
 
 use anyhow::{bail, Context, Result};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::path::Path;
 use std::process::Command;
 
 use crate::{
     app::App,
-    util::sandbox_command::{SandboxCommand, SandboxCommandOutput},
+    util::{
+        sandbox_command::{SandboxCommand, SandboxCommandOutput},
+        time::GitIdentTime,
+    },
 };
+
+use super::time::{FocusTime, GitTime};
 
 pub fn git_binary() -> OsString {
     OsString::from("git")
@@ -284,5 +292,158 @@ impl RepoState {
 impl Display for RepoState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}?@={}", self.origin_url, self.commit_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
+/// Represents a git "ident", which is a signature and timestamp.
+pub struct Ident {
+    name: String,
+    email: String,
+    timestamp: FocusTime,
+}
+
+impl Ident {
+    pub fn new<S: AsRef<str>>(name: S, email: S, time: FocusTime) -> Ident {
+        Ident {
+            name: name.as_ref().into(),
+            email: email.as_ref().into(),
+            timestamp: time,
+        }
+    }
+
+    pub fn with_time(&self, time: FocusTime) -> Self {
+        Self {
+            name: self.name.to_owned(),
+            email: self.email.to_owned(),
+            timestamp: time,
+        }
+    }
+
+    pub fn now<S: AsRef<str>>(name: S, email: S) -> Ident {
+        Self::new(name, email, FocusTime::now())
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn email(&self) -> &str {
+        &self.email
+    }
+    pub fn timestamp(&self) -> &FocusTime {
+        &self.timestamp
+    }
+
+    pub fn to_signature(&self) -> Result<git2::Signature<'static>> {
+        let git_time = GitTime::from(self.timestamp());
+        git2::Signature::new(&self.name, &self.email, &git_time.into_inner())
+            .context("failed to create signature")
+    }
+}
+
+impl fmt::Display for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} <{}> {}",
+            self.name,
+            self.email,
+            GitIdentTime::from(&self.timestamp),
+        )
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GitVersion {
+    major: u32,
+    minor: u32,
+    patch: u32,
+}
+
+static VERSION_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^git version ([0-9]+)\.([0-9]+)\.([0-9]+)").unwrap());
+
+impl GitVersion {
+    pub fn new(major: u32, minor: u32, patch: u32) -> Self {
+        GitVersion {
+            major,
+            minor,
+            patch,
+        }
+    }
+
+    pub fn parse<S: AsRef<str>>(s: S) -> Result<GitVersion> {
+        if let Some(caps) = VERSION_RE.captures(s.as_ref()) {
+            let major = caps[1].parse::<u32>()?;
+            let minor = caps[2].parse::<u32>()?;
+            let patch = caps[3].parse::<u32>()?;
+
+            Ok(GitVersion::new(major, minor, patch))
+        } else {
+            Err(anyhow::anyhow!(
+                "could not parse version from string: {:?}",
+                s.as_ref()
+            ))
+        }
+    }
+
+    pub fn current() -> Result<GitVersion> {
+        let out = Command::new(git_binary())
+            .arg("version")
+            .stderr(Stdio::inherit())
+            .output()?;
+
+        let str = String::from_utf8(out.stdout)?;
+        Self::parse(str)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+
+    #[test]
+    fn test_git_version_parse() -> Result<()> {
+        let v = GitVersion::parse("git version 2.32.5")?;
+
+        assert_eq!(GitVersion::new(2, 32, 5), v);
+
+        let v = GitVersion::parse("git version 2.32.5-extra-crap-over-here")?;
+        assert_eq!(GitVersion::new(2, 32, 5), v);
+
+        let err = GitVersion::parse("this is garbage");
+        assert!(err.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_git_version_current() -> Result<()> {
+        // just make sure this doesn't return an error
+        let _gv = GitVersion::current().unwrap();
+        Ok(())
+    }
+
+    static TIMESTAMP: &'static str = "2022-02-03T00:00:00-05:00";
+
+    #[test]
+    fn test_ident_to_signature() -> Result<()> {
+        let ident = Ident::new(
+            "Arthur Pewtey",
+            "apewtey@twitter.com",
+            FocusTime::parse_from_rfc3339(TIMESTAMP)?,
+        );
+
+        let epoch = 1643864400;
+
+        let sig = git2::Signature::new(
+            "Arthur Pewtey",
+            "apewtey@twitter.com",
+            &git2::Time::new(epoch, -5 * 60),
+        )?;
+
+        assert_eq!(ident.to_signature()?.to_string(), sig.to_string());
+        Ok(())
     }
 }
