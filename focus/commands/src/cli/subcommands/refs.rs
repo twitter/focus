@@ -5,95 +5,165 @@ use focus_internals::{
     util::{
         git_helper,
         sandbox_command::{SandboxCommand, SandboxCommandOutput},
+        time::FocusTime,
     },
 };
 use log::debug;
 
 use anyhow::{Context, Result};
-use chrono::{offset, Date, DateTime, FixedOffset, NaiveDate, NaiveDateTime, ParseError};
-use git2::{Commit, Oid, Repository, Time};
+use git2::Repository;
+use once_cell::sync::Lazy;
 
-static DATE_FORMAT: &str = "%Y-%m-%d";
+/// Vec of names that should never be expired via this process
+/// TODO: this should probably be in configuration rather than hardcoded here
+static SAFE_BRANCH_NAMES: Lazy<Vec<&'static str>> = Lazy::new(|| {
+    vec![
+        "refs/heads/main",
+        "refs/heads/master",
+        "refs/heads/repo.d/main",
+        "refs/heads/repo.d/master",
+    ]
+});
 
-pub fn parse_shallow_since_date(s: &str) -> Result<DateTime<FixedOffset>, ParseError> {
-    NaiveDate::parse_from_str(s, DATE_FORMAT)
-        .map(|nd| Date::from_utc(nd, offset::FixedOffset::east(0)).and_hms(0, 0, 0))
+mod partition {
+    use std::collections::HashSet;
+
+    use anyhow::{Context, Result};
+    use focus_internals::util::time::{FocusTime, GitTime};
+    use git2::{Commit, Oid, Repository};
+
+    use super::PartitionedRefNames;
+
+    #[derive(Debug, Clone)]
+    pub(super) struct RefInfo {
+        name: String,
+        author_time: FocusTime,
+        merge_base_auth_time: Option<FocusTime>,
+    }
+
+    impl RefInfo {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn author_time(&self) -> &FocusTime {
+            &self.author_time
+        }
+        fn merge_base_auth_time(&self) -> &Option<FocusTime> {
+            &self.merge_base_auth_time
+        }
+    }
+
+    fn head_commit(repo: &Repository) -> Result<Commit> {
+        repo.head()?.peel_to_commit().context("peeling HEAD commit")
+    }
+
+    fn safe_refs() -> HashSet<&'static str> {
+        let mut h = HashSet::new();
+        h.extend(super::SAFE_BRANCH_NAMES.clone().into_iter());
+        h
+    }
+
+    fn safe_branches_and_tags(repo: &Repository) -> Result<Vec<git2::Reference>> {
+        let safe_refs = safe_refs();
+
+        let unfiltered = repo
+            .references()
+            .context("opening repo.references")?
+            .into_iter()
+            .collect::<Result<Vec<git2::Reference>, git2::Error>>()?;
+
+        let filtered = unfiltered
+            .into_iter()
+            .filter(|r| (r.is_branch() || r.is_tag()))
+            .filter(|r| r.name().map(|n| !safe_refs.contains(n)).unwrap_or(true))
+            .collect();
+
+        Ok(filtered)
+    }
+
+    fn find_merge_base_commit(repo: &Repository, a: Oid, b: Oid) -> Result<Commit> {
+        let mb_oid = repo.merge_base(a, b).context("merge_base")?;
+        repo.find_commit(mb_oid)
+            .context("find_commit of merge base")
+    }
+
+    pub(super) fn collect_ref_info(repo: &Repository) -> Result<Vec<RefInfo>> {
+        let repo = repo;
+        let head = head_commit(repo)?;
+
+        let mut refs: Vec<RefInfo> = Vec::new();
+
+        for r in safe_branches_and_tags(repo)?.into_iter() {
+            let commit = r.peel_to_commit().context("peeling ref to commit")?;
+            let name = r.name().unwrap().to_string();
+            let author_time = FocusTime::from(GitTime::from(commit.author().when()));
+            let merge_base_auth_time = find_merge_base_commit(repo, head.id(), commit.id())
+                .map(|mbc| FocusTime::from(mbc.author().when()))
+                .ok();
+            refs.push(RefInfo {
+                name,
+                author_time,
+                merge_base_auth_time,
+            })
+        }
+
+        Ok(refs)
+    }
+
+    pub(super) fn partitioned_ref_names(
+        ref_infos: Vec<RefInfo>,
+        cutoff: FocusTime,
+        check_merge_base: bool,
+    ) -> Result<PartitionedRefNames> {
+        let (cur_info, expired_info): (Vec<RefInfo>, Vec<RefInfo>) =
+            ref_infos.into_iter().partition(|info| {
+                let auth_time = info.author_time();
+                if *auth_time < cutoff {
+                    false
+                } else if check_merge_base {
+                    match info.merge_base_auth_time() {
+                        Some(t) if *t < cutoff => false,
+                        None => true, // merge base not found, assume its current or an orphan branch
+                        _ => true,
+                    }
+                } else {
+                    true
+                }
+            });
+
+        Ok(PartitionedRefNames {
+            current: cur_info.iter().map(|i| i.name().to_owned()).collect(),
+            expired: expired_info.iter().map(|i| i.name().to_owned()).collect(),
+        })
+    }
 }
 
-fn git_time_to_date_time(t: Time) -> DateTime<FixedOffset> {
-    DateTime::from_utc(
-        NaiveDateTime::from_timestamp(t.seconds(), 0 /* nanos */),
-        FixedOffset::east(t.offset_minutes() * 60),
-    )
-}
-
-static MASTER_NAME: &str = "refs/heads/master";
-
-fn find_merge_base_commit(repo: &Repository, a: Oid, b: Oid) -> Result<Commit> {
-    let mb_oid = repo.merge_base(a, b).context("merge_base")?;
-    repo.find_commit(mb_oid)
-        .context("find_commit of merge base")
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct PartitionedRefNames {
-    pub current: Vec<String>,
-    pub expired: Vec<String>,
+    current: Vec<String>,
+    expired: Vec<String>,
 }
 
 impl PartitionedRefNames {
-    fn new() -> PartitionedRefNames {
-        PartitionedRefNames {
-            current: Vec::new(),
-            expired: Vec::new(),
-        }
-    }
-}
-
-pub fn partition_refs(
-    repo: &Repository,
-    cutoff: DateTime<FixedOffset>,
-    check_merge_base: bool,
-) -> Result<PartitionedRefNames> {
-    let refs = repo.references().context("opening repo.references")?;
-
-    let master_ref = repo
-        .find_reference(MASTER_NAME)
-        .context("finding master ref")?;
-    let master_commit = master_ref
-        .peel_to_commit()
-        .context("peel master to commit")?;
-
-    let mut partitioned = PartitionedRefNames::new();
-    for rref in refs {
-        let r = rref.context("unwrapping Reference")?;
-        if r.is_tag() || r.is_branch() {
-            let commit = r.peel_to_commit().context("peeling ref to commit")?;
-            let ref_name = r.name().unwrap().to_string();
-
-            let auth_time = git_time_to_date_time(commit.author().when());
-            if auth_time < cutoff {
-                partitioned.expired.push(ref_name);
-                continue;
-            }
-            // if the merge base of the ref with master is before the cutoff date, then don't
-            // consider it current. If the ref does not share a merge base with master, it's
-            // also not considered current
-            else if check_merge_base {
-                for mb_commit in find_merge_base_commit(&repo, master_commit.id(), commit.id()).ok()
-                {
-                    let mb_commit_time = git_time_to_date_time(mb_commit.author().when());
-                    if mb_commit_time < cutoff {
-                        partitioned.expired.push(ref_name.clone());
-                        continue;
-                    }
-                }
-            }
-            partitioned.current.push(ref_name);
-        }
+    /// Get a reference to the partitioned ref names's current.
+    pub fn current(&self) -> &[String] {
+        self.current.as_ref()
     }
 
-    Ok(partitioned)
+    /// Get a reference to the partitioned ref names's expired.
+    pub fn expired(&self) -> &[String] {
+        self.expired.as_ref()
+    }
+
+    /// convenience constructor, given a repo, the cutoff time, and the check_merge_base option,
+    /// create a PartitionedRefNames instance for the repo's references.
+    pub fn for_repo(repo: &Repository, cutoff: FocusTime, check_merge_base: bool) -> Result<Self> {
+        partition::partitioned_ref_names(
+            partition::collect_ref_info(repo)?,
+            cutoff,
+            check_merge_base,
+        )
+    }
 }
 
 /// Goes through 'names' and detects if there are duplicates that differ only by case.
@@ -111,8 +181,8 @@ fn delete_case_conflict_refs(repo: &Repository, names: Vec<String>) -> Result<Ve
             debug!("deleting case conflict ref name: {}", name);
             // this is a conflict so delete this ref here so we don't run into
             // a problem when we do the bulk deletion
-            let mut rf = repo.find_reference(&name).context("find conflicting ref")?;
-            rf.delete().context("deleting conflicting ref")?;
+            let mut rf = repo.find_reference(&name)?;
+            rf.delete()?;
         } else {
             ok_names.push(name);
         }
@@ -123,7 +193,7 @@ fn delete_case_conflict_refs(repo: &Repository, names: Vec<String>) -> Result<Ve
 
 pub fn expire_old_refs(
     repo: &Repository,
-    cutoff: DateTime<FixedOffset>,
+    cutoff: FocusTime,
     check_merge_base: bool,
     use_transaction: bool,
     app: Arc<App>,
@@ -135,9 +205,8 @@ pub fn expire_old_refs(
             sandbox.create_file(Some("update-refs"), None, None)?;
 
         let xs = {
-            let partitioned = partition_refs(&repo, cutoff, check_merge_base)
-                .context("collecting expired ref names")?;
-            delete_case_conflict_refs(&repo, partitioned.expired)?
+            let partitioned = PartitionedRefNames::for_repo(repo, cutoff, check_merge_base)?;
+            delete_case_conflict_refs(repo, partitioned.expired)?
         };
 
         let mut content: Vec<String> = xs
@@ -151,16 +220,14 @@ pub fn expire_old_refs(
             content.push("commit\x00".to_string());
         }
 
-        ref_file
-            .write_all(content.join("").as_bytes())
-            .context("writing content")?;
-        ref_file.sync_data().context("syncing data")?;
+        ref_file.write_all(content.join("").as_bytes())?;
+        ref_file.sync_data()?;
         ref_file_path
     };
 
     let ref_file = File::open(ref_file_path).context("re-opening the ref file")?;
     let (mut cmd, scmd) = SandboxCommand::new_with_handles(
-        "expire refs with update-ref".to_owned(),
+        "expire refs with update-ref",
         git_helper::git_binary(),
         Some(Stdio::from(ref_file)),
         None,
@@ -169,7 +236,7 @@ pub fn expire_old_refs(
     )?;
 
     scmd.ensure_success_or_log(
-        cmd.current_dir(repo.workdir().unwrap_or(repo.path()))
+        cmd.current_dir(repo.workdir().unwrap_or_else(|| repo.path()))
             .arg("update-ref")
             .arg("--stdin")
             .arg("-z"),
@@ -181,34 +248,185 @@ pub fn expire_old_refs(
 
 #[cfg(test)]
 mod tests {
-    use crate::{refs::parse_shallow_since_date, subcommands::refs::git_time_to_date_time};
+    use std::fs;
+
     use anyhow::Result;
-    use chrono::{DateTime, FixedOffset};
+    use focus_internals::util::{git_helper::Ident, time::FocusTime};
+
+    use crate::subcommands::testing::refs::Fixture;
+
+    static OLD_MERGE_BASE_BRANCH_NAME: &'static str = "refs/heads/oldmergebase";
+    static OLD_TIP_BRANCH_NAME: &'static str = "refs/heads/oldtip";
+    static REFS_HEADS_MAIN: &'static str = "refs/heads/main";
+    static FIRST_COMMIT_TIMESTAMP: &'static str = "2016-02-03T00:00:00-05:00";
+    static REFS_HEADS_REPOD_MASTER: &'static str = "refs/heads/repo.d/master";
+
+    // we want a repo that has commits like:
+    //
+    //      F            << oldtip
+    //    /
+    //   A --> B --> C   << main
+    //    \
+    //     D --> E       << oldmergebase
+    //
+    // A and F have timestamps far in the past, every thing else has a "now" timestamp
+    fn setup_ref_repo(fix: &mut Fixture, ident: &Ident) -> Result<()> {
+        let sig = ident.to_signature()?;
+
+        let oid_a = fix.write_add_and_commit(
+            "f0",
+            "f0",
+            "initial commit",
+            Some(&sig),
+            Some(&sig),
+        )?;
+
+        fix.checkout_b(OLD_TIP_BRANCH_NAME, oid_a)?;
+
+        fix.write_add_and_commit("ffs", "ffs", "ffs", Some(&sig), Some(&sig))?;
+
+        fix.checkout(REFS_HEADS_MAIN, None)?;
+
+        let i2 = ident.with_time(FocusTime::now());
+        let i2_sig = i2.to_signature()?;
+
+        let write_and_commit = |f: &mut Fixture, s: &str| -> Result<git2::Oid> {
+            f.write_add_and_commit(s, s, s, Some(&i2_sig), Some(&i2_sig))
+        };
+
+        let _oid_b = write_and_commit(fix, "f1")?;
+        let _oid_c = write_and_commit(fix, "f2")?;
+
+        fix.checkout_b(OLD_MERGE_BASE_BRANCH_NAME, oid_a)?;
+
+        let _oid_d = write_and_commit(fix, "f3")?;
+        let _oid_e = write_and_commit(fix, "f4")?;
+
+        fix.checkout(REFS_HEADS_MAIN, None)?;
+
+        Ok(())
+    }
+
+    fn old_ident() -> Ident {
+        Ident::new(
+            "Carter Pewterschmidt",
+            "cpewterschmidt@twitter.com",
+            FocusTime::parse_from_rfc3339(FIRST_COMMIT_TIMESTAMP).expect("failed to parse date"),
+        )
+    }
 
     #[test]
-    fn test_parse_date() -> Result<()> {
-        let data: Vec<(String, DateTime<FixedOffset>)> = vec![
-            ("2022-01-02", "2022-01-02T00:00:00-00:00"),
-            ("2022-03-05", "2022-03-05T00:00:00-00:00"),
-        ]
-        .iter()
-        .map(|(a, b)| (a.to_string(), DateTime::parse_from_rfc3339(b).unwrap()))
-        .collect();
+    fn test_expire_based_on_merge_base() -> Result<()> {
+        let mut fix = Fixture::new()?;
+        let ident = old_ident();
 
-        for (a, b) in data {
-            assert_eq!(parse_shallow_since_date(a.as_str())?, b);
+        {
+            setup_ref_repo(&mut fix, &ident)?;
         }
+
+        let repo = fix.repo();
+
+        let cutoff = FocusTime::now() - chrono::Duration::days(90);
+
+        assert!(repo.find_reference(OLD_MERGE_BASE_BRANCH_NAME).is_ok());
+
+        super::expire_old_refs(repo, cutoff, true, false, fix.app())?;
+
+        assert!(repo.find_reference(OLD_MERGE_BASE_BRANCH_NAME).is_err());
+        assert!(repo.find_reference(OLD_TIP_BRANCH_NAME).is_err());
+        assert!(repo.find_reference(REFS_HEADS_MAIN).is_ok());
 
         Ok(())
     }
 
     #[test]
-    fn test_git_time_to_date_time() -> Result<()> {
-        let dt = DateTime::parse_from_rfc3339("2022-02-07T12:34:56-05:00")?;
-        let expected_unix_time: i64 = 1644255296;
-        let git_time = git2::Time::new(expected_unix_time, -(5 * 60));
+    fn test_expire_ignoring_merge_base() -> Result<()> {
+        let mut fix = Fixture::new()?;
+        let ident = old_ident();
+        {
+            setup_ref_repo(&mut fix, &ident)?;
+        }
 
-        assert_eq!(git_time_to_date_time(git_time), dt);
+        let repo = fix.repo();
+        let cutoff = FocusTime::now() - chrono::Duration::days(90);
+
+        super::expire_old_refs(repo, cutoff, false, false, fix.app())?;
+
+        assert!(repo.find_reference(OLD_TIP_BRANCH_NAME).is_err());
+        assert!(repo.find_reference(OLD_MERGE_BASE_BRANCH_NAME).is_ok());
+        assert!(repo.find_reference(REFS_HEADS_MAIN).is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_expire_leaves_repod_master_untouched() -> Result<()> {
+        let mut fix = Fixture::new()?;
+        let ident = old_ident();
+        {
+            setup_ref_repo(&mut fix, &ident)?;
+        }
+
+        {
+            // set head to unborn branch
+            let repo = fix.repo();
+            repo.set_head("refs/heads/repo.d/master")?;
+
+            // cleanup existing files
+            let workdir = repo.workdir().unwrap().to_owned();
+            for res in fs::read_dir(workdir)? {
+                let entry = res?;
+                if entry.file_name() == ".git" {
+                    continue;
+                }
+                let meta = entry.metadata()?;
+                if meta.is_dir() {
+                    fs::remove_dir_all(entry.path())?;
+                } else {
+                    fs::remove_file(entry.path())?;
+                }
+            }
+        }
+
+        let cutoff = FocusTime::now() - chrono::Duration::days(90);
+
+        // create a new commit
+        let oid = {
+            let sig = ident.to_signature()?;
+            fix.write_add_and_commit(
+                "stuff.sh",
+                "this is stuff",
+                "stuff for repo.d",
+                Some(&sig),
+                Some(&sig),
+            )
+        }?;
+
+        {
+            let repo = fix.repo();
+
+            let repod_commit = repo.find_commit(oid)?;
+
+            // make sure this commit is older than the cutoff so we know we're actually
+            // testing the right thing.
+            assert!(FocusTime::from(repod_commit.author().when()) < cutoff);
+
+            // create a ref with the same name that HEAD points to, making it a "born" branch
+            repo.reference(REFS_HEADS_REPOD_MASTER, oid, true, "")?;
+        }
+
+        // switch head back to main
+        fix.checkout(REFS_HEADS_MAIN, Some(git2::ResetType::Hard))?;
+
+        {
+            let repo = fix.repo();
+            super::expire_old_refs(repo, cutoff, false, false, fix.app())?;
+
+            assert!(repo.find_reference(OLD_TIP_BRANCH_NAME).is_err());
+            assert!(repo.find_reference(OLD_MERGE_BASE_BRANCH_NAME).is_ok());
+            assert!(repo.find_reference(REFS_HEADS_MAIN).is_ok());
+            assert!(repo.find_reference(REFS_HEADS_REPOD_MASTER).is_ok());
+        }
 
         Ok(())
     }

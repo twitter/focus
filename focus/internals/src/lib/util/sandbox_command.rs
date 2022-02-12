@@ -49,27 +49,34 @@ pub enum SandboxCommandOutput {
 }
 
 impl SandboxCommand {
-    pub fn new<S: AsRef<OsStr>>(
-        description: String,
-        program: S,
+    pub fn new<S: AsRef<str>, O: AsRef<OsStr>>(
+        description: S,
+        program: O,
         app: Arc<App>,
     ) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
-        let sandbox_command = Self::with_command(description, &mut command, app)?;
+        let sandbox_command =
+            Self::with_command(description.as_ref().to_owned(), &mut command, app)?;
         Ok((command, sandbox_command))
     }
 
-    pub fn new_with_handles<S: AsRef<OsStr>>(
-        description: String,
-        program: S,
+    pub fn new_with_handles<S: AsRef<str>, O: AsRef<OsStr>>(
+        description: S,
+        program: O,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
         stderr: Option<&Path>,
         app: Arc<App>,
     ) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
-        let sandbox_command =
-            Self::with_command_and_handles(description, &mut command, stdin, stdout, stderr, app)?;
+        let sandbox_command = Self::with_command_and_handles(
+            description.as_ref().to_owned(),
+            &mut command,
+            stdin,
+            stdout,
+            stderr,
+            app,
+        )?;
         Ok((command, sandbox_command))
     }
 

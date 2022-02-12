@@ -18,7 +18,7 @@ use focus_internals::{
     coordinate::Coordinate,
     model::LayerSets,
     tracker::Tracker,
-    util::{backed_up_file::BackedUpFile, git_helper, paths},
+    util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
 };
 use subcommands::init::InitOpt;
 
@@ -440,12 +440,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let repo = Repository::open(repo_path).context("opening the repo")?;
 
             match refs_subcommand.verb {
-                RefsOpts::Delete {
-                    cutoff_date,
-                    use_transaction,
-                    check_merge_base,
-                } => {
-                    let cutoff = refs::parse_shallow_since_date(cutoff_date.as_str())?;
+                RefsOpts::Delete {cutoff_date, use_transaction, check_merge_base} => {
+                    let cutoff = FocusTime::parse_date(cutoff_date)?;
                     app.ui().set_enabled(interactive);
                     refs::expire_old_refs(&repo, cutoff, check_merge_base, use_transaction, app)
                 }
@@ -454,11 +450,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     cutoff_date,
                     check_merge_base,
                 } => {
-                    let cutoff = refs::parse_shallow_since_date(cutoff_date.as_str())?;
-
-                    let expired = refs::partition_refs(&repo, cutoff, check_merge_base)
-                        .context("partition_refs")?
-                        .expired;
+                    let cutoff = FocusTime::parse_date(cutoff_date)?;
+                    let part_refs = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
+                    let expired = part_refs.expired();
 
                     println!("{}", expired.join("\n"));
 
@@ -469,12 +463,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     cutoff_date,
                     check_merge_base,
                 } => {
-                    let cutoff = refs::parse_shallow_since_date(cutoff_date.as_str())?;
-                    let names = refs::partition_refs(&repo, cutoff, check_merge_base)
-                        .context("partition_refs")?
-                        .current;
+                    let cutoff = FocusTime::parse_date(cutoff_date)?;
+                    let part_refs = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
+                    let current = part_refs.current();
 
-                    println!("{}", names.join("\n"));
+                    println!("{}", current.join("\n"));
 
                     Ok(())
                 }
