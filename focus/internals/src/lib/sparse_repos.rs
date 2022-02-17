@@ -253,7 +253,13 @@ fn configure_sparse_repo_final(
         .join("origin")
         .join("state.bin.lock");
 
-    let paths_to_copy = vec!["config", "hooks", "hooks_multi", "objects/journals", "repo.d"];
+    let paths_to_copy = vec![
+        "config",
+        "hooks",
+        "hooks_multi",
+        "objects/journals",
+        "repo.d",
+    ];
 
     for name in paths_to_copy {
         let app = app.clone();
