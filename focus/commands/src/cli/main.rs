@@ -1,16 +1,3 @@
-mod subcommands;
-
-use anyhow::{bail, Context, Result};
-use env_logger::{self, Env};
-use focus_internals::{
-    app::App,
-    coordinate::Coordinate,
-    model::LayerSets,
-    tracker::Tracker,
-    util::{backed_up_file::BackedUpFile, git_helper, paths},
-};
-use git2::Repository;
-
 use std::{
     convert::TryFrom,
     env,
@@ -19,9 +6,25 @@ use std::{
     sync::Arc,
     time::Instant,
 };
+
+use anyhow::{bail, Context, Result};
+use chrono::NaiveDate;
+use env_logger::{self, Env};
+use git2::Repository;
 use structopt::StructOpt;
 
-use crate::subcommands::{adhoc, refs, layer};
+use focus_internals::{
+    app::App,
+    coordinate::Coordinate,
+    model::LayerSets,
+    tracker::Tracker,
+    util::{backed_up_file::BackedUpFile, git_helper, paths},
+};
+use subcommands::init::InitOpt;
+
+use crate::subcommands::{adhoc, init, layer, refs};
+
+mod subcommands;
 
 fn the_name_of_this_binary() -> String {
     std::env::args_os()
@@ -99,13 +102,60 @@ enum Subcommand {
         #[structopt(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        args: Vec<String>
+        args: Vec<String>,
+    },
+
+    /// Set up an initial clone of the repo from the remote
+    Init {
+        /// By default we take 90 days of history, pass a date with this option
+        /// if you want a different amount of history
+        #[structopt(long, parse(try_from_str = init::parse_shallow_since_date))]
+        shallow_since: Option<NaiveDate>,
+
+        /// This command will only ever clone a single ref, by default this is
+        /// "master". If you wish to clone a different branch, then use this option
+        #[structopt(long, default_value = "master")]
+        branch_name: String,
+
+        #[structopt(long)]
+        no_checkout: bool,
+
+        /// The default is to pass --no-tags to clone, this option, if given,
+        /// will cause git to do its normal default tag following behavior
+        #[structopt(long)]
+        follow_tags: bool,
+
+        /// If not given, we use --filter=blob:none. To use a different filter
+        /// argument, use this option. To disable filtering, use --no-filter.
+        #[structopt(long, default_value = "blob:none")]
+        filter: String,
+
+        /// Do not pass a filter flag to git-clone. If both --no-filter and --filter
+        /// options are given, --no-filter wins
+        #[structopt(long)]
+        no_filter: bool,
+
+        #[structopt(long)]
+        bare: bool,
+
+        #[structopt(long)]
+        sparse: bool,
+
+        #[structopt(long)]
+        progress: bool,
+
+        #[structopt(long)]
+        push_url: Option<String>,
+
+        #[structopt(long, default_value=init::SOURCE_RO_URL)]
+        fetch_url: String,
+
+        #[structopt()]
+        target_path: String,
     },
 
     UserInterfaceTest {},
 }
-
-
 
 #[derive(StructOpt, Debug)]
 struct RepoSubcommand {
@@ -190,7 +240,7 @@ struct AdhocSubcommand {
 #[derive(StructOpt, Debug)]
 struct RefsSubcommand {
     #[structopt(subcommand)]
-    verb: RefsOpts
+    verb: RefsOpts,
 }
 
 #[derive(StructOpt, Debug)]
@@ -234,7 +284,6 @@ enum RefsOpts {
     },
 }
 
-
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Focused Development Tools")]
 struct FocusOpts {
@@ -257,8 +306,6 @@ struct FocusOpts {
     #[structopt(subcommand)]
     cmd: Subcommand,
 }
-
-
 
 fn ensure_directories_exist() -> Result<()> {
     Tracker::default()
@@ -379,7 +426,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             subcommands::sync::run(app, &sparse_repo)
         }
 
-        Subcommand::Refs { repo: repo_path, args } => {
+        Subcommand::Refs {
+            repo: repo_path,
+            args,
+        } => {
             // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
             let args = {
                 let mut args = args;
@@ -390,8 +440,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let repo = Repository::open(repo_path).context("opening the repo")?;
 
             match refs_subcommand.verb {
-                RefsOpts::Delete {cutoff_date, use_transaction, check_merge_base} => {
-                    let cutoff = refs::parse_date(cutoff_date)?;
+                RefsOpts::Delete {
+                    cutoff_date,
+                    use_transaction,
+                    check_merge_base,
+                } => {
+                    let cutoff = refs::parse_shallow_since_date(cutoff_date.as_str())?;
                     app.ui().set_enabled(interactive);
                     refs::expire_old_refs(&repo, cutoff, check_merge_base, use_transaction, app)
                 }
@@ -400,9 +454,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     cutoff_date,
                     check_merge_base,
                 } => {
-                    let cutoff = refs::parse_date(cutoff_date)?;
+                    let cutoff = refs::parse_shallow_since_date(cutoff_date.as_str())?;
 
-                    let expired = refs::partition_refs(&repo, cutoff, check_merge_base).context("partition_refs")?.expired;
+                    let expired = refs::partition_refs(&repo, cutoff, check_merge_base)
+                        .context("partition_refs")?
+                        .expired;
 
                     println!("{}", expired.join("\n"));
 
@@ -413,8 +469,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     cutoff_date,
                     check_merge_base,
                 } => {
-                    let cutoff = refs::parse_date(cutoff_date)?;
-                    let names = refs::partition_refs(&repo, cutoff, check_merge_base).context("partition_refs")?.current;
+                    let cutoff = refs::parse_shallow_since_date(cutoff_date.as_str())?;
+                    let names = refs::partition_refs(&repo, cutoff, check_merge_base)
+                        .context("partition_refs")?
+                        .current;
 
                     println!("{}", names.join("\n"));
 
@@ -570,6 +628,63 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             if let Some(backup) = adhoc_layer_set_backup {
                 backup.set_restore(false);
             }
+
+            Ok(())
+        }
+
+        Subcommand::Init {
+            shallow_since,
+            branch_name,
+            no_checkout,
+            follow_tags,
+            filter,
+            no_filter,
+            bare,
+            sparse,
+            progress,
+            fetch_url,
+            push_url,
+            target_path,
+        } => {
+            let ui = app.ui();
+            ui.status("Init repo");
+
+            let expanded =
+                expand_tilde(target_path).context("expanding tilde on target_path argument")?;
+
+            let target = expanded.as_path();
+
+            let mut init_opts: Vec<InitOpt> = Vec::new();
+
+            let mut add_if_true = |n: bool, opt: InitOpt| {
+                if n {
+                    init_opts.push(opt)
+                };
+            };
+
+            add_if_true(no_checkout, InitOpt::NoCheckout);
+            add_if_true(bare, InitOpt::Bare);
+            add_if_true(sparse, InitOpt::Sparse);
+            add_if_true(follow_tags, InitOpt::FollowTags);
+            add_if_true(progress, InitOpt::Progress);
+
+            ui.set_enabled(interactive);
+
+            ui.log(
+                "Init",
+                format!("setting up a copy of the repo in {:?}", target),
+            );
+
+            init::run(
+                shallow_since,
+                Some(branch_name),
+                if no_filter { None } else { Some(filter) },
+                fetch_url,
+                push_url,
+                target.to_owned(),
+                init_opts,
+                app,
+            )?;
 
             Ok(())
         }

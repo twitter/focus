@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write, process::Stdio, sync::Arc, collections::HashSet};
+use std::{collections::HashSet, fs::File, io::Write, process::Stdio, sync::Arc};
 
 use focus_internals::{
     app::App,
@@ -15,12 +15,9 @@ use git2::{Commit, Oid, Repository, Time};
 
 static DATE_FORMAT: &str = "%Y-%m-%d";
 
-pub fn parse_date(s: String) -> Result<DateTime<FixedOffset>, ParseError> {
-    NaiveDate::parse_from_str(s.as_str(), DATE_FORMAT)
-        .map(|nd| {
-            Date::from_utc(nd, offset::FixedOffset::east(0))
-                .and_hms(0, 0, 0)
-        })
+pub fn parse_shallow_since_date(s: &str) -> Result<DateTime<FixedOffset>, ParseError> {
+    NaiveDate::parse_from_str(s, DATE_FORMAT)
+        .map(|nd| Date::from_utc(nd, offset::FixedOffset::east(0)).and_hms(0, 0, 0))
 }
 
 fn git_time_to_date_time(t: Time) -> DateTime<FixedOffset> {
@@ -29,7 +26,6 @@ fn git_time_to_date_time(t: Time) -> DateTime<FixedOffset> {
         FixedOffset::east(t.offset_minutes() * 60),
     )
 }
-
 
 static MASTER_NAME: &str = "refs/heads/master";
 
@@ -47,10 +43,12 @@ pub struct PartitionedRefNames {
 
 impl PartitionedRefNames {
     fn new() -> PartitionedRefNames {
-        PartitionedRefNames { current: Vec::new(), expired: Vec::new() }
+        PartitionedRefNames {
+            current: Vec::new(),
+            expired: Vec::new(),
+        }
     }
 }
-
 
 pub fn partition_refs(
     repo: &Repository,
@@ -76,7 +74,7 @@ pub fn partition_refs(
             let auth_time = git_time_to_date_time(commit.author().when());
             if auth_time < cutoff {
                 partitioned.expired.push(ref_name);
-                continue
+                continue;
             }
             // if the merge base of the ref with master is before the cutoff date, then don't
             // consider it current. If the ref does not share a merge base with master, it's
@@ -133,18 +131,18 @@ pub fn expire_old_refs(
     let sandbox = app.sandbox();
 
     let ref_file_path = {
-        let (mut ref_file, ref_file_path) = sandbox.create_file(Some("update-refs"), None)?;
+        let (mut ref_file, ref_file_path, _) =
+            sandbox.create_file(Some("update-refs"), None, None)?;
 
         let xs = {
-            let partitioned = partition_refs(&repo, cutoff, check_merge_base).context("collecting expired ref names")?;
+            let partitioned = partition_refs(&repo, cutoff, check_merge_base)
+                .context("collecting expired ref names")?;
             delete_case_conflict_refs(&repo, partitioned.expired)?
         };
 
         let mut content: Vec<String> = xs
             .iter()
-            .map(|ref_name| {
-                format!("delete {}\x00\x00", ref_name)
-            })
+            .map(|ref_name| format!("delete {}\x00\x00", ref_name))
             .collect();
 
         if use_transaction {
@@ -183,21 +181,22 @@ pub fn expire_old_refs(
 
 #[cfg(test)]
 mod tests {
+    use crate::{refs::parse_shallow_since_date, subcommands::refs::git_time_to_date_time};
     use anyhow::Result;
-    use chrono::{FixedOffset, DateTime};
-    use crate::{refs::parse_date, subcommands::refs::git_time_to_date_time};
+    use chrono::{DateTime, FixedOffset};
 
     #[test]
     fn test_parse_date() -> Result<()> {
         let data: Vec<(String, DateTime<FixedOffset>)> = vec![
             ("2022-01-02", "2022-01-02T00:00:00-00:00"),
             ("2022-03-05", "2022-03-05T00:00:00-00:00"),
-        ].iter()
+        ]
+        .iter()
         .map(|(a, b)| (a.to_string(), DateTime::parse_from_rfc3339(b).unwrap()))
         .collect();
 
         for (a, b) in data {
-            assert_eq!(parse_date(a)?, b);
+            assert_eq!(parse_shallow_since_date(a.as_str())?, b);
         }
 
         Ok(())

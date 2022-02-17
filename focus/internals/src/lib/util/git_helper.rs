@@ -18,8 +18,11 @@ pub fn git_binary() -> OsString {
     OsString::from("git")
 }
 
-pub fn git_command(description: String, app: Arc<App>) -> Result<(Command, SandboxCommand)> {
-    SandboxCommand::new(description, git_binary(), app)
+pub fn git_command<S: AsRef<str>>(
+    description: S,
+    app: Arc<App>,
+) -> Result<(Command, SandboxCommand)> {
+    SandboxCommand::new(description.as_ref().to_owned(), git_binary(), app)
 }
 
 pub fn remote_add<P: AsRef<Path>>(

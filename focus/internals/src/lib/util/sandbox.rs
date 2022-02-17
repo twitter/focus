@@ -50,11 +50,13 @@ impl Sandbox {
         &self,
         prefix: Option<&str>,
         extension: Option<&str>,
-    ) -> Result<(File, PathBuf)> {
+        serial: Option<usize>,
+    ) -> Result<(File, PathBuf, usize)> {
         let parent = self.path.to_owned();
         let mut path = PathBuf::new();
-        let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
-        let name = format!("{}-{:x}", prefix.unwrap_or("unknown"), serial);
+        let serial: usize =
+            serial.unwrap_or_else(|| self.serial_sequence.fetch_add(1, Ordering::SeqCst));
+        let name = format!("{}-{:09}", prefix.unwrap_or("unknown"), serial);
         path.set_file_name(name);
         if let Some(extension) = extension {
             path.set_extension(extension);
@@ -62,13 +64,13 @@ impl Sandbox {
         let qualified_path = parent.join(path);
         let file = File::create(&qualified_path.as_path()).context("creating a temporary file")?;
 
-        Ok((file, qualified_path))
+        Ok((file, qualified_path, serial))
     }
 
     pub fn create_subdirectory(&self, prefix: &str) -> Result<PathBuf> {
         let parent = self.path.to_owned();
         let serial: usize = self.serial_sequence.fetch_add(1, Ordering::SeqCst);
-        let name = format!("{}-{:x}", prefix, serial);
+        let name = format!("{}-{:09}", prefix, serial);
         let qualified_path = parent.join(name);
         std::fs::create_dir(qualified_path.as_path())
             .context("creating sandbox subdirectory failed")?;
@@ -131,25 +133,37 @@ mod tests {
     #[test]
     fn file_naming() -> Result<()> {
         let sandbox = Sandbox::new(true)?;
-        match sandbox.create_file(Some("hello"), Some("txt")) {
-            Ok((_, path)) => {
-                let s = format!("hello-{:x}.txt", 0 as usize);
+        match sandbox.create_file(Some("hello"), Some("txt"), None) {
+            Ok((_, path, ser)) => {
+                assert_eq!(ser, 0);
+                let s = format!("hello-{:09}.txt", ser);
                 let expected = OsStr::new(&s);
                 assert_eq!(&path.file_name().unwrap(), &expected);
             }
             _ => bail!("expected a file"),
         }
-        match sandbox.create_file(None, Some("txt")) {
-            Ok((_, path)) => {
-                let s = format!("unknown-{:x}.txt", 1 as usize);
+        match sandbox.create_file(None, Some("txt"), None) {
+            Ok((_, path, ser)) => {
+                assert_eq!(ser, 1);
+                let s = format!("unknown-{:09}.txt", ser);
                 let expected = OsStr::new(&s);
                 assert_eq!(&path.file_name().unwrap(), &expected);
             }
             _ => bail!("expected a file"),
         }
-        match sandbox.create_file(Some("adieu"), None) {
-            Ok((_, path)) => {
-                let s = format!("adieu-{:x}", 2 as usize);
+        match sandbox.create_file(Some("adieu"), None, None) {
+            Ok((_, path, ser)) => {
+                assert_eq!(ser, 2);
+                let s = format!("adieu-{:09}", ser);
+                let expected = OsStr::new(&s);
+                assert_eq!(&path.file_name().unwrap(), &expected);
+            }
+            _ => bail!("expected a file"),
+        }
+        match sandbox.create_file(Some("adieu"), Some("too"), Some(2 as usize)) {
+            Ok((_, path, ser)) => {
+                assert_eq!(ser, 2);
+                let s = format!("adieu-{:09}.too", ser);
                 let expected = OsStr::new(&s);
                 assert_eq!(&path.file_name().unwrap(), &expected);
             }

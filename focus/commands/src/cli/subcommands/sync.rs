@@ -106,8 +106,9 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
         bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
     }
 
-    let (sparse_profile_output_file, sparse_profile_output_path) =
-        app.sandbox().create_file(Some("sparse-profile"), None)?;
+    let (sparse_profile_output_file, sparse_profile_output_path, _) =
+        app.sandbox()
+            .create_file(Some("sparse-profile"), None, None)?;
     drop(sparse_profile_output_file);
 
     let sparse_checkout_backup_path = {

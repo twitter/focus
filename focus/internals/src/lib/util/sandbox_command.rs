@@ -3,14 +3,18 @@ use anyhow::{bail, Context, Result};
 use std::{
     ffi::OsStr,
     fs::File,
-    io::BufReader,
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc,
+    },
+    time::Duration,
 };
 
 fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
-    use std::io::{self, BufRead};
+    use std::io;
 
     let file = File::open(file)?;
     let lines = io::BufReader::new(file).lines();
@@ -81,32 +85,49 @@ impl SandboxCommand {
         stderr: Option<&Path>,
         app: Arc<App>,
     ) -> Result<Self> {
-        let cloned_app = app;
-        let sandbox = cloned_app.sandbox();
+        use std::io::Write;
+        let sandbox = app.sandbox();
+
+        // Write the description and get the generated serial to name all the files the same.
+        let serial = {
+            let (mut description_file, _, serial) = sandbox
+                .create_file(Some("sandboxed_command"), Some("script"), None)
+                .context("Failed creating description file")?;
+            writeln!(description_file, "# {}", description)?;
+            write!(
+                description_file,
+                "{}",
+                command.get_program().to_string_lossy()
+            )?;
+            for arg in command.get_args() {
+                write!(description_file, "{}", arg.to_string_lossy())?;
+            }
+            writeln!(description_file, "")?;
+            serial
+        };
+
         let output_file = |extension: &str| -> Result<(Stdio, PathBuf)> {
-            let (file, path) = sandbox.create_file(Some("sandboxed_command"), Some(extension))?;
-            let mut description_path = path.clone();
-            description_path.set_extension("script");
-            std::fs::write(&description_path, format!("{:?}", &command).as_bytes())
-                .context("writing script description")?;
+            let (file, path, _) =
+                sandbox.create_file(Some("sandboxed_command"), Some(extension), Some(serial))?;
             Ok((Stdio::from(file), path))
         };
+
         let stdin = stdin.unwrap_or_else(Stdio::null);
 
         let (stdout, stdout_path) = match stdout {
             Some(path) => (Stdio::from(File::open(&path)?), path.to_owned()),
-            None => output_file("stdio").context("preparing stdout")?,
+            None => output_file("stdout").context("Failed preparing stdout")?,
         };
         let (stderr, stderr_path) = match stderr {
             Some(path) => (Stdio::from(File::open(&path)?), path.to_owned()),
-            None => output_file("stderr").context("preparing stderr")?,
+            None => output_file("stderr").context("Failed preparing stderr")?,
         };
 
         command.stdin(stdin).stdout(stdout).stderr(stderr);
 
-        let cloned_app_for_progress_reporter = cloned_app.clone();
+        let cloned_app_for_progress_reporter = app.clone();
         Ok(Self {
-            app: cloned_app,
+            app: app,
             progress_reporter: ProgressReporter::new(
                 cloned_app_for_progress_reporter,
                 description,
@@ -151,7 +172,7 @@ impl SandboxCommand {
 
         for (title, path) in items {
             exhibit_file(self.app.clone(), path, title.as_str())
-                .with_context(|| format!("exhibiting {}", title))?
+                .with_context(|| format!("Exhibiting {}", title))?
         }
 
         Ok(())
@@ -193,18 +214,81 @@ impl SandboxCommand {
         description: &str,
     ) -> Result<ExitStatus> {
         log::debug!("Starting {:?} ({})", cmd, description);
-        let status = cmd
-            .status()
-            .with_context(|| format!("launching command {}", description))?;
+        let mut launch = cmd
+            .spawn()
+            .with_context(|| format!("Failed to spawn command {}", description))?;
 
+        let program_desc = format!("{:?}", cmd.get_program());
+        let tailer = Self::tail(self.app.clone(), &program_desc, &self.stderr_path)
+            .context("Could not create log tailer");
+
+        let status = launch
+            .wait()
+            .with_context(|| format!("Failed to wait for command {}", description))?;
+        tailer.iter().for_each(|t| t.stop());
         log::debug!("Command {:?} exited with status {}", cmd, &status);
-
         if !status.success() {
             self.log(output, description).context("logging output")?;
-            bail!("command {:?} failed: {}", cmd, description);
+            bail!("Command {:?} failed: {}", cmd, description);
         }
 
         Ok(status)
+    }
+
+    fn tail(app: Arc<App>, description: &str, path: &Path) -> Result<Tailer> {
+        Ok(match File::options().read(true).open(path) {
+            Ok(f) => Tailer::new(app.clone(), description, f),
+            Err(_e) => bail!("Could not open {} for tailing", path.display()),
+        })
+    }
+}
+
+struct Tailer {
+    cancel_tx: mpsc::Sender<()>,
+    stopped: AtomicBool,
+}
+
+impl Tailer {
+    pub fn new(app: Arc<App>, description: &str, file: File) -> Self {
+        let (cancel_tx, cancel_rx) = mpsc::channel::<()>();
+        let description = description.to_owned();
+        let _ = std::thread::spawn(move || Self::work(app, description, file, cancel_rx));
+        Self {
+            cancel_tx,
+            stopped: AtomicBool::new(false),
+        }
+    }
+
+    pub fn stop(&self) {
+        if let Ok(updated) =
+            self.stopped
+                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        {
+            if updated {
+                if let Err(e) = self.cancel_tx.send(()) {
+                    log::warn!("Failed to send stop signal to Tailer instance: {}", e);
+                }
+            }
+        }
+    }
+
+    fn work(app: Arc<App>, description: String, file: File, cancel_rx: mpsc::Receiver<()>) {
+        let desc = format!("{}#stderr", description);
+        let buffered_reader = BufReader::new(file);
+        let mut lines = buffered_reader.lines();
+        while cancel_rx.try_recv().is_err() {
+            while let Some(Ok(line)) = lines.next() {
+                app.ui().log(desc.clone(), line);
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        app.ui().log(desc.clone(), "Exited loop");
+    }
+}
+
+impl Drop for Tailer {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -232,7 +316,7 @@ mod tests {
         let app = Arc::from(App::new(false, false)?);
         let sandbox = app.sandbox();
         let path = {
-            let (mut file, path) = sandbox.create_file(None, None)?;
+            let (mut file, path, _) = sandbox.create_file(None, None, None)?;
             file.write_all(b"hello, world")?;
             path
         };
