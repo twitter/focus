@@ -260,19 +260,19 @@ enum RefsSubcommand {
 #[structopt(about = "Focused Development Tools")]
 struct FocusOpts {
     /// Preserve the created sandbox directory for inspecting logs and other files.
-    #[clap(long)]
+    #[clap(long, global = true)]
     preserve_sandbox: bool,
 
     /// Disable textual user interface; happens by default on non-interactive terminals.
-    #[clap(long)]
+    #[clap(long, global = true)]
     ugly: bool,
 
     /// Number of threads to use when performing parallel resolution (where possible).
-    #[clap(long, default_value = "0")]
+    #[clap(long, default_value = "0", global = true)]
     resolution_threads: usize,
 
     /// Change to the provided directory before doing anything else.
-    #[clap(short = 'C', long = "work-dir")]
+    #[clap(short = 'C', long = "work-dir", global = true)]
     working_directory: Option<PathBuf>,
 
     #[clap(subcommand)]
