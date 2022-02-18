@@ -11,9 +11,9 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
+use clap::Parser;
 use env_logger::{self, Env};
 use git2::Repository;
-use structopt::StructOpt;
 
 use focus_internals::{
     app::App,
@@ -37,24 +37,24 @@ fn the_name_of_this_binary() -> String {
         .to_owned()
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build coordinates
     Clone {
         /// Copy only the specified branch rather than all local branches.
-        #[structopt(long)]
+        #[clap(long)]
         single_branch: bool,
 
         /// Path to the dense repository to base the clone on.
-        #[structopt(long, parse(from_os_str), default_value = "~/workspace/source")]
+        #[clap(long, parse(from_os_str), default_value = "~/workspace/source")]
         dense_repo: PathBuf,
 
         /// Path where the new sparse repository should be created.
-        #[structopt(parse(from_os_str))]
+        #[clap(parse(from_os_str))]
         sparse_repo: PathBuf,
 
         /// The name of the branch to clone.
-        #[structopt(long, default_value = "master")]
+        #[clap(long, default_value = "master")]
         branch: String,
 
         /// Named layers and ad-hoc coordinates to include in the clone. Named layers are loaded from the dense repo's `focus/projects` directory.
@@ -64,7 +64,7 @@ enum Subcommand {
     /// Update the sparse checkout to reflect changes to the build graph.
     Sync {
         /// Path to the sparse repository.
-        #[structopt(parse(from_os_str), default_value = ".")]
+        #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
     },
 
@@ -76,7 +76,7 @@ enum Subcommand {
     /// Interact with the stack of selected layers. Run `focus layer help` for more information.
     Layer {
         /// Path to the repository.
-        #[structopt(long, parse(from_os_str), default_value = ".")]
+        #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
         args: Vec<String>,
@@ -85,7 +85,7 @@ enum Subcommand {
     /// Interact with the ad-hoc coordinate stack. Run `focus adhoc help` for more information.
     Adhoc {
         /// Path to the repository.
-        #[structopt(long, parse(from_os_str), default_value = ".")]
+        #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
         args: Vec<String>,
@@ -94,14 +94,14 @@ enum Subcommand {
     /// Detect whether there are changes to the build graph (used internally)
     DetectBuildGraphChanges {
         // Path to the repository.
-        #[structopt(long, parse(from_os_str), default_value = ".")]
+        #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
 
     /// Utility methods for listing and expiring outdated refs. Used to maintain a time windowed
     /// repository.
     Refs {
-        #[structopt(long, parse(from_os_str), default_value = ".")]
+        #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
         args: Vec<String>,
@@ -159,13 +159,13 @@ enum Subcommand {
     UserInterfaceTest {},
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 struct RepoSubcommand {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     verb: RepoOpts,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 enum RepoOpts {
     /// List registered repositories
     List {},
@@ -174,7 +174,7 @@ enum RepoOpts {
     Repair {},
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 enum LayersOpts {
     /// List all available layers
     Available {},
@@ -191,7 +191,7 @@ enum LayersOpts {
     /// Pop one or more layer(s) from the top of the stack of current selected layers
     Pop {
         /// The number of layers to pop.
-        #[structopt(long, default_value = "1")]
+        #[clap(long, default_value = "1")]
         count: usize,
     },
 
@@ -202,13 +202,13 @@ enum LayersOpts {
     },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 struct LayerSubcommand {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     verb: LayersOpts,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 enum AdhocOpts {
     /// List the contents of the ad-hoc coordinate stack
     List {},
@@ -222,7 +222,7 @@ enum AdhocOpts {
     /// Pop one or more coordinates(s) from the top of the ad-hoc coordinate stack
     Pop {
         /// The number of coordinates to pop.
-        #[structopt(long, default_value = "1")]
+        #[clap(long, default_value = "1")]
         count: usize,
     },
 
@@ -233,79 +233,79 @@ enum AdhocOpts {
     },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 struct AdhocSubcommand {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     verb: AdhocOpts,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 struct RefsSubcommand {
     #[structopt(subcommand)]
     verb: RefsOpts,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 enum RefsOpts {
     /// Expires refs that are outside the window of "current refs"
     Delete {
-        #[structopt(long, default_value = "2021-01-01")]
+        #[clap(long, default_value = "2021-01-01")]
         cutoff_date: String,
 
-        #[structopt(long)]
+        #[clap(long)]
         use_transaction: bool,
 
         /// If true, then ensure the merge base falls after the cutoff date.
         /// this avoids the problem of refs that refer to commits that are not
         /// included in master
-        #[structopt(short = "m", long = "check-merge-base")]
+        #[clap(short = 'm', long = "check-merge-base")]
         check_merge_base: bool,
     },
 
     ListExpired {
-        #[structopt(long, default_value = "2021-01-01")]
+        #[clap(long, default_value = "2021-01-01")]
         cutoff_date: String,
 
         /// If true, then ensure the merge base falls after the cutoff date.
         /// this avoids the problem of refs that refer to commits that are not
         /// included in master
-        #[structopt(short = "m", long = "check-merge-base")]
+        #[clap(short = 'm', long = "check-merge-base")]
         check_merge_base: bool,
     },
 
     /// Output a list of still current (I.e. non-expired) refs
     ListCurrent {
-        #[structopt(long, default_value = "2021-01-01")]
+        #[clap(long, default_value = "2021-01-01")]
         cutoff_date: String,
 
         /// If true, then ensure the merge base falls after the cutoff date.
         /// this avoids the problem of refs that refer to commits that are not
         /// included in master
-        #[structopt(short = "m", long = "check-merge-base")]
+        #[clap(short = 'm', long = "check-merge-base")]
         check_merge_base: bool,
     },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 #[structopt(about = "Focused Development Tools")]
 struct FocusOpts {
     /// Preserve the created sandbox directory for inspecting logs and other files.
-    #[structopt(long)]
+    #[clap(long)]
     preserve_sandbox: bool,
 
     /// Disable textual user interface; happens by default on non-interactive terminals.
-    #[structopt(long)]
+    #[clap(long)]
     ugly: bool,
 
     /// Number of threads to use when performing parallel resolution (where possible).
-    #[structopt(long, default_value = "0")]
+    #[clap(long, default_value = "0")]
     resolution_threads: usize,
 
     /// Change to the provided directory before doing anything else.
-    #[structopt(short = "C", long = "work-dir")]
+    #[clap(short = 'C', long = "work-dir")]
     working_directory: Option<PathBuf>,
 
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     cmd: Subcommand,
 }
 
@@ -438,7 +438,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 args.insert(0, format!("{} refs", the_name_of_this_binary()));
                 args
             };
-            let refs_subcommand = RefsSubcommand::from_iter(args.iter());
+            let refs_subcommand = RefsSubcommand::parse_from(args.iter());
             let repo = Repository::open(repo_path).context("opening the repo")?;
 
             match refs_subcommand.verb {
@@ -485,13 +485,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Repo { args } => {
-            // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
+            // Note: This is hacky, but it allows us to have second-level subcommands, which clap otherwise does not support.
             let args = {
                 let mut args = args;
                 args.insert(0, format!("{} repo", the_name_of_this_binary()));
                 args
             };
-            let repo_subcommand = RepoSubcommand::from_iter(args.iter());
+            let repo_subcommand = RepoSubcommand::parse_from(args.iter());
             match repo_subcommand.verb {
                 RepoOpts::List {} => subcommands::repo::list(),
                 RepoOpts::Repair {} => subcommands::repo::repair(app),
@@ -515,13 +515,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         Subcommand::Layer { repo, args } => {
             paths::assert_focused_repo(&repo)?;
 
-            // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
+            // Note: This is hacky, but it allows us to have second-level subcommands, which clap otherwise does not support.
             let args = {
                 let mut args = args;
                 args.insert(0, format!("{} layer", the_name_of_this_binary()));
                 args
             };
-            let layer_subcommand = LayerSubcommand::from_iter(args.iter());
+            let layer_subcommand = LayerSubcommand::parse_from(args.iter());
 
             let should_check_tree_cleanliness = match layer_subcommand.verb {
                 LayersOpts::Available {} => false,
@@ -584,7 +584,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
                 args
             };
-            let adhoc_subcommand = AdhocSubcommand::from_iter(args.iter());
+            let adhoc_subcommand = AdhocSubcommand::parse_from(args.iter());
 
             let should_check_tree_cleanliness = match adhoc_subcommand.verb {
                 AdhocOpts::List {} => false,
@@ -707,7 +707,7 @@ fn setup_thread_pool(resolution_threads: usize) -> Result<()> {
 
 fn main() -> Result<()> {
     let started_at = Instant::now();
-    let options = FocusOpts::from_args();
+    let options = FocusOpts::parse();
     if let Some(working_directory) = &options.working_directory {
         std::env::set_current_dir(working_directory).context("Switching working directory")?;
     }
