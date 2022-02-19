@@ -36,7 +36,7 @@ impl ScratchGitRepo {
     }
 
     pub(crate) fn create_fixture_repo(containing_dir: &Path) -> Result<PathBuf> {
-        let name = format!("repo_{}", Uuid::new_v4().to_string());
+        let name = format!("repo_{}", Uuid::new_v4());
         Command::new("git")
             .arg("init")
             .arg(&name)
