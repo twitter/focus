@@ -108,7 +108,7 @@ impl SandboxCommand {
             for arg in command.get_args() {
                 write!(description_file, "{}", arg.to_string_lossy())?;
             }
-            writeln!(description_file, "")?;
+            writeln!(description_file)?;
             serial
         };
 
@@ -133,7 +133,7 @@ impl SandboxCommand {
 
         let cloned_app_for_progress_reporter = app.clone();
         Ok(Self {
-            app: app,
+            app,
             progress_reporter: ProgressReporter::new(
                 cloned_app_for_progress_reporter,
                 description,
@@ -243,7 +243,7 @@ impl SandboxCommand {
 
     fn tail(app: Arc<App>, description: &str, path: &Path) -> Result<Tailer> {
         Ok(match File::options().read(true).open(path) {
-            Ok(f) => Tailer::new(app.clone(), description, f),
+            Ok(f) => Tailer::new(app, description, f),
             Err(_e) => bail!("Could not open {} for tailing", path.display()),
         })
     }
@@ -288,7 +288,7 @@ impl Tailer {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        app.ui().log(desc.clone(), "Exited loop");
+        app.ui().log(desc, "Exited loop");
     }
 }
 

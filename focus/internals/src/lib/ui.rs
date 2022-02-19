@@ -226,7 +226,7 @@ impl UserInterfaceRenderer {
                     .checked_add(1)
                     .unwrap_or(0))
                 {
-                    write!(stdout, "{}\n", termion::clear::CurrentLine).unwrap();
+                    writeln!(stdout, "{}", termion::clear::CurrentLine).unwrap();
                 }
                 used += area_height;
             }
