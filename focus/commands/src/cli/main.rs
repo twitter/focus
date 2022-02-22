@@ -3,7 +3,6 @@
 use std::{
     convert::TryFrom,
     env,
-    ffi::OsString,
     path::{Path, PathBuf},
     sync::Arc,
     time::Instant,
@@ -27,15 +26,6 @@ use subcommands::init::InitOpt;
 use crate::subcommands::{adhoc, init, layer, refs};
 
 mod subcommands;
-
-fn the_name_of_this_binary() -> String {
-    std::env::args_os()
-        .next()
-        .unwrap_or_else(|| OsString::from("focus"))
-        .to_str()
-        .unwrap()
-        .to_owned()
-}
 
 #[derive(Parser, Debug)]
 enum Subcommand {
@@ -70,7 +60,8 @@ enum Subcommand {
 
     /// Interact with repos configured on this system. Run `focus repo help` for more information.
     Repo {
-        args: Vec<String>,
+        #[clap(subcommand)]
+        subcommand: RepoSubcommand,
     },
 
     /// Interact with the stack of selected layers. Run `focus layer help` for more information.
@@ -79,7 +70,8 @@ enum Subcommand {
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        args: Vec<String>,
+        #[clap(subcommand)]
+        subcommand: LayerSubcommand,
     },
 
     /// Interact with the ad-hoc coordinate stack. Run `focus adhoc help` for more information.
@@ -88,7 +80,8 @@ enum Subcommand {
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        args: Vec<String>,
+        #[clap(subcommand)]
+        subcommand: AdhocSubcommand,
     },
 
     /// Detect whether there are changes to the build graph (used internally)
@@ -104,7 +97,8 @@ enum Subcommand {
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        args: Vec<String>,
+        #[clap(subcommand)]
+        subcommand: RefsSubcommand,
     },
 
     /// Set up an initial clone of the repo from the remote
@@ -160,13 +154,7 @@ enum Subcommand {
 }
 
 #[derive(Parser, Debug)]
-struct RepoSubcommand {
-    #[clap(subcommand)]
-    verb: RepoOpts,
-}
-
-#[derive(Parser, Debug)]
-enum RepoOpts {
+enum RepoSubcommand {
     /// List registered repositories
     List {},
 
@@ -175,7 +163,7 @@ enum RepoOpts {
 }
 
 #[derive(Parser, Debug)]
-enum LayersOpts {
+enum LayerSubcommand {
     /// List all available layers
     Available {},
 
@@ -203,13 +191,7 @@ enum LayersOpts {
 }
 
 #[derive(Parser, Debug)]
-struct LayerSubcommand {
-    #[clap(subcommand)]
-    verb: LayersOpts,
-}
-
-#[derive(Parser, Debug)]
-enum AdhocOpts {
+enum AdhocSubcommand {
     /// List the contents of the ad-hoc coordinate stack
     List {},
 
@@ -234,19 +216,7 @@ enum AdhocOpts {
 }
 
 #[derive(Parser, Debug)]
-struct AdhocSubcommand {
-    #[clap(subcommand)]
-    verb: AdhocOpts,
-}
-
-#[derive(Parser, Debug)]
-struct RefsSubcommand {
-    #[structopt(subcommand)]
-    verb: RefsOpts,
-}
-
-#[derive(Parser, Debug)]
-enum RefsOpts {
+enum RefsSubcommand {
     /// Expires refs that are outside the window of "current refs"
     Delete {
         #[clap(long, default_value = "2021-01-01")]
@@ -430,19 +400,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
         Subcommand::Refs {
             repo: repo_path,
-            args,
+            subcommand,
         } => {
-            // Note: This is hacky, but it allows us to have second-level subcommands, which structopt otherwise does not support.
-            let args = {
-                let mut args = args;
-                args.insert(0, format!("{} refs", the_name_of_this_binary()));
-                args
-            };
-            let refs_subcommand = RefsSubcommand::parse_from(args.iter());
             let repo = Repository::open(repo_path).context("opening the repo")?;
-
-            match refs_subcommand.verb {
-                RefsOpts::Delete {
+            match subcommand {
+                RefsSubcommand::Delete {
                     cutoff_date,
                     use_transaction,
                     check_merge_base,
@@ -452,7 +414,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     refs::expire_old_refs(&repo, cutoff, check_merge_base, use_transaction, app)
                 }
 
-                RefsOpts::ListExpired {
+                RefsSubcommand::ListExpired {
                     cutoff_date,
                     check_merge_base,
                 } => {
@@ -467,7 +429,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     Ok(())
                 }
 
-                RefsOpts::ListCurrent {
+                RefsSubcommand::ListCurrent {
                     cutoff_date,
                     check_merge_base,
                 } => {
@@ -484,19 +446,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             }
         }
 
-        Subcommand::Repo { args } => {
-            // Note: This is hacky, but it allows us to have second-level subcommands, which clap otherwise does not support.
-            let args = {
-                let mut args = args;
-                args.insert(0, format!("{} repo", the_name_of_this_binary()));
-                args
-            };
-            let repo_subcommand = RepoSubcommand::parse_from(args.iter());
-            match repo_subcommand.verb {
-                RepoOpts::List {} => subcommands::repo::list(),
-                RepoOpts::Repair {} => subcommands::repo::repair(app),
-            }
-        }
+        Subcommand::Repo { subcommand } => match subcommand {
+            RepoSubcommand::List {} => subcommands::repo::list(),
+            RepoSubcommand::Repair {} => subcommands::repo::repair(app),
+        },
 
         Subcommand::DetectBuildGraphChanges { repo } => {
             let repo = expand_tilde(repo)?;
@@ -512,23 +465,15 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             subcommands::user_interface_test::run(app)
         }
 
-        Subcommand::Layer { repo, args } => {
+        Subcommand::Layer { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
 
-            // Note: This is hacky, but it allows us to have second-level subcommands, which clap otherwise does not support.
-            let args = {
-                let mut args = args;
-                args.insert(0, format!("{} layer", the_name_of_this_binary()));
-                args
-            };
-            let layer_subcommand = LayerSubcommand::parse_from(args.iter());
-
-            let should_check_tree_cleanliness = match layer_subcommand.verb {
-                LayersOpts::Available {} => false,
-                LayersOpts::List {} => false,
-                LayersOpts::Push { names: _ } => true,
-                LayersOpts::Pop { count: _ } => true,
-                LayersOpts::Remove { names: _ } => true,
+            let should_check_tree_cleanliness = match subcommand {
+                LayerSubcommand::Available {} => false,
+                LayerSubcommand::List {} => false,
+                LayerSubcommand::Push { names: _ } => true,
+                LayerSubcommand::Pop { count: _ } => true,
+                LayerSubcommand::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
                 subcommands::sync::ensure_working_trees_are_clean(
@@ -550,12 +495,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 }
             };
 
-            let mutated = match layer_subcommand.verb {
-                LayersOpts::Available {} => layer::available(&repo)?,
-                LayersOpts::List {} => layer::list(&repo)?,
-                LayersOpts::Push { names } => layer::push(&repo, names)?,
-                LayersOpts::Pop { count } => layer::pop(&repo, count)?,
-                LayersOpts::Remove { names } => layer::remove(&repo, names)?,
+            let mutated = match subcommand {
+                LayerSubcommand::Available {} => layer::available(&repo)?,
+                LayerSubcommand::List {} => layer::list(&repo)?,
+                LayerSubcommand::Push { names } => layer::push(&repo, names)?,
+                LayerSubcommand::Pop { count } => layer::pop(&repo, count)?,
+                LayerSubcommand::Remove { names } => layer::remove(&repo, names)?,
             };
 
             if mutated {
@@ -576,21 +521,14 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             Ok(())
         }
 
-        Subcommand::Adhoc { repo, args } => {
+        Subcommand::Adhoc { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
 
-            let args = {
-                let mut args = args;
-                args.insert(0, format!("{} adhoc", the_name_of_this_binary()));
-                args
-            };
-            let adhoc_subcommand = AdhocSubcommand::parse_from(args.iter());
-
-            let should_check_tree_cleanliness = match adhoc_subcommand.verb {
-                AdhocOpts::List {} => false,
-                AdhocOpts::Push { names: _ } => true,
-                AdhocOpts::Pop { count: _ } => true,
-                AdhocOpts::Remove { names: _ } => true,
+            let should_check_tree_cleanliness = match subcommand {
+                AdhocSubcommand::List {} => false,
+                AdhocSubcommand::Push { names: _ } => true,
+                AdhocSubcommand::Pop { count: _ } => true,
+                AdhocSubcommand::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
                 subcommands::sync::ensure_working_trees_are_clean(
@@ -610,11 +548,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 }
             };
 
-            let mutated: bool = match adhoc_subcommand.verb {
-                AdhocOpts::List {} => adhoc::list(app.clone(), repo.clone())?,
-                AdhocOpts::Push { names } => adhoc::push(app.clone(), repo.clone(), names)?,
-                AdhocOpts::Pop { count } => adhoc::pop(app.clone(), repo.clone(), count)?,
-                AdhocOpts::Remove { names } => adhoc::remove(app.clone(), repo.clone(), names)?,
+            let mutated: bool = match subcommand {
+                AdhocSubcommand::List {} => adhoc::list(app.clone(), repo.clone())?,
+                AdhocSubcommand::Push { names } => adhoc::push(app.clone(), repo.clone(), names)?,
+                AdhocSubcommand::Pop { count } => adhoc::pop(app.clone(), repo.clone(), count)?,
+                AdhocSubcommand::Remove { names } => {
+                    adhoc::remove(app.clone(), repo.clone(), names)?
+                }
             };
 
             if mutated {
