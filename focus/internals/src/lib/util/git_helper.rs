@@ -1,6 +1,7 @@
 use std::{
     ffi::{OsStr, OsString},
     fmt::{self, Display},
+    os::unix::prelude::OsStringExt,
     path::PathBuf,
     process::Stdio,
     str::FromStr,
@@ -25,6 +26,35 @@ use super::time::{FocusTime, GitTime};
 
 pub fn git_binary() -> OsString {
     OsString::from("git")
+}
+
+/// returns the canonical path to the git binary in PATH
+pub fn git_binary_path() -> Result<PathBuf> {
+    which::which(&git_binary())?
+        .canonicalize()
+        .context("failed to locate git binary in PATH")
+}
+
+const NL: u8 = b'\n';
+
+pub fn git_exec_path() -> Result<PathBuf> {
+    let mut output = Command::new(git_binary())
+        .arg("--exec-path")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()?;
+
+    if !output.status.success() {
+        bail!("git --exec-path failed to run");
+    }
+
+    let stdout = &mut output.stdout;
+    if *stdout.last().unwrap() == NL {
+        stdout.pop();
+    }
+
+    let out = OsString::from_vec(output.stdout);
+    Ok(PathBuf::from(out))
 }
 
 pub fn git_command<S: AsRef<str>>(
@@ -320,7 +350,7 @@ impl Ident {
             timestamp,
         } = self;
         let git_time = GitTime::from(timestamp.clone());
-        git2::Signature::new(&name, &email, &git_time.into_inner())
+        git2::Signature::new(name, email, &git_time.into_inner())
             .context("failed to create signature")
     }
 }
@@ -444,6 +474,20 @@ mod tests {
         )?;
 
         assert_eq!(ident.to_signature()?.to_string(), sig.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn test_git_binary_path() -> Result<()> {
+        // just make sure this doesn't barf
+        git_binary_path()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_git_exec_path() -> Result<()> {
+        // just make sure this doesn't barf
+        git_exec_path()?;
         Ok(())
     }
 }

@@ -15,7 +15,7 @@ use git2::Repository;
 
 /// Vec of names that should never be expired via this process
 /// TODO: this should probably be in configuration rather than hardcoded here
-const SAFE_BRANCH_NAMES: &[&'static str] = &[
+const SAFE_BRANCH_NAMES: &[&str] = &[
     "refs/heads/main",
     "refs/heads/master",
     "refs/heads/repo.d/main",
