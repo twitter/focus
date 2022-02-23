@@ -440,7 +440,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let repo = Repository::open(repo_path).context("opening the repo")?;
 
             match refs_subcommand.verb {
-                RefsOpts::Delete {cutoff_date, use_transaction, check_merge_base} => {
+                RefsOpts::Delete {
+                    cutoff_date,
+                    use_transaction,
+                    check_merge_base,
+                } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
                     app.ui().set_enabled(interactive);
                     refs::expire_old_refs(&repo, cutoff, check_merge_base, use_transaction, app)
@@ -451,8 +455,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let part_refs = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
-                    let expired = part_refs.expired();
+                    let refs::PartitionedRefNames {
+                        current: _,
+                        expired,
+                    } = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
 
                     println!("{}", expired.join("\n"));
 
@@ -464,8 +470,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let part_refs = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
-                    let current = part_refs.current();
+                    let refs::PartitionedRefNames {
+                        current,
+                        expired: _,
+                    } = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
 
                     println!("{}", current.join("\n"));
 
