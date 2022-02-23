@@ -21,9 +21,14 @@ use focus_internals::{
     tracker::Tracker,
     util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
 };
-use subcommands::init::InitOpt;
+use subcommands::{init::InitOpt, maintenance::launchd};
 
-use crate::subcommands::{adhoc, init, layer, refs};
+use crate::subcommands::{
+    adhoc, init, layer, maintenance,
+    maintenance::{TimePeriod},
+    refs,
+};
+use strum::{VariantNames, IntoEnumIterator};
 
 mod subcommands;
 
@@ -105,52 +110,120 @@ enum Subcommand {
     Init {
         /// By default we take 90 days of history, pass a date with this option
         /// if you want a different amount of history
-        #[structopt(long, parse(try_from_str = init::parse_shallow_since_date))]
+        #[clap(long, parse(try_from_str = init::parse_shallow_since_date))]
         shallow_since: Option<NaiveDate>,
 
         /// This command will only ever clone a single ref, by default this is
         /// "master". If you wish to clone a different branch, then use this option
-        #[structopt(long, default_value = "master")]
+        #[clap(long, default_value = "master")]
         branch_name: String,
 
-        #[structopt(long)]
+        #[clap(long)]
         no_checkout: bool,
 
         /// The default is to pass --no-tags to clone, this option, if given,
         /// will cause git to do its normal default tag following behavior
-        #[structopt(long)]
+        #[clap(long)]
         follow_tags: bool,
 
         /// If not given, we use --filter=blob:none. To use a different filter
         /// argument, use this option. To disable filtering, use --no-filter.
-        #[structopt(long, default_value = "blob:none")]
+        #[clap(long, default_value = "blob:none")]
         filter: String,
 
         /// Do not pass a filter flag to git-clone. If both --no-filter and --filter
         /// options are given, --no-filter wins
-        #[structopt(long)]
+        #[clap(long)]
         no_filter: bool,
 
-        #[structopt(long)]
+        #[clap(long)]
         bare: bool,
 
-        #[structopt(long)]
+        #[clap(long)]
         sparse: bool,
 
-        #[structopt(long)]
+        #[clap(long)]
         progress: bool,
 
-        #[structopt(long)]
+        #[clap(long)]
         push_url: Option<String>,
 
-        #[structopt(long, default_value=init::SOURCE_RO_URL)]
+        #[clap(long, default_value=init::SOURCE_RO_URL)]
         fetch_url: String,
 
-        #[structopt()]
+        #[clap()]
         target_path: String,
     },
 
     UserInterfaceTest {},
+
+    #[clap(hide = true)]
+    Maintenance {
+        /// The git config key to look for paths of repos to run maintenance in. Defaults to
+        /// 'maintenance.repo'
+        #[clap(long, default_value=maintenance::DEFAULT_CONFIG_KEY, global = true)]
+        config_key: String,
+
+        #[clap(subcommand)]
+        subcommand: MaintenanceSubcommand,
+    },
+}
+
+#[derive(Parser, Debug)]
+enum MaintenanceSubcommand {
+    /// Runs global (i.e. system-wide) git maintenance tasks on repositories listed in
+    /// the $HOME/.gitconfig's `maintenance.repo` multi-value config key. This command
+    /// is usually run by a system-specific scheduler (eg. launchd) so it's unlikely that
+    /// end users would need to invoke this command directly.
+    Run {
+        /// The absolute path to the git binary to use. If not given, the first 'git' in PATH
+        /// will be used.
+        #[clap(long)]
+        git_binary_path: Option<PathBuf>,
+
+        /// The absolute path to the git 'libexec' directory to use. If not given, the output of
+        /// `git --exec-path` will be used.
+        #[clap(long)]
+        exec_path: Option<PathBuf>,
+
+        /// The git config file to use to read the list of repos to run maintenance in. If not
+        /// given, then use the default 'global' config which is usually $HOME/.gitconfig.
+        #[clap(long)]
+        config_path: Option<PathBuf>,
+
+        /// The time period of job to run
+        #[clap(
+            long,
+            possible_values=TimePeriod::VARIANTS,
+            default_value="hourly",
+        )]
+        time_period: TimePeriod,
+    },
+
+    Register {
+        #[clap(long, parse(from_os_str))]
+        repo_path: Option<PathBuf>,
+
+        #[clap(long, parse(from_os_str))]
+        config_path: Option<PathBuf>,
+    },
+
+    Schedule {
+        #[clap(long, parse(from_os_str), default_value = "~/Library/LaunchAgents")]
+        launch_agents_path: PathBuf,
+
+        /// The time period of job to schedule
+        #[clap(
+            long,
+            possible_values=TimePeriod::VARIANTS,
+            default_value="hourly",
+        )]
+        time_period: TimePeriod,
+
+        /// register jobs for all time periods
+        #[clap(long, conflicts_with = "time-period")]
+        all: bool,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -631,6 +704,55 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
             Ok(())
         }
+
+        Subcommand::Maintenance {
+            subcommand,
+            config_key,
+        } => match subcommand {
+            MaintenanceSubcommand::Run {
+                git_binary_path,
+                exec_path,
+                config_path,
+                time_period,
+            } => maintenance::run(
+                maintenance::RunOptions {
+                    git_binary_path,
+                    config_key,
+                    exec_path,
+                    config_path,
+                },
+                time_period,
+            ),
+            MaintenanceSubcommand::Register {
+                repo_path,
+                config_path,
+            } => maintenance::register(maintenance::RegisterOpts {
+                repo_path,
+                config_key,
+                global_config_path: config_path,
+            }),
+            MaintenanceSubcommand::Schedule {
+                launch_agents_path,
+                time_period,
+                all,
+            } => {
+                let time_periods: Vec<TimePeriod> = if all {
+                    maintenance::TimePeriod::iter().collect()
+                } else {
+                    vec![time_period]
+                };
+
+                for tp in time_periods {
+                    maintenance::write_plist(
+                        launchd::PlistOpts::default(),
+                        tp,
+                        &expand_tilde(&launch_agents_path)?,
+                    )?;
+                }
+
+                todo!("implement calling launchctl with new jobs");
+            }
+        },
     }
 }
 
