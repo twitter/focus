@@ -28,7 +28,7 @@ impl TimePeriod {
 
 const DEFAULT_CONFIG_KEY: &str = "maintenance.repo";
 
-const CONFIG_DEFAULTS: &[(&str, &str)] =  &[
+const CONFIG_DEFAULTS: &[(&str, &str)] = &[
     ("maintenance.auto", "false"),
     ("maintenance.strategy", "incremental"),
     ("maintenance.gc.enabled", "false"),
@@ -38,7 +38,6 @@ const CONFIG_DEFAULTS: &[(&str, &str)] =  &[
     ("maintenance.incremental-repack.enabled", "true"),
     ("log.excludedecoration", "refs/prefetch/"),
 ];
-
 
 fn is_config_key_set<S: AsRef<str>>(config: &mut git2::Config, key: S) -> Result<bool> {
     match config.snapshot()?.get_bytes(key.as_ref()) {
@@ -150,12 +149,15 @@ impl Maintenance {
     }
 
     fn run_in_path(&self, time_period: TimePeriod, path: &Path) -> Result<()> {
-
         match self.run_maint(time_period, path) {
             Ok(output) => {
                 let status = &output.status;
                 if status.success() {
-                    log::debug!("completed {} maintenance for {:?}", time_period.name(), path)
+                    log::debug!(
+                        "completed {} maintenance for {:?}",
+                        time_period.name(),
+                        path
+                    )
                 } else {
                     log::warn!("maintenance failed for {:?}, exit status {}", path, status);
                     {
@@ -293,8 +295,8 @@ mod tests {
         {
             let mut config = fix.config()?;
 
-            config.set_multivar(DEFAULT_CONFIG_KEY, "", "/path/to/foo")?;
-            config.set_multivar(DEFAULT_CONFIG_KEY, "", "/path/to/bar")?;
+            config.set_multivar(DEFAULT_CONFIG_KEY, "^/path/to/foo$", "/path/to/foo")?;
+            config.set_multivar(DEFAULT_CONFIG_KEY, "^/path/to/bar$", "/path/to/bar")?;
 
             let mut maint = Maintenance::new(Some(config.into_inner()))?;
 
