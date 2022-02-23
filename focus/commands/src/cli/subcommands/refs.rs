@@ -12,18 +12,15 @@ use log::debug;
 
 use anyhow::{Context, Result};
 use git2::Repository;
-use once_cell::sync::Lazy;
 
 /// Vec of names that should never be expired via this process
 /// TODO: this should probably be in configuration rather than hardcoded here
-static SAFE_BRANCH_NAMES: Lazy<Vec<&'static str>> = Lazy::new(|| {
-    vec![
-        "refs/heads/main",
-        "refs/heads/master",
-        "refs/heads/repo.d/main",
-        "refs/heads/repo.d/master",
-    ]
-});
+const SAFE_BRANCH_NAMES: &[&'static str] = &[
+    "refs/heads/main",
+    "refs/heads/master",
+    "refs/heads/repo.d/main",
+    "refs/heads/repo.d/master",
+];
 
 mod partition {
     use std::collections::HashSet;
@@ -36,31 +33,20 @@ mod partition {
 
     #[derive(Debug, Clone)]
     pub(super) struct RefInfo {
-        name: String,
-        author_time: FocusTime,
-        merge_base_auth_time: Option<FocusTime>,
-    }
-
-    impl RefInfo {
-        fn name(&self) -> &str {
-            &self.name
-        }
-        fn author_time(&self) -> &FocusTime {
-            &self.author_time
-        }
-        fn merge_base_auth_time(&self) -> &Option<FocusTime> {
-            &self.merge_base_auth_time
-        }
+        pub name: String,
+        pub author_time: FocusTime,
+        pub merge_base_auth_time: Option<FocusTime>,
     }
 
     fn head_commit(repo: &Repository) -> Result<Commit> {
-        repo.head()?.peel_to_commit().context("peeling HEAD commit")
+        repo.head()
+            .context("Finding repo HEAD")?
+            .peel_to_commit()
+            .context("peeling HEAD commit")
     }
 
     fn safe_refs() -> HashSet<&'static str> {
-        let mut h = HashSet::new();
-        h.extend(super::SAFE_BRANCH_NAMES.clone().into_iter());
-        h
+        super::SAFE_BRANCH_NAMES.iter().copied().collect()
     }
 
     fn safe_branches_and_tags(repo: &Repository) -> Result<Vec<git2::Reference>> {
@@ -116,12 +102,17 @@ mod partition {
         check_merge_base: bool,
     ) -> Result<PartitionedRefNames> {
         let (cur_info, expired_info): (Vec<RefInfo>, Vec<RefInfo>) =
-            ref_infos.into_iter().partition(|info| {
-                let auth_time = info.author_time();
+            ref_infos.into_iter().partition(|ref_info| {
+                let RefInfo {
+                    name: _,
+                    author_time,
+                    merge_base_auth_time,
+                } = ref_info;
+                let auth_time = author_time;
                 if *auth_time < cutoff {
                     false
                 } else if check_merge_base {
-                    match info.merge_base_auth_time() {
+                    match merge_base_auth_time {
                         Some(t) if *t < cutoff => false,
                         None => true, // merge base not found, assume its current or an orphan branch
                         _ => true,
@@ -132,29 +123,19 @@ mod partition {
             });
 
         Ok(PartitionedRefNames {
-            current: cur_info.iter().map(|i| i.name().to_owned()).collect(),
-            expired: expired_info.iter().map(|i| i.name().to_owned()).collect(),
+            current: cur_info.into_iter().map(|i| i.name).collect(),
+            expired: expired_info.into_iter().map(|i| i.name).collect(),
         })
     }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct PartitionedRefNames {
-    current: Vec<String>,
-    expired: Vec<String>,
+    pub current: Vec<String>,
+    pub expired: Vec<String>,
 }
 
 impl PartitionedRefNames {
-    /// Get a reference to the partitioned ref names's current.
-    pub fn current(&self) -> &[String] {
-        self.current.as_ref()
-    }
-
-    /// Get a reference to the partitioned ref names's expired.
-    pub fn expired(&self) -> &[String] {
-        self.expired.as_ref()
-    }
-
     /// convenience constructor, given a repo, the cutoff time, and the check_merge_base option,
     /// create a PartitionedRefNames instance for the repo's references.
     pub fn for_repo(repo: &Repository, cutoff: FocusTime, check_merge_base: bool) -> Result<Self> {
@@ -181,8 +162,8 @@ fn delete_case_conflict_refs(repo: &Repository, names: Vec<String>) -> Result<Ve
             debug!("deleting case conflict ref name: {}", name);
             // this is a conflict so delete this ref here so we don't run into
             // a problem when we do the bulk deletion
-            let mut rf = repo.find_reference(&name)?;
-            rf.delete()?;
+            let mut rf = repo.find_reference(&name).context("find conflicting ref")?;
+            rf.delete().context("delete conflicting ref")?;
         } else {
             ok_names.push(name);
         }
@@ -205,8 +186,12 @@ pub fn expire_old_refs(
             sandbox.create_file(Some("update-refs"), None, None)?;
 
         let xs = {
-            let partitioned = PartitionedRefNames::for_repo(repo, cutoff, check_merge_base)?;
-            delete_case_conflict_refs(repo, partitioned.expired)?
+            let PartitionedRefNames {
+                current: _,
+                expired,
+            } = PartitionedRefNames::for_repo(repo, cutoff, check_merge_base)
+                .context("collecting expired ref names")?;
+            delete_case_conflict_refs(repo, expired)?
         };
 
         let mut content: Vec<String> = xs
@@ -220,8 +205,10 @@ pub fn expire_old_refs(
             content.push("commit\x00".to_string());
         }
 
-        ref_file.write_all(content.join("").as_bytes())?;
-        ref_file.sync_data()?;
+        ref_file
+            .write_all(content.join("").as_bytes())
+            .context("writing content")?;
+        ref_file.sync_data().context("syncing data")?;
         ref_file_path
     };
 
@@ -273,13 +260,8 @@ mod tests {
     fn setup_ref_repo(fix: &mut Fixture, ident: &Ident) -> Result<()> {
         let sig = ident.to_signature()?;
 
-        let oid_a = fix.write_add_and_commit(
-            "f0",
-            "f0",
-            "initial commit",
-            Some(&sig),
-            Some(&sig),
-        )?;
+        let oid_a =
+            fix.write_add_and_commit("f0", "f0", "initial commit", Some(&sig), Some(&sig))?;
 
         fix.checkout_b(OLD_TIP_BRANCH_NAME, oid_a)?;
 
@@ -287,7 +269,10 @@ mod tests {
 
         fix.checkout(REFS_HEADS_MAIN, None)?;
 
-        let i2 = ident.with_time(FocusTime::now());
+        let i2 = Ident {
+            timestamp: FocusTime::now(),
+            ..ident.clone()
+        };
         let i2_sig = i2.to_signature()?;
 
         let write_and_commit = |f: &mut Fixture, s: &str| -> Result<git2::Oid> {
@@ -308,11 +293,12 @@ mod tests {
     }
 
     fn old_ident() -> Ident {
-        Ident::new(
-            "Carter Pewterschmidt",
-            "cpewterschmidt@twitter.com",
-            FocusTime::parse_from_rfc3339(FIRST_COMMIT_TIMESTAMP).expect("failed to parse date"),
-        )
+        Ident {
+            name: "Carter Pewterschmidt".to_string(),
+            email: "cpewterschmidt@twitter.com".to_string(),
+            timestamp: FocusTime::parse_from_rfc3339(FIRST_COMMIT_TIMESTAMP)
+                .expect("failed to parse date"),
+        }
     }
 
     #[test]

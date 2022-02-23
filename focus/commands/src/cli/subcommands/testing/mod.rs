@@ -106,13 +106,14 @@ pub(in crate::subcommands) mod refs {
             };
 
             // figure out if HEAD is pointing to a born branch yet
-            let parents = if let Ok(head) = repo.head() {
-                match head.peel_to_commit() {
+            let parents = match repo.head() {
+                Ok(head) => match head.peel_to_commit() {
                     Ok(commit) => vec![commit],
                     Err(_e) => vec![],
+                },
+                Err(_) => {
+                    vec![]
                 }
-            } else {
-                vec![]
             };
 
             let pref: Vec<&git2::Commit> = parents.iter().collect();
@@ -154,7 +155,11 @@ pub(in crate::subcommands) mod refs {
             Ok(br)
         }
 
-        pub fn checkout<S: AsRef<str>>(&mut self, branch_name: S, reset_type: Option<git2::ResetType>) -> Result<()> {
+        pub fn checkout<S: AsRef<str>>(
+            &mut self,
+            branch_name: S,
+            reset_type: Option<git2::ResetType>,
+        ) -> Result<()> {
             let repo = self.repo();
             repo.set_head(branch_name.as_ref())?;
             repo.reset(
