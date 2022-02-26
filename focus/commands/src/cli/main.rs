@@ -164,6 +164,21 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: MaintenanceSubcommand,
     },
+
+    /// git-trace allows one to transform the output of GIT_TRACE2_EVENT data into a format
+    /// that the chrome://tracing viewer can understand and display. This is a convenient way
+    /// to analyze the timing and call tree of a git command.
+    ///
+    /// For example, to analyze git gc:
+    /// ```
+    /// $ GIT_TRACE2_EVENT=/tmp/gc.json git gc
+    /// $ focus git-trace /tmp/gc.json /tmp/chrome-trace.json
+    /// ````
+    /// Then open chrome://tracing in your browser and load the /tmp/chrome-trace.json flie.
+    GitTrace {
+        input: PathBuf,
+        output: PathBuf,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -750,6 +765,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 todo!("implement calling launchctl with new jobs");
             }
         },
+
+        Subcommand::GitTrace { input, output } => {
+            Ok(focus_internals::tracing::Trace::git_trace_from(input)?
+                .write_trace_json_to(output)?)
+        }
     }
 }
 

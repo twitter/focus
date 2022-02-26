@@ -5,6 +5,7 @@ pub mod model;
 pub mod repository;
 pub mod sparse_repos;
 pub mod testing;
+pub mod tracing;
 pub mod tracker;
 pub mod ui;
 pub mod util;

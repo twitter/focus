@@ -1,5 +1,2 @@
 [workspace]
-members = [
-        "focus/commands",
-        "focus/internals",
-]
+members = ["focus/commands", "focus/internals"]

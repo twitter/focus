@@ -1,0 +1,335 @@
+---
+source: focus/internals/src/lib/tracing/chrome/tests.rs
+assertion_line: 12
+expression: trace
+
+---
+traceEvents:
+  - ts: 0
+    pid: 1
+    tid: 1
+    name: "data(traverse_trees): statistics -> {\"traverse_trees_count\":1,\"traverse_trees_max_depth\":1}"
+    cat: ""
+    ph: X
+    dur: 11805
+    args:
+      category: traverse_trees
+      file_line_thread: "tree-walk.c:185:main"
+      git_event_name: data_json
+      key: statistics
+      nesting: 1
+      t_abs: 0.011805
+      t_rel: 0.011805
+      value:
+        traverse_trees_count: 1
+        traverse_trees_max_depth: 1
+  - ts: 1271
+    pid: 1
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 10546
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 0.011817
+  - ts: 1333
+    pid: 1
+    tid: 0
+    name: git reset --hard ccdd887
+    cat: ""
+    ph: X
+    dur: 10453
+    args:
+      begin:
+        argv:
+          - git
+          - reset
+          - "--hard"
+          - ccdd887
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.001331
+      end:
+        code: 0
+        file_line_thread: "git.c:716:main"
+        git_event_name: exit
+        t_abs: 0.011785
+  - ts: 1622
+    pid: 1
+    tid: 0
+    name: "repository.c:136:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "repository.c:136:main"
+      git_event_name: def_repo
+      worktree: /Users/jsimms/workspace/focus
+  - ts: 1803
+    pid: 1
+    tid: 0
+    name: "git.c:459:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "git.c:459:main"
+      git_event_name: cmd_name
+      hierarchy: reset
+      name: reset
+  - ts: 3260
+    pid: 1
+    tid: 0
+    name: "builtin/reset.c:483:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "builtin/reset.c:483:main"
+      git_event_name: cmd_mode
+      name: hard
+  - ts: 3337
+    pid: 1
+    tid: 1
+    name: do_read_index
+    cat: ""
+    ph: X
+    dur: 270
+    args:
+      begin:
+        category: index
+        file_line_thread: "read-cache.c:2416:main"
+        git_event_name: region_enter
+        label: do_read_index
+        msg: ".git/index"
+        nesting: 1
+      end:
+        file_line_thread: "read-cache.c:2421:main"
+        git_event_name: region_leave
+        t_rel: 0.00027
+  - ts: 3338
+    pid: 1
+    tid: 2
+    name: "data(index): read/version -> 2"
+    cat: ""
+    ph: X
+    dur: 199
+    args:
+      category: index
+      file_line_thread: "read-cache.c:2362:main"
+      git_event_name: data
+      key: read/version
+      nesting: 2
+      t_abs: 0.003536
+      t_rel: 0.000199
+      value: "2"
+  - ts: 3359
+    pid: 1
+    tid: 2
+    name: "data(index): read/cache_nr -> 94"
+    cat: ""
+    ph: X
+    dur: 234
+    args:
+      category: index
+      file_line_thread: "read-cache.c:2364:main"
+      git_event_name: data
+      key: read/cache_nr
+      nesting: 2
+      t_abs: 0.003571
+      t_rel: 0.000234
+      value: "94"
+  - ts: 3465
+    pid: 1
+    tid: 2
+    name: read
+    cat: ""
+    ph: X
+    dur: 30
+    args:
+      begin:
+        category: cache_tree
+        file_line_thread: "cache-tree.c:625:main"
+        git_event_name: region_enter
+        label: read
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "cache-tree.c:627:main"
+        git_event_name: region_leave
+        t_rel: 0.00003
+  - ts: 4495
+    pid: 1
+    tid: 1
+    name: unpack_trees
+    cat: ""
+    ph: X
+    dur: 2443
+    args:
+      begin:
+        category: unpack_trees
+        file_line_thread: "unpack-trees.c:1724:main"
+        git_event_name: region_enter
+        label: unpack_trees
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "unpack-trees.c:1910:main"
+        git_event_name: region_leave
+        t_rel: 0.002455
+  - ts: 4878
+    pid: 1
+    tid: 2
+    name: traverse_trees
+    cat: ""
+    ph: X
+    dur: 1568
+    args:
+      begin:
+        category: unpack_trees
+        file_line_thread: "unpack-trees.c:1817:main"
+        git_event_name: region_enter
+        label: traverse_trees
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "unpack-trees.c:1819:main"
+        git_event_name: region_leave
+        t_rel: 0.001568
+  - ts: 6505
+    pid: 1
+    tid: 2
+    name: Updating files
+    cat: ""
+    ph: X
+    dur: 27
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Updating files
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 0.000027
+  - ts: 6549
+    pid: 1
+    tid: 2
+    name: Filtering content
+    cat: ""
+    ph: X
+    dur: 31
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Filtering content
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 0.000031
+  - ts: 7028
+    pid: 1
+    tid: 1
+    name: prime_cache_tree
+    cat: ""
+    ph: X
+    dur: 1005
+    args:
+      begin:
+        category: cache-tree
+        file_line_thread: "cache-tree.c:815:main"
+        git_event_name: region_enter
+        label: prime_cache_tree
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "cache-tree.c:822:main"
+        git_event_name: region_leave
+        t_rel: 0.001004
+  - ts: 8050
+    pid: 1
+    tid: 1
+    name: do_write_index
+    cat: ""
+    ph: X
+    dur: 1234
+    args:
+      begin:
+        category: index
+        file_line_thread: "read-cache.c:3138:main"
+        git_event_name: region_enter
+        label: do_write_index
+        msg: /Users/jsimms/focus/.git/index.lock
+        nesting: 1
+      end:
+        file_line_thread: "read-cache.c:3141:main"
+        git_event_name: region_leave
+        t_rel: 0.001234
+  - ts: 8050
+    pid: 1
+    tid: 2
+    name: "data(index): write/cache_nr -> 94"
+    cat: ""
+    ph: X
+    dur: 1226
+    args:
+      category: index
+      file_line_thread: "read-cache.c:3102:main"
+      git_event_name: data
+      key: write/cache_nr
+      nesting: 2
+      t_abs: 0.009276
+      t_rel: 0.001226
+      value: "94"
+  - ts: 8050
+    pid: 1
+    tid: 2
+    name: "data(index): write/version -> 2"
+    cat: ""
+    ph: X
+    dur: 1212
+    args:
+      category: index
+      file_line_thread: "read-cache.c:3100:main"
+      git_event_name: data
+      key: write/version
+      nesting: 2
+      t_abs: 0.009262
+      t_rel: 0.001212
+      value: "2"
+  - ts: 9096
+    pid: 1
+    tid: 2
+    name: write
+    cat: ""
+    ph: X
+    dur: 45
+    args:
+      begin:
+        category: cache_tree
+        file_line_thread: "cache-tree.c:529:main"
+        git_event_name: region_enter
+        label: write
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "cache-tree.c:531:main"
+        git_event_name: region_leave
+        t_rel: 0.000045
+displayTimeUnit: ~
+systemTraceEvents: ~
+otherData: ~
+
