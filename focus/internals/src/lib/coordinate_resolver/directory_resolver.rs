@@ -24,14 +24,13 @@ impl Resolver for DirectoryResolver {
         _cache_options: &CacheOptions,
         _app: Arc<App>,
     ) -> Result<ResolutionResult> {
-        let directories = BTreeSet::<PathBuf>::from_iter(
-            request.coordinate_set().underlying().iter().filter_map(
+        let directories =
+            BTreeSet::<PathBuf>::from_iter(request.coordinate_set.underlying().iter().filter_map(
                 |coordinate| match coordinate {
                     Coordinate::Directory(inner) => Some(PathBuf::from(inner)),
                     _ => unreachable!(),
                 },
-            ),
-        );
+            ));
 
         Ok(ResolutionResult::from(directories))
     }

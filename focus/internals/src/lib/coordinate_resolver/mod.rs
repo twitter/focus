@@ -20,32 +20,11 @@ use self::{
 };
 
 /// A request to resolve coordinates in a particular repository.
+#[derive(Clone, Debug)]
 pub struct ResolutionRequest {
-    repo: PathBuf,
-    repo_state: RepoState,
-    coordinate_set: CoordinateSet,
-}
-
-impl ResolutionRequest {
-    pub fn new(repo: &Path, repo_state: RepoState, coordinate_set: CoordinateSet) -> Self {
-        Self {
-            repo: repo.to_owned(),
-            repo_state,
-            coordinate_set,
-        }
-    }
-
-    pub fn repo(&self) -> &Path {
-        &self.repo
-    }
-
-    pub fn repo_state(&self) -> &RepoState {
-        &self.repo_state
-    }
-
-    pub fn coordinate_set(&self) -> &CoordinateSet {
-        &self.coordinate_set
-    }
+    pub repo: PathBuf,
+    pub repo_state: RepoState,
+    pub coordinate_set: CoordinateSet,
 }
 
 /// Result of resolving a set of coordinates; namely a set of paths.
@@ -135,7 +114,7 @@ impl Resolver for RoutingResolver {
         use rayon::prelude::*;
 
         request
-            .coordinate_set()
+            .coordinate_set
             .underlying()
             .par_iter()
             .map(|coordinate| {
@@ -144,11 +123,10 @@ impl Resolver for RoutingResolver {
                 let mut set = HashSet::<Coordinate>::new();
                 set.insert(coordinate.to_owned());
 
-                let subrequest = ResolutionRequest::new(
-                    request.repo(),
-                    request.repo_state().clone(),
-                    CoordinateSet::from(set),
-                );
+                let subrequest = ResolutionRequest {
+                    coordinate_set: CoordinateSet::from(set),
+                    ..request.clone()
+                };
 
                 match coordinate {
                     Coordinate::Bazel(_) => {

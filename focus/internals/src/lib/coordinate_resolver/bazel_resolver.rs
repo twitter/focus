@@ -20,7 +20,7 @@ pub struct BazelResolver {
 
 impl BazelResolver {
     fn locate_bazel_binary(request: &ResolutionRequest) -> PathBuf {
-        let in_repo_bazel_wrapper = request.repo().join("bazel");
+        let in_repo_bazel_wrapper = request.repo.join("bazel");
         if in_repo_bazel_wrapper.is_file() {
             // This is dumb, but our wrapper script pukes if you invoke it with an absolute path. We are just ensuring that it exists at all.
             PathBuf::from("./bazel")
@@ -51,7 +51,7 @@ impl Resolver for BazelResolver {
 
         let mut directories = BTreeSet::<PathBuf>::new();
         let clauses: Vec<String> = request
-            .coordinate_set()
+            .coordinate_set
             .underlying()
             .iter()
             .filter_map(|coordinate| {
@@ -75,7 +75,7 @@ impl Resolver for BazelResolver {
             cmd.arg("query")
                 .arg(&query)
                 .arg("--output=package")
-                .current_dir(request.repo()),
+                .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
             &description,
         )?;
