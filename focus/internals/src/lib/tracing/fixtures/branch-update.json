@@ -1,0 +1,6 @@
+{"event":"version","sid":"20220304T193523.496337Z-H85c4cf64-P000088e3","thread":"main","time":"2022-03-04T19:35:23.496881Z","file":"common-main.c","line":49,"evt":"3","exe":"2.35.1"}
+{"event":"start","sid":"20220304T193523.496337Z-H85c4cf64-P000088e3","thread":"main","time":"2022-03-04T19:35:23.496973Z","file":"common-main.c","line":50,"t_abs":0.001536,"argv":["git","branch","-f","jsimms/git-trace-processing","HEAD"]}
+{"event":"def_repo","sid":"20220304T193523.496337Z-H85c4cf64-P000088e3","thread":"main","time":"2022-03-04T19:35:23.497348Z","file":"repository.c","line":136,"repo":1,"worktree":"/Users/jsimms/workspace/focus"}
+{"event":"cmd_name","sid":"20220304T193523.496337Z-H85c4cf64-P000088e3","thread":"main","time":"2022-03-04T19:35:23.497415Z","file":"git.c","line":459,"name":"branch","hierarchy":"branch"}
+{"event":"exit","sid":"20220304T193523.496337Z-H85c4cf64-P000088e3","thread":"main","time":"2022-03-04T19:35:23.501482Z","file":"git.c","line":716,"t_abs":0.006046,"code":0}
+{"event":"atexit","sid":"20220304T193523.496337Z-H85c4cf64-P000088e3","thread":"main","time":"2022-03-04T19:35:23.501508Z","file":"trace2/tr2_tgt_event.c","line":201,"t_abs":0.006074,"code":0}

@@ -1,0 +1,94 @@
+---
+source: focus/internals/src/lib/tracing/chrome/tests.rs
+assertion_line: 12
+expression: trace
+
+---
+traceEvents:
+  - ts: 0
+    pid: 1
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 21072650
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 21.073792
+  - ts: 56
+    pid: 1
+    tid: 0
+    name: git reflog
+    cat: ""
+    ph: X
+    dur: 31273
+    args:
+      begin:
+        argv:
+          - git
+          - reflog
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.001196
+      end:
+        code: 0
+        file_line_thread: "git.c:716:main"
+        git_event_name: exit
+        t_abs: 0.03247
+  - ts: 330
+    pid: 1
+    tid: 0
+    name: "repository.c:136:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "repository.c:136:main"
+      git_event_name: def_repo
+      worktree: /Users/jsimms/workspace/focus
+  - ts: 501
+    pid: 1
+    tid: 0
+    name: "git.c:459:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "git.c:459:main"
+      git_event_name: cmd_name
+      hierarchy: reflog
+      name: reflog
+  - ts: 5106
+    pid: 1
+    tid: 0
+    name: less
+    cat: ""
+    ph: X
+    dur: 21067480
+    args:
+      begin:
+        argv:
+          - less
+        cd: ~
+        child_class: pager
+        child_id: 0
+        file_line_thread: "run-command.c:721:main"
+        git_event_name: child_start
+        hook_name: ~
+        use_shell: true
+      end:
+        code: 0
+        file_line_thread: "run-command.c:977:main"
+        git_event_name: child_exit
+        pid: 31194
+        t_rel: 21.067475
+displayTimeUnit: ~
+systemTraceEvents: ~
+otherData: ~
+

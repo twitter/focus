@@ -1,0 +1,874 @@
+---
+source: focus/internals/src/lib/tracing/chrome/tests.rs
+assertion_line: 12
+expression: trace
+
+---
+traceEvents:
+  - ts: 0
+    pid: 1
+    tid: 1
+    name: "data(traverse_trees): statistics -> {\"traverse_trees_count\":1,\"traverse_trees_max_depth\":1}"
+    cat: ""
+    ph: X
+    dur: 2864561
+    args:
+      category: traverse_trees
+      file_line_thread: "tree-walk.c:185:main"
+      git_event_name: data_json
+      key: statistics
+      nesting: 1
+      t_abs: 2.864561
+      t_rel: 2.864561
+      value:
+        traverse_trees_count: 1
+        traverse_trees_max_depth: 1
+  - ts: 7
+    pid: 1
+    tid: 1
+    name: "data(transfer): negotiated-version -> 2"
+    cat: ""
+    ph: X
+    dur: 372699
+    args:
+      category: transfer
+      file_line_thread: "connect.c:167:main"
+      git_event_name: data
+      key: negotiated-version
+      nesting: 1
+      t_abs: 0.372699
+      t_rel: 0.372699
+      value: "2"
+  - ts: 4370
+    pid: 1
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 2860208
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 2.864578
+  - ts: 5081
+    pid: 1
+    tid: 0
+    name: "git clone https://git.twitter.biz/focus"
+    cat: ""
+    ph: X
+    dur: 2859458
+    args:
+      begin:
+        argv:
+          - git
+          - clone
+          - "https://git.twitter.biz/focus"
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.004747
+      end:
+        code: 0
+        file_line_thread: "git.c:716:main"
+        git_event_name: exit
+        t_abs: 2.864537
+  - ts: 5239
+    pid: 1
+    tid: 0
+    name: "git.c:459:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "git.c:459:main"
+      git_event_name: cmd_name
+      hierarchy: clone
+      name: clone
+  - ts: 7539
+    pid: 1
+    tid: 0
+    name: "repository.c:136:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "repository.c:136:main"
+      git_event_name: def_repo
+      worktree: /Users/jsimms/tmp/focus
+  - ts: 27502
+    pid: 1
+    tid: 0
+    name: "git remote-https origin https://git.twitter.biz/focus"
+    cat: ""
+    ph: X
+    dur: 2813409
+    args:
+      begin:
+        argv:
+          - git
+          - remote-https
+          - origin
+          - "https://git.twitter.biz/focus"
+        cd: ~
+        child_class: remote-https
+        child_id: 0
+        file_line_thread: "run-command.c:721:main"
+        git_event_name: child_start
+        hook_name: ~
+        use_shell: false
+      end:
+        code: 0
+        file_line_thread: "run-command.c:977:main"
+        git_event_name: child_exit
+        pid: 10955
+        t_rel: 2.813413
+  - ts: 37719
+    pid: 2
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 2712948
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 2.714923
+  - ts: 37767
+    pid: 2
+    tid: 0
+    name: "git remote-https origin https://git.twitter.biz/focus"
+    cat: ""
+    ph: X
+    dur: 2712866
+    args:
+      begin:
+        argv:
+          - /usr/local/Cellar/git/2.35.1/libexec/git-core/git
+          - remote-https
+          - origin
+          - "https://git.twitter.biz/focus"
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.002019
+      end:
+        code: 0
+        file_line_thread: "git.c:761:main"
+        git_event_name: exit
+        t_abs: 2.714887
+  - ts: 38816
+    pid: 2
+    tid: 0
+    name: "git.c:739:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "git.c:739:main"
+      git_event_name: cmd_name
+      hierarchy: clone/_run_dashed_
+      name: _run_dashed_
+  - ts: 38871
+    pid: 2
+    tid: 0
+    name: "git-remote-https origin https://git.twitter.biz/focus"
+    cat: ""
+    ph: X
+    dur: 2711625
+    args:
+      begin:
+        argv:
+          - git-remote-https
+          - origin
+          - "https://git.twitter.biz/focus"
+        cd: ~
+        child_class: dashed
+        child_id: 0
+        file_line_thread: "run-command.c:721:main"
+        git_event_name: child_start
+        hook_name: ~
+        use_shell: false
+      end:
+        code: 0
+        file_line_thread: "run-command.c:977:main"
+        git_event_name: child_exit
+        pid: 10956
+        t_rel: 2.711596
+  - ts: 53685
+    pid: 3
+    tid: 1
+    name: "data(transfer): negotiated-version -> 2"
+    cat: ""
+    ph: X
+    dur: 318856
+    args:
+      category: transfer
+      file_line_thread: "connect.c:167:main"
+      git_event_name: data
+      key: negotiated-version
+      nesting: 1
+      t_abs: 0.318856
+      t_rel: 0.318856
+      value: "2"
+  - ts: 55576
+    pid: 3
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 2693373
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 2.695272
+  - ts: 55622
+    pid: 3
+    tid: 0
+    name: "git-remote-https origin https://git.twitter.biz/focus"
+    cat: ""
+    ph: X
+    dur: 2693191
+    args:
+      begin:
+        argv:
+          - /usr/local/Cellar/git/2.35.1/libexec/git-core/git-remote-https
+          - origin
+          - "https://git.twitter.biz/focus"
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.001946
+      end:
+        code: 0
+        file_line_thread: "common-main.c:63:main"
+        git_event_name: exit
+        t_abs: 2.695124
+  - ts: 55977
+    pid: 3
+    tid: 0
+    name: "repository.c:136:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "repository.c:136:main"
+      git_event_name: def_repo
+      worktree: /Users/jsimms/tmp
+  - ts: 56060
+    pid: 3
+    tid: 0
+    name: "remote-curl.c:1493:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "remote-curl.c:1493:main"
+      git_event_name: cmd_name
+      hierarchy: clone/_run_dashed_/remote-curl
+      name: remote-curl
+  - ts: 510989
+    pid: 1
+    tid: 1
+    name: parse_remote_refs_and_find_cutoff
+    cat: ""
+    ph: X
+    dur: 1330
+    args:
+      begin:
+        category: fetch-pack
+        file_line_thread: "fetch-pack.c:697:main"
+        git_event_name: region_enter
+        label: parse_remote_refs_and_find_cutoff
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "fetch-pack.c:720:main"
+        git_event_name: region_leave
+        t_rel: 0.001333
+  - ts: 512370
+    pid: 1
+    tid: 1
+    name: mark_complete_local_refs
+    cat: ""
+    ph: X
+    dur: 405
+    args:
+      begin:
+        category: fetch-pack
+        file_line_thread: "fetch-pack.c:726:main"
+        git_event_name: region_enter
+        label: mark_complete_local_refs
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "fetch-pack.c:734:main"
+        git_event_name: region_leave
+        t_rel: 0.000404
+  - ts: 512807
+    pid: 1
+    tid: 1
+    name: mark_common_remote_refs
+    cat: ""
+    ph: X
+    dur: 147
+    args:
+      begin:
+        category: fetch-pack
+        file_line_thread: "fetch-pack.c:740:main"
+        git_event_name: region_enter
+        label: mark_common_remote_refs
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "fetch-pack.c:749:main"
+        git_event_name: region_leave
+        t_rel: 0.000147
+  - ts: 512992
+    pid: 1
+    tid: 1
+    name: negotiation_v2
+    cat: ""
+    ph: X
+    dur: 82
+    args:
+      begin:
+        category: fetch-pack
+        file_line_thread: "fetch-pack.c:1618:main"
+        git_event_name: region_enter
+        label: negotiation_v2
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "fetch-pack.c:1652:main"
+        git_event_name: region_leave
+        t_rel: 0.000082
+  - ts: 1002714
+    pid: 1
+    tid: 0
+    name: git index-pack --stdin -v --fix-thin --keep=fetch-pack 10954 on weasel --check-self-contained-and-connected
+    cat: ""
+    ph: X
+    dur: 1837747
+    args:
+      begin:
+        argv:
+          - git
+          - index-pack
+          - "--stdin"
+          - "-v"
+          - "--fix-thin"
+          - "--keep=fetch-pack 10954 on weasel"
+          - "--check-self-contained-and-connected"
+        cd: ~
+        child_class: "?"
+        child_id: 1
+        file_line_thread: "run-command.c:721:main"
+        git_event_name: child_start
+        hook_name: ~
+        use_shell: false
+      end:
+        code: 0
+        file_line_thread: "run-command.c:977:main"
+        git_event_name: child_exit
+        pid: 10958
+        t_rel: 1.837745
+  - ts: 1012335
+    pid: 4
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 1825090
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 1.827027
+  - ts: 1024677
+    pid: 4
+    tid: 0
+    name: git index-pack --stdin -v --fix-thin --keep=fetch-pack 10954 on weasel --check-self-contained-and-connected
+    cat: ""
+    ph: X
+    dur: 1812712
+    args:
+      begin:
+        argv:
+          - /usr/local/Cellar/git/2.35.1/libexec/git-core/git
+          - index-pack
+          - "--stdin"
+          - "-v"
+          - "--fix-thin"
+          - "--keep=fetch-pack 10954 on weasel"
+          - "--check-self-contained-and-connected"
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.014233
+      end:
+        code: 0
+        file_line_thread: "git.c:716:main"
+        git_event_name: exit
+        t_abs: 1.826985
+  - ts: 1025540
+    pid: 4
+    tid: 0
+    name: "repository.c:136:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "repository.c:136:main"
+      git_event_name: def_repo
+      worktree: /Users/jsimms/tmp
+  - ts: 1026595
+    pid: 4
+    tid: 0
+    name: "git.c:459:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "git.c:459:main"
+      git_event_name: cmd_name
+      hierarchy: clone/index-pack
+      name: index-pack
+  - ts: 1029892
+    pid: 4
+    tid: 2
+    name: "data(progress): total_bytes -> 15887584"
+    cat: ""
+    ph: X
+    dur: 1720312
+    args:
+      category: progress
+      file_line_thread: "progress.c:334:main"
+      git_event_name: data
+      key: total_bytes
+      nesting: 2
+      t_abs: 1.739807
+      t_rel: 1.720312
+      value: "15887584"
+  - ts: 1029896
+    pid: 4
+    tid: 1
+    name: Receiving objects
+    cat: ""
+    ph: X
+    dur: 1720334
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Receiving objects
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 1.720338
+  - ts: 1029901
+    pid: 4
+    tid: 2
+    name: "data(progress): total_objects -> 13166"
+    cat: ""
+    ph: X
+    dur: 1720253
+    args:
+      category: progress
+      file_line_thread: "progress.c:329:main"
+      git_event_name: data
+      key: total_objects
+      nesting: 2
+      t_abs: 1.739748
+      t_rel: 1.720253
+      value: "13166"
+  - ts: 2751068
+    pid: 4
+    tid: 1
+    name: Resolving deltas
+    cat: ""
+    ph: X
+    dur: 76825
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Resolving deltas
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 0.076826
+  - ts: 2751070
+    pid: 4
+    tid: 2
+    name: "data(progress): total_objects -> 6277"
+    cat: ""
+    ph: X
+    dur: 76781
+    args:
+      category: progress
+      file_line_thread: "progress.c:329:main"
+      git_event_name: data
+      key: total_objects
+      nesting: 2
+      t_abs: 1.81745
+      t_rel: 0.076781
+      value: "6277"
+  - ts: 2829968
+    pid: 4
+    tid: 2
+    name: "data(progress): total_objects -> 32768"
+    cat: ""
+    ph: X
+    dur: 635
+    args:
+      category: progress
+      file_line_thread: "progress.c:329:main"
+      git_event_name: data
+      key: total_objects
+      nesting: 2
+      t_abs: 1.820205
+      t_rel: 0.000635
+      value: "32768"
+  - ts: 2829969
+    pid: 4
+    tid: 1
+    name: Checking objects
+    cat: ""
+    ph: X
+    dur: 660
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Checking objects
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 0.000661
+  - ts: 2841133
+    pid: 1
+    tid: 0
+    name: git rev-list --objects --stdin --not --all --quiet --alternate-refs --progress=Checking connectivity
+    cat: ""
+    ph: X
+    dur: 13309
+    args:
+      begin:
+        argv:
+          - git
+          - rev-list
+          - "--objects"
+          - "--stdin"
+          - "--not"
+          - "--all"
+          - "--quiet"
+          - "--alternate-refs"
+          - "--progress=Checking connectivity"
+        cd: ~
+        child_class: "?"
+        child_id: 2
+        file_line_thread: "run-command.c:721:main"
+        git_event_name: child_start
+        hook_name: ~
+        use_shell: false
+      end:
+        code: 0
+        file_line_thread: "run-command.c:977:main"
+        git_event_name: child_exit
+        pid: 10960
+        t_rel: 0.013297
+  - ts: 2850424
+    pid: 5
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 3473
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 0.005378
+  - ts: 2850483
+    pid: 5
+    tid: 0
+    name: git rev-list --objects --stdin --not --all --quiet --alternate-refs --progress=Checking connectivity
+    cat: ""
+    ph: X
+    dur: 3387
+    args:
+      begin:
+        argv:
+          - /usr/local/Cellar/git/2.35.1/libexec/git-core/git
+          - rev-list
+          - "--objects"
+          - "--stdin"
+          - "--not"
+          - "--all"
+          - "--quiet"
+          - "--alternate-refs"
+          - "--progress=Checking connectivity"
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.00196
+      end:
+        code: 0
+        file_line_thread: "git.c:716:main"
+        git_event_name: exit
+        t_abs: 0.005351
+  - ts: 2850886
+    pid: 5
+    tid: 0
+    name: "repository.c:136:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "repository.c:136:main"
+      git_event_name: def_repo
+      worktree: /Users/jsimms/tmp
+  - ts: 2851242
+    pid: 5
+    tid: 0
+    name: "git.c:459:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "git.c:459:main"
+      git_event_name: cmd_name
+      hierarchy: clone/rev-list
+      name: rev-list
+  - ts: 2853684
+    pid: 5
+    tid: 2
+    name: "data(progress): total_objects -> 0"
+    cat: ""
+    ph: X
+    dur: 62
+    args:
+      category: progress
+      file_line_thread: "progress.c:329:main"
+      git_event_name: data
+      key: total_objects
+      nesting: 2
+      t_abs: 0.005227
+      t_rel: 0.000062
+      value: "0"
+  - ts: 2853689
+    pid: 5
+    tid: 1
+    name: Checking connectivity
+    cat: ""
+    ph: X
+    dur: 82
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Checking connectivity
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 0.000088
+  - ts: 2862415
+    pid: 1
+    tid: 1
+    name: unpack_trees
+    cat: ""
+    ph: X
+    dur: 1679
+    args:
+      begin:
+        category: unpack_trees
+        file_line_thread: "unpack-trees.c:1724:main"
+        git_event_name: region_enter
+        label: unpack_trees
+        msg: ~
+        nesting: 1
+      end:
+        file_line_thread: "unpack-trees.c:1910:main"
+        git_event_name: region_leave
+        t_rel: 0.001681
+  - ts: 2862656
+    pid: 1
+    tid: 2
+    name: traverse_trees
+    cat: ""
+    ph: X
+    dur: 252
+    args:
+      begin:
+        category: unpack_trees
+        file_line_thread: "unpack-trees.c:1817:main"
+        git_event_name: region_enter
+        label: traverse_trees
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "unpack-trees.c:1819:main"
+        git_event_name: region_leave
+        t_rel: 0.000252
+  - ts: 2862965
+    pid: 1
+    tid: 2
+    name: Updating files
+    cat: ""
+    ph: X
+    dur: 1007
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Updating files
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 0.001006
+  - ts: 2864009
+    pid: 1
+    tid: 2
+    name: Filtering content
+    cat: ""
+    ph: X
+    dur: 16
+    args:
+      begin:
+        category: progress
+        file_line_thread: "progress.c:268:main"
+        git_event_name: region_enter
+        label: Filtering content
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "progress.c:336:main"
+        git_event_name: region_leave
+        t_rel: 0.000017
+  - ts: 2864050
+    pid: 1
+    tid: 2
+    name: update
+    cat: ""
+    ph: X
+    dur: 22
+    args:
+      begin:
+        category: cache_tree
+        file_line_thread: "cache-tree.c:476:main"
+        git_event_name: region_enter
+        label: update
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "cache-tree.c:479:main"
+        git_event_name: region_leave
+        t_rel: 0.000021
+  - ts: 2864109
+    pid: 1
+    tid: 1
+    name: do_write_index
+    cat: ""
+    ph: X
+    dur: 205
+    args:
+      begin:
+        category: index
+        file_line_thread: "read-cache.c:3138:main"
+        git_event_name: region_enter
+        label: do_write_index
+        msg: /Users/jsimms/tmp/focus/.git/index.lock
+        nesting: 1
+      end:
+        file_line_thread: "read-cache.c:3141:main"
+        git_event_name: region_leave
+        t_rel: 0.000205
+  - ts: 2864109
+    pid: 1
+    tid: 2
+    name: "data(index): write/cache_nr -> 2"
+    cat: ""
+    ph: X
+    dur: 190
+    args:
+      category: index
+      file_line_thread: "read-cache.c:3102:main"
+      git_event_name: data
+      key: write/cache_nr
+      nesting: 2
+      t_abs: 2.864299
+      t_rel: 0.00019
+      value: "2"
+  - ts: 2864110
+    pid: 1
+    tid: 2
+    name: "data(index): write/version -> 2"
+    cat: ""
+    ph: X
+    dur: 168
+    args:
+      category: index
+      file_line_thread: "read-cache.c:3100:main"
+      git_event_name: data
+      key: write/version
+      nesting: 2
+      t_abs: 2.864277
+      t_rel: 0.000168
+      value: "2"
+  - ts: 2864134
+    pid: 1
+    tid: 2
+    name: write
+    cat: ""
+    ph: X
+    dur: 14
+    args:
+      begin:
+        category: cache_tree
+        file_line_thread: "cache-tree.c:529:main"
+        git_event_name: region_enter
+        label: write
+        msg: ~
+        nesting: 2
+      end:
+        file_line_thread: "cache-tree.c:531:main"
+        git_event_name: region_leave
+        t_rel: 0.000014
+displayTimeUnit: ~
+systemTraceEvents: ~
+otherData: ~
+

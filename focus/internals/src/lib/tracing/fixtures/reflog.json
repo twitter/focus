@@ -1,0 +1,8 @@
+{"event":"version","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:22:40.069460Z","file":"common-main.c","line":49,"evt":"3","exe":"2.35.1"}
+{"event":"start","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:22:40.069516Z","file":"common-main.c","line":50,"t_abs":0.001196,"argv":["git","reflog"]}
+{"event":"def_repo","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:22:40.069790Z","file":"repository.c","line":136,"repo":1,"worktree":"/Users/jsimms/workspace/focus"}
+{"event":"cmd_name","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:22:40.069961Z","file":"git.c","line":459,"name":"reflog","hierarchy":"reflog"}
+{"event":"child_start","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:22:40.074566Z","file":"run-command.c","line":721,"child_id":0,"child_class":"pager","use_shell":true,"argv":["less"]}
+{"event":"exit","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:22:40.100789Z","file":"git.c","line":716,"t_abs":0.032470,"code":0}
+{"event":"child_exit","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:23:01.142046Z","file":"run-command.c","line":977,"child_id":0,"pid":31194,"code":0,"t_rel":21.067475}
+{"event":"atexit","sid":"20220304T192240.068988Z-H85c4cf64-P000079d9","thread":"main","time":"2022-03-04T19:23:01.142110Z","file":"trace2/tr2_tgt_event.c","line":201,"t_abs":21.073792,"code":0}

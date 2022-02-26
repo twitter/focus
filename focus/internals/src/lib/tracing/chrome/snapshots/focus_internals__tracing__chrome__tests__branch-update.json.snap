@@ -1,0 +1,73 @@
+---
+source: focus/internals/src/lib/tracing/chrome/tests.rs
+assertion_line: 12
+expression: trace
+
+---
+traceEvents:
+  - ts: 0
+    pid: 1
+    tid: 0
+    name: main
+    cat: ""
+    ph: X
+    dur: 4627
+    args:
+      begin:
+        file_line_thread: "common-main.c:49:main"
+        git_event_name: version
+        git_version: 2.35.1
+        stats_version: "3"
+      end:
+        code: 0
+        file_line_thread: "trace2/tr2_tgt_event.c:201:main"
+        git_event_name: atexit
+        t_abs: 0.006074
+  - ts: 92
+    pid: 1
+    tid: 0
+    name: git branch -f jsimms/git-trace-processing HEAD
+    cat: ""
+    ph: X
+    dur: 4509
+    args:
+      begin:
+        argv:
+          - git
+          - branch
+          - "-f"
+          - jsimms/git-trace-processing
+          - HEAD
+        file_line_thread: "common-main.c:50:main"
+        git_event_name: start
+        t_abs: 0.001536
+      end:
+        code: 0
+        file_line_thread: "git.c:716:main"
+        git_event_name: exit
+        t_abs: 0.006046
+  - ts: 467
+    pid: 1
+    tid: 0
+    name: "repository.c:136:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "repository.c:136:main"
+      git_event_name: def_repo
+      worktree: /Users/jsimms/workspace/focus
+  - ts: 534
+    pid: 1
+    tid: 0
+    name: "git.c:459:main"
+    cat: ""
+    ph: i
+    args:
+      file_line_thread: "git.c:459:main"
+      git_event_name: cmd_name
+      hierarchy: branch
+      name: branch
+displayTimeUnit: ~
+systemTraceEvents: ~
+otherData: ~
+

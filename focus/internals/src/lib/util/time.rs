@@ -175,6 +175,16 @@ impl fmt::Display for GitIdentTime {
     }
 }
 
+pub trait DateTimeExt<Tz: TimeZone> {
+    fn timestamp_micros(&self) -> i64;
+}
+
+impl<Tz: TimeZone> DateTimeExt<Tz> for DateTime<Tz> {
+    fn timestamp_micros(&self) -> i64 {
+        self.timestamp_nanos() / 1000
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
