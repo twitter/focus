@@ -710,7 +710,11 @@ fn resolve_involved_directories(
     let resolver = RoutingResolver::new(cache_dir.as_path());
 
     let repo_state = git_helper::RepoState::new(&repo, app.clone())?;
-    let request = ResolutionRequest::new(repo, repo_state, coordinate_set);
+    let request = ResolutionRequest {
+        repo: repo.to_path_buf(),
+        repo_state,
+        coordinate_set,
+    };
     let cache_options = CacheOptions::default();
 
     let result = resolver

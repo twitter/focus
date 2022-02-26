@@ -20,7 +20,7 @@ pub struct PantsResolver {
 
 impl PantsResolver {
     fn locate_pants_binary(request: &ResolutionRequest) -> PathBuf {
-        let in_repo_pants_wrapper = request.repo().join("pants");
+        let in_repo_pants_wrapper = request.repo.join("pants");
         if in_repo_pants_wrapper.is_file() {
             // This is dumb, but our wrapper script pukes if you invoke it with an absolute path. We are just ensuring that it exists at all.
             PathBuf::from("./pants")
@@ -51,7 +51,7 @@ impl Resolver for PantsResolver {
 
         let mut directories = BTreeSet::<PathBuf>::new();
         let addresses: Vec<String> = request
-            .coordinate_set()
+            .coordinate_set
             .underlying()
             .iter()
             .filter_map(|coordinate| {
@@ -74,7 +74,7 @@ impl Resolver for PantsResolver {
         scmd.ensure_success_or_log(
             cmd.env("EE_PANTS_DAEMON_BETA", "0")
                 .args(args)
-                .current_dir(request.repo()),
+                .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
             &description,
         )?;
