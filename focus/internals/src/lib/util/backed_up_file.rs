@@ -3,6 +3,7 @@ use std::{
     cell::Cell,
     path::{Path, PathBuf},
 };
+use tracing::{debug, info};
 
 #[derive(Debug)]
 pub struct BackedUpFile {
@@ -29,11 +30,7 @@ impl BackedUpFile {
             )
         })?;
 
-        log::debug!(
-            "Backed up {} -> {}",
-            &path.display(),
-            &backup_path.display()
-        );
+        debug!(?path, ?backup_path, "Backed up file",);
 
         Ok(Self {
             original_path: path.to_owned(),
@@ -50,15 +47,15 @@ impl BackedUpFile {
 impl Drop for BackedUpFile {
     fn drop(&mut self) {
         if self.restore.get() {
-            log::info!(
-                "Restoring backup {} -> {}",
-                self.backup_path.display(),
-                self.original_path.display()
+            info!(
+                ?self.backup_path,
+                ?self.original_path,
+                "Restoring backed up file",
             );
             std::fs::rename(&self.backup_path, &self.original_path)
                 .expect("failed to restore backup file");
         } else {
-            log::debug!("Removing backup {}", self.backup_path.display());
+            debug!(?self.backup_path, "Removing backup file");
             std::fs::remove_file(&self.backup_path).expect("failed to delete backup file");
         }
     }

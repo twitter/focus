@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::{app::App, repository::Repo, util::paths::focus_config_dir};
@@ -128,7 +129,8 @@ impl Tracker {
         for entry in reader {
             match entry {
                 Ok(entry) => {
-                    log::info!("Checking {}", entry.path().display());
+                    let entry_path = entry.path();
+                    info!(?entry_path, "Checking repository");
 
                     if let Ok(file_type) = entry.file_type() {
                         if file_type.is_symlink() {
@@ -155,26 +157,22 @@ impl Tracker {
                                     };
 
                                     if mismatched_uuid {
-                                        log::warn!(
-                                            "Removing {}: configured UUID differs from indicated UUID ({})",
-                                            entry.path().display(),
-                                            uuid_from_filename,
+                                        warn!(
+                                            ?entry_path,
+                                            ?uuid_from_filename,
+                                            "Removing entry configured UUID differs from indicated UUID",
                                         );
                                         std::fs::remove_file(entry.path())?;
                                     }
                                 }
 
                                 Err(e) => {
-                                    log::warn!(
-                                        "Removing {}: invalid destination: {}",
-                                        entry.path().display(),
-                                        e
-                                    );
+                                    warn!(?entry_path, ?e, "Removing entry: invalid destination",);
                                     std::fs::remove_file(entry.path())?;
                                 }
                             }
                         } else {
-                            log::warn!("Removing {} (not a symlink)", entry.path().display());
+                            warn!(?entry_path, "Removing entry (not a symlink)");
                             std::fs::remove_file(entry.path())?;
                         }
                     } else {
@@ -203,6 +201,7 @@ impl Tracker {
             match entry {
                 Ok(entry) => {
                     if let Ok(file_type) = entry.file_type() {
+                        let entry_path = entry.path();
                         if file_type.is_symlink() {
                             match canonicalize(entry.path()) {
                                 Ok(canonical_path) => {
@@ -226,15 +225,15 @@ impl Tracker {
                                 }
 
                                 Err(e) => {
-                                    log::warn!(
-                                        "Skipping {}: unable to canonicalize destination {}",
-                                        entry.path().display(),
-                                        e
+                                    warn!(
+                                        ?entry_path,
+                                        ?e,
+                                        "Skipping entry: unable to canonicalize destination",
                                     );
                                 }
                             }
                         } else {
-                            log::info!("ignoring {} (not a symlink)", entry.path().display());
+                            info!(?entry_path, "ignoring entry (not a symlink)");
                         }
                     } else {
                         bail!("unable to determine file type for {:?}", entry.path());

@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
-use log;
 use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tracing::info;
 
 use tempfile::TempDir;
 
@@ -27,9 +27,9 @@ impl Sandbox {
             drop(underlying);
 
             fs::create_dir_all(&path).context("recreating the directory")?;
-            log::info!(
-                "Created sandbox in '{}', which will not be cleaned up at exit",
-                &path.display()
+            info!(
+                ?path,
+                "Created sandbox, which will not be cleaned up at exit",
             );
 
             None

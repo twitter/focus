@@ -1,4 +1,6 @@
 use anyhow::{bail, Context, Result};
+use tracing::debug;
+use tracing::warn;
 
 use std::convert::TryFrom;
 use std::fs::File;
@@ -728,13 +730,13 @@ fn resolve_involved_directories(
             find_closest_directory_with_build_file(&qualified_path, repo)
                 .context("locating closest build file")?
         {
-            log::debug!(
-                "Adding directory with closest build definiton: {}",
-                path_to_closest_build_file.display()
+            debug!(
+                ?path_to_closest_build_file,
+                "Adding directory with closest build definition",
             );
             into.insert(path_to_closest_build_file);
         } else {
-            log::debug!("Adding directory verbatim: {}", qualified_path.display());
+            debug!(?qualified_path, "Adding directory verbatim");
             into.insert(qualified_path);
         }
     }
@@ -774,7 +776,7 @@ pub fn generate_sparse_profile(
                 .as_path()
                 .strip_prefix(repo)
                 .context("Failed to strip prefix")?;
-            log::debug!("+ {}", &dir.display());
+            debug!(?dir, "Adding directory");
             line.extend(dir.as_os_str().as_bytes());
         }
         line.extend(b"/\n"); // Paths have a '/' suffix
@@ -791,7 +793,7 @@ fn find_closest_directory_with_build_file(file: &Path, ceiling: &Path) -> Result
     } else if let Some(parent) = file.parent() {
         parent
     } else {
-        log::warn!("Path {} has no parent", file.display());
+        warn!(?file, "Path has no parent");
         return Ok(None);
     };
     loop {

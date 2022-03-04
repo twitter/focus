@@ -11,6 +11,7 @@ use focus_internals::util::sandbox_command::SandboxCommandOutput;
 use focus_internals::working_tree_synchronizer::WorkingTreeSynchronizer;
 use std::convert::TryFrom;
 use std::fs::File;
+use tracing::error;
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -25,7 +26,7 @@ where
 {
     let result = f();
     if let Err(e) = result {
-        log::error!("Failed {}: {}", description.to_ascii_lowercase(), e);
+        error!(?e, "Failed {}", description.to_ascii_lowercase());
         bail!(e);
     }
 

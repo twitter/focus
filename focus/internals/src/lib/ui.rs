@@ -12,6 +12,7 @@ use std::{
 use crate::app::App;
 
 use anyhow::{bail, Context, Result};
+use tracing::{info, warn};
 
 pub struct Task {
     description: String,
@@ -307,7 +308,7 @@ impl UserInterfaceRenderer {
             if self.interactive() {
                 // Ignore. It will be listed in the log.
             } else {
-                log::info!("{}", message);
+                info!("{}", message);
             }
         }
     }
@@ -433,11 +434,7 @@ impl UserInterfaceState {
                 locked_log_entries.push(entry);
             }
             Err(e) => {
-                log::warn!(
-                    "Failed to obtain lock; could not add log entry {:?}: {}",
-                    entry,
-                    e
-                );
+                warn!(?entry, ?e, "Failed to obtain lock; could not add log entry",);
             }
         }
     }
@@ -448,11 +445,7 @@ impl UserInterfaceState {
                 *locked_status = status;
             }
             Err(e) => {
-                log::warn!(
-                    "Failed to obtain lock; could not set status to {}: {}",
-                    status,
-                    e
-                );
+                warn!(?status, ?e, "Failed to obtain lock; could not set status");
             }
         }
     }

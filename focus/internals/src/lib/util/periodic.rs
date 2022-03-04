@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::thread::spawn;
 use std::time::Duration;
 
-use log::debug;
+use tracing::debug;
 
 enum InvocationKind {
     Timed,

@@ -12,6 +12,7 @@ use std::{
     },
     time::Duration,
 };
+use tracing::{debug, warn};
 
 fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
     use std::io;
@@ -219,7 +220,7 @@ impl SandboxCommand {
         output: SandboxCommandOutput,
         description: &str,
     ) -> Result<ExitStatus> {
-        log::debug!("Starting {:?} ({})", cmd, description);
+        debug!("Starting {:?} ({})", cmd, description);
         let mut launch = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn command {}", description))?;
@@ -232,7 +233,7 @@ impl SandboxCommand {
             .wait()
             .with_context(|| format!("Failed to wait for command {}", description))?;
         tailer.iter().for_each(|t| t.stop());
-        log::debug!("Command {:?} exited with status {}", cmd, &status);
+        debug!("Command {:?} exited with status {}", cmd, &status);
         if !status.success() {
             self.log(output, description).context("logging output")?;
             bail!("Command {:?} failed: {}", cmd, description);
@@ -272,7 +273,7 @@ impl Tailer {
         {
             if updated {
                 if let Err(e) = self.cancel_tx.send(()) {
-                    log::warn!("Failed to send stop signal to Tailer instance: {}", e);
+                    warn!(?e, "Failed to send stop signal to Tailer instance");
                 }
             }
         }
