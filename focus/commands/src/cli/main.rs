@@ -22,13 +22,10 @@ use focus_internals::{
     util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
 };
 use subcommands::{init::InitOpt, maintenance::launchd};
+use tracing::debug;
 
-use crate::subcommands::{
-    adhoc, init, layer, maintenance,
-    maintenance::{TimePeriod},
-    refs,
-};
-use strum::{VariantNames, IntoEnumIterator};
+use crate::subcommands::{adhoc, init, layer, maintenance, maintenance::TimePeriod, refs};
+use strum::{IntoEnumIterator, VariantNames};
 
 mod subcommands;
 
@@ -788,7 +785,10 @@ fn main() -> Result<()> {
     run_subcommand(app, options, interactive)?;
 
     let total_runtime = started_at.elapsed();
-    log::debug!("Finished normally in {:.2}s", total_runtime.as_secs_f32());
+    debug!(
+        total_runtime_secs = total_runtime.as_secs_f32(),
+        "Finished normally"
+    );
 
     Ok(())
 }

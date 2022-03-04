@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::{app::App, ui::ProgressReporter, util::git_helper};
@@ -129,7 +130,7 @@ impl RepoManager {
                     let repo_path = directory_entry.path();
                     let git_dir = repo_path.join(".git");
                     if !git_dir.is_dir() {
-                        log::warn!("Skipping {} (not a Git repository)", repo_path.display());
+                        warn!(?repo_path, "Skipping directory (not a Git repository)");
                         continue;
                     }
 

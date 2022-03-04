@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use tracing::{debug, info};
 
 use std::path::{Path, PathBuf};
 
@@ -47,7 +48,7 @@ fn find_committed_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     for line in &changed_paths {
         let parsed = PathBuf::from(line);
         if build_graph_involved_filename_predicate(parsed.as_path()) {
-            log::info!("Committed {}", parsed.display());
+            info!(path = ?parsed, "Committed path");
             build_involved_changed_paths.push(parsed);
         }
     }
@@ -75,7 +76,7 @@ fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
         }
         let parsed = PathBuf::from(path.unwrap());
         if build_graph_involved_filename_predicate(parsed.as_path()) {
-            log::info!("Uncommitted {}", parsed.display());
+            info!(path = ?parsed, "Uncommitted path");
             build_involved_changed_paths.push(parsed);
         }
     }
@@ -139,6 +140,6 @@ pub fn run(app: Arc<App>, repo: &Path) -> Result<()> {
         eprintln!("Uncommitted changes affect the build graph, please run `focus sync` to update the sparse checkout!");
         std::process::exit(1);
     }
-    log::debug!("No changes to files affecting the build graph were detected");
+    debug!("No changes to files affecting the build graph were detected");
     Ok(())
 }

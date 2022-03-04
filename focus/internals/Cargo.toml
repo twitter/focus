@@ -10,7 +10,6 @@ anyhow = "1.0.45"
 dirs = "4.0.0"
 git2 = { version = "0.13.23", default-features = false }
 lazy_static = "1.4.0"
-log = "0.4.14"
 prost = "0.9.0"
 serde = "1.0.130"
 serde_derive = "1.0.130"
@@ -29,6 +28,7 @@ regex = "1.5.4"
 once_cell = "1.4.0"
 clap = "3.1.0"
 which = "4.2.4"
+tracing = "0.1.31"
 
 [lib]
 name = "focus_internals"

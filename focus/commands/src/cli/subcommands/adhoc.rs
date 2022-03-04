@@ -10,6 +10,7 @@ use focus_internals::{
     app::App,
     model::{Layer, LayerSet, LayerSets},
 };
+use tracing::warn;
 
 struct Adhoc {
     app: Arc<App>,
@@ -95,9 +96,9 @@ pub fn push(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<bool> {
 
         for name in &names {
             if set.contains(name) {
-                log::warn!(
-                    "Skipping '{}' since it is already present in the stack",
-                    name
+                warn!(
+                    ?name,
+                    "Skipping layer since it is already present in the stack",
                 )
             } else {
                 coordinates.push(name.to_owned());
@@ -112,7 +113,7 @@ pub fn pop(app: Arc<App>, repo: PathBuf, count: usize) -> Result<bool> {
     Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
         for i in 0..count {
             if coordinates.pop().is_none() {
-                log::warn!("There were only {} coordinates to pop off the stack", i);
+                warn!("There were only {} coordinates to pop off the stack", i);
                 break;
             }
         }
@@ -133,9 +134,9 @@ pub fn remove(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<bool> 
             if let Some(index) = coordinate_index.get(name) {
                 coordinates.remove(*index);
             } else {
-                log::warn!(
-                    "Skipped coordinate {} since it was missing from the stack",
-                    name
+                warn!(
+                    ?name,
+                    "Skipped coordinate since it was missing from the stack",
                 );
             }
         }

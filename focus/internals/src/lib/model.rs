@@ -10,6 +10,7 @@ use std::{
 use anyhow::{bail, Context, Error, Result};
 
 use serde_derive::{Deserialize, Serialize};
+use tracing::{debug, warn};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(thiserror::Error, Debug)]
@@ -308,9 +309,9 @@ impl LayerSets {
             .sort_by_file_name()
             .follow_links(true)
             .into_iter();
-        log::debug!(
-            "scanning project directory {}",
-            &self.project_directory().display()
+        debug!(
+            project_directory = ?self.project_directory(),
+            "scanning project directory",
         );
 
         for entry in walker.filter_entry(Self::layer_file_filter) {
@@ -322,7 +323,7 @@ impl LayerSets {
                     }
                 }
                 Err(e) => {
-                    log::warn!("Encountered error: {}", e);
+                    warn!(?e, "Encountered error");
                 }
             }
         }
@@ -434,7 +435,7 @@ impl LayerSets {
         if let Some(selected_layers) = self.selected_layers().context("loading selected layers")? {
             layers.extend(selected_layers);
         } else {
-            log::warn!("No layers are selected!");
+            warn!("No layers are selected!");
         }
         Ok(layers)
     }

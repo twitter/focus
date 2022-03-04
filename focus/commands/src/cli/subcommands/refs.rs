@@ -8,10 +8,10 @@ use focus_internals::{
         time::FocusTime,
     },
 };
-use log::debug;
 
 use anyhow::{Context, Result};
 use git2::Repository;
+use tracing::debug;
 
 /// Vec of names that should never be expired via this process
 /// TODO: this should probably be in configuration rather than hardcoded here

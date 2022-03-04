@@ -11,6 +11,7 @@ use std::{
 use anyhow::{Context, Result};
 use focus_internals::util::git_helper;
 use strum_macros;
+use tracing::{debug, error, info, warn};
 
 use self::launchd::PlistOpts;
 
@@ -89,7 +90,7 @@ impl Default for RegisterOpts {
 
 /// Registers the current repository to be maintained when the maintenance runner executes
 pub fn register(opts: RegisterOpts) -> Result<()> {
-    log::debug!("maintenance.register {:?}", opts);
+    debug!(?opts, "maintenance.register");
     let RegisterOpts {
         repo_path,
         config_key,
@@ -221,35 +222,30 @@ impl Runner {
     }
 
     fn run_in_path(&self, time_period: TimePeriod, path: &Path) -> Result<()> {
-        log::info!("being running {} tasks in {:?}", time_period, path);
+        info!(?time_period, ?path, "running tasks");
         match self.run_maint(time_period, path) {
             Ok(output) => {
                 let status = &output.status;
                 if status.success() {
-                    log::debug!(
-                        "completed {} maintenance for {:?}",
-                        time_period.name(),
-                        path
-                    )
+                    debug!(?time_period, ?path, "completed maintenance",)
                 } else {
-                    log::warn!("maintenance failed for {:?}, exit status {}", path, status);
+                    warn!(?path, exit_status = ?status, "maintenance failed");
                     {
                         let cursor = Cursor::new(output.stdout);
                         for line in cursor.lines() {
-                            log::warn!("stdout: {}", line?)
+                            warn!(stdout = ?line, "stdout");
                         }
                     }
                     {
                         let cursor = Cursor::new(output.stderr);
                         for line in cursor.lines() {
-                            log::warn!("stderr: {}", line?)
+                            warn!(?line, "stderr");
                         }
                     }
                 }
             }
             Err(e) => {
-                log::warn!("failed runing git-maintenance for repo: {:?}", path);
-                log::warn!("{:?}", e);
+                warn!(?path, ?e, "failed runing git-maintenance");
             }
         }
         Ok(())
@@ -264,8 +260,7 @@ impl Runner {
                 Ok(true) => self.run_in_path(time_period, pb)?,
                 Ok(false) => self.handle_missing_config_entry(&path)?,
                 Err(e) => {
-                    log::error!("error in determining if path {:?} is a repo", pb);
-                    log::error!("{:?}", e);
+                    error!(path = ?pb, ?e, "error in determining if path is a repo");
                 }
             }
         }

@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{bail, Result};
+use tracing::error;
 
 use crate::util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
 
@@ -88,7 +89,7 @@ impl Resolver for PantsResolver {
                 if let Some(parent) = path.parent() {
                     directories.insert(parent.to_owned());
                 } else {
-                    log::error!("Could not get parent of path {}", path.display());
+                    error!(?path, "Could not get parent of path");
                     // Complain...
                 }
             }

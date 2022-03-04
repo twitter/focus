@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
-use log::warn;
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 pub struct LockFile {
     path: PathBuf,
@@ -65,9 +65,9 @@ impl Drop for LockFile {
     fn drop(&mut self) {
         if let Err(e) = Self::acqrel_lock(self.fd, false) {
             warn!(
-                "Releasing advisory lock on file {} failed: {}",
-                self.path.display(),
-                e
+                ?self.path,
+                ?e,
+                "Releasing advisory lock on file failed",
             );
         }
         if let Err(e) = std::fs::remove_file(self.path.as_path()) {
