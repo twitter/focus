@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fs::File, io::Write, process::Stdio, sync::Arc};
 
-use focus_internals::{
+use crate::{
     app::App,
     util::{
         git_helper,
@@ -25,8 +25,8 @@ const SAFE_BRANCH_NAMES: &[&str] = &[
 mod partition {
     use std::collections::HashSet;
 
+    use crate::util::time::{FocusTime, GitTime};
     use anyhow::{Context, Result};
-    use focus_internals::util::time::{FocusTime, GitTime};
     use git2::{Commit, Oid, Repository};
 
     use super::PartitionedRefNames;
@@ -237,10 +237,10 @@ pub fn expire_old_refs(
 mod tests {
     use std::fs;
 
+    use crate::util::{git_helper::Ident, time::FocusTime};
     use anyhow::Result;
-    use focus_internals::util::{git_helper::Ident, time::FocusTime};
 
-    use crate::subcommands::testing::refs::Fixture;
+    use crate::operation::testing::refs::Fixture;
 
     static OLD_MERGE_BASE_BRANCH_NAME: &'static str = "refs/heads/oldmergebase";
     static OLD_TIP_BRANCH_NAME: &'static str = "refs/heads/oldtip";

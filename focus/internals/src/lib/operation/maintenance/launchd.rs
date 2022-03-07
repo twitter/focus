@@ -3,7 +3,7 @@ use plist::{dictionary::Dictionary, Value};
 use std::{io::Write, path::PathBuf};
 
 #[derive(Debug, Clone)]
-pub(crate) struct PlistOpts {
+pub struct PlistOpts {
     pub focus_path: PathBuf,
     pub git_binary_path: PathBuf,
     pub time_period: TimePeriod,
@@ -67,7 +67,7 @@ impl From<ProgramArguments> for Value {
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct CalendarInterval {
+pub struct CalendarInterval {
     day: Option<u32>,
     hour: Option<u32>,
     minute: Option<u32>,
@@ -233,7 +233,7 @@ impl From<PlistOpts> for LaunchdPlist {
     }
 }
 
-pub(crate) fn write_plist<W: Write>(writer: W, plist_opts: PlistOpts) -> Result<()> {
+pub fn write_plist<W: Write>(writer: W, plist_opts: PlistOpts) -> Result<()> {
     let lp: LaunchdPlist = plist_opts.into();
 
     let v: Value = lp.into();

@@ -1,4 +1,4 @@
-pub(crate) mod launchd;
+pub mod launchd;
 
 use std::{
     ffi::OsString,
@@ -8,8 +8,9 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use crate::util::git_helper;
 use anyhow::{Context, Result};
-use focus_internals::util::git_helper;
+use strum::IntoEnumIterator;
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
@@ -316,6 +317,32 @@ impl TryFrom<RunOptions> for Runner {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ScheduleOpts {
+    /// The path where file constrolling launch agents should be written.
+    pub launch_agents_path: PathBuf,
+
+    /// The time period of job to schedule.
+    pub time_period: TimePeriod,
+
+    /// Whether to register jobs for all time periods.
+    pub all: bool,
+}
+
+pub fn schedule(opts: ScheduleOpts) -> Result<()> {
+    let time_periods: Vec<TimePeriod> = if opts.all {
+        TimePeriod::iter().collect()
+    } else {
+        vec![opts.time_period]
+    };
+
+    for tp in time_periods {
+        write_plist(launchd::PlistOpts::default(), tp, &opts.launch_agents_path)?;
+    }
+
+    todo!("implement calling launchctl with new jobs");
+}
+
 trait ConfigExt {
     fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>>;
 
@@ -365,7 +392,7 @@ pub fn run(cli: RunOptions, time_period: TimePeriod) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn write_plist(
+pub fn write_plist(
     opts: PlistOpts,
     _time_period: TimePeriod,
     _launch_agents_dir: &Path,
@@ -378,8 +405,8 @@ pub(crate) fn write_plist(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::scratch_git_repo::ScratchGitRepo;
     use anyhow::Result;
-    use focus_internals::testing::scratch_git_repo::ScratchGitRepo;
     use tempfile::TempDir;
 
     struct ConfigFixture {

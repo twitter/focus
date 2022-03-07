@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(in crate::subcommands) mod refs {
+pub(in crate::operation) mod refs {
     use std::{
         path::{Path, PathBuf},
         process::Command,
@@ -8,7 +8,7 @@ pub(in crate::subcommands) mod refs {
 
     use anyhow::{Context, Result};
 
-    use focus_internals::app::App;
+    use crate::app::App;
     use git2::Repository;
 
     use tempfile::TempDir;

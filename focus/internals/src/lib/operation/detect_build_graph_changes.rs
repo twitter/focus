@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use std::sync::{mpsc, Arc};
 
-use focus_internals::app::App;
-use focus_internals::util::git_helper;
+use crate::app::App;
+use crate::util::git_helper;
 
 fn build_graph_involved_filename_predicate(name: &Path) -> bool {
     if let Some(extension) = name.extension() {

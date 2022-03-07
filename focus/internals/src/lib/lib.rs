@@ -2,6 +2,7 @@ pub mod app;
 pub mod coordinate;
 pub mod coordinate_resolver;
 pub mod model;
+pub mod operation;
 pub mod repository;
 pub mod sparse_repos;
 pub mod testing;
