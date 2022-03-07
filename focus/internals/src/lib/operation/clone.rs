@@ -1,5 +1,5 @@
+use crate::{app::App, sparse_repos};
 use anyhow::Result;
-use focus_internals::{app::App, sparse_repos};
 
 use std::{path::PathBuf, sync::Arc};
 

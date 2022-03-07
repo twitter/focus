@@ -1,14 +1,14 @@
 use std::{collections::HashSet, path::PathBuf, process::Command, sync::Arc};
 
-use anyhow::{bail, Context, Result};
-use chrono::{Datelike, Duration, Local, NaiveDate};
-use focus_internals::{
+use crate::{
     app::App,
     util::{
         git_helper,
         sandbox_command::{SandboxCommand, SandboxCommandOutput},
     },
 };
+use anyhow::{bail, Context, Result};
+use chrono::{Datelike, Duration, Local, NaiveDate};
 use tempfile::TempDir;
 
 pub static SOURCE_RO_URL: &str = "https://rogit.twitter.biz/source";

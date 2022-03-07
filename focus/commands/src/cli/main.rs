@@ -18,16 +18,13 @@ use focus_internals::{
     app::App,
     coordinate::Coordinate,
     model::LayerSets,
+    operation,
     tracker::Tracker,
     util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
 };
-use subcommands::{init::InitOpt, maintenance::launchd};
 use tracing::debug;
 
-use crate::subcommands::{adhoc, init, layer, maintenance, maintenance::TimePeriod, refs};
-use strum::{IntoEnumIterator, VariantNames};
-
-mod subcommands;
+use strum::VariantNames;
 
 #[derive(Parser, Debug)]
 enum Subcommand {
@@ -107,7 +104,7 @@ enum Subcommand {
     Init {
         /// By default we take 90 days of history, pass a date with this option
         /// if you want a different amount of history
-        #[clap(long, parse(try_from_str = init::parse_shallow_since_date))]
+        #[clap(long, parse(try_from_str = operation::init::parse_shallow_since_date))]
         shallow_since: Option<NaiveDate>,
 
         /// This command will only ever clone a single ref, by default this is
@@ -145,7 +142,7 @@ enum Subcommand {
         #[clap(long)]
         push_url: Option<String>,
 
-        #[clap(long, default_value=init::SOURCE_RO_URL)]
+        #[clap(long, default_value=operation::init::SOURCE_RO_URL)]
         fetch_url: String,
 
         #[clap()]
@@ -158,7 +155,7 @@ enum Subcommand {
     Maintenance {
         /// The git config key to look for paths of repos to run maintenance in. Defaults to
         /// 'maintenance.repo'
-        #[clap(long, default_value=maintenance::DEFAULT_CONFIG_KEY, global = true)]
+        #[clap(long, default_value=operation::maintenance::DEFAULT_CONFIG_KEY, global = true)]
         config_key: String,
 
         #[clap(subcommand)]
@@ -206,10 +203,10 @@ enum MaintenanceSubcommand {
         /// The time period of job to run
         #[clap(
             long,
-            possible_values=TimePeriod::VARIANTS,
+            possible_values=operation::maintenance::TimePeriod::VARIANTS,
             default_value="hourly",
         )]
-        time_period: TimePeriod,
+        time_period: operation::maintenance::TimePeriod,
     },
 
     Register {
@@ -227,10 +224,10 @@ enum MaintenanceSubcommand {
         /// The time period of job to schedule
         #[clap(
             long,
-            possible_values=TimePeriod::VARIANTS,
+            possible_values=operation::maintenance::TimePeriod::VARIANTS,
             default_value="hourly",
         )]
-        time_period: TimePeriod,
+        time_period: operation::maintenance::TimePeriod,
 
         /// register jobs for all time periods
         #[clap(long, conflicts_with = "time-period")]
@@ -466,7 +463,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             ));
             ui.set_enabled(interactive);
 
-            subcommands::clone::run(
+            operation::clone::run(
                 dense_repo,
                 sparse_repo,
                 branch,
@@ -480,7 +477,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         Subcommand::Sync { sparse_repo } => {
             let sparse_repo = expand_tilde(sparse_repo)?;
             app.ui().set_enabled(interactive);
-            subcommands::sync::run(app, &sparse_repo)
+            operation::sync::run(app, &sparse_repo)
         }
 
         Subcommand::Refs {
@@ -496,7 +493,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
                     app.ui().set_enabled(interactive);
-                    refs::expire_old_refs(&repo, cutoff, check_merge_base, use_transaction, app)
+                    operation::refs::expire_old_refs(
+                        &repo,
+                        cutoff,
+                        check_merge_base,
+                        use_transaction,
+                        app,
+                    )
                 }
 
                 RefsSubcommand::ListExpired {
@@ -504,10 +507,14 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let refs::PartitionedRefNames {
+                    let operation::refs::PartitionedRefNames {
                         current: _,
                         expired,
-                    } = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
+                    } = operation::refs::PartitionedRefNames::for_repo(
+                        &repo,
+                        cutoff,
+                        check_merge_base,
+                    )?;
 
                     println!("{}", expired.join("\n"));
 
@@ -519,10 +526,14 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let refs::PartitionedRefNames {
+                    let operation::refs::PartitionedRefNames {
                         current,
                         expired: _,
-                    } = refs::PartitionedRefNames::for_repo(&repo, cutoff, check_merge_base)?;
+                    } = operation::refs::PartitionedRefNames::for_repo(
+                        &repo,
+                        cutoff,
+                        check_merge_base,
+                    )?;
 
                     println!("{}", current.join("\n"));
 
@@ -532,22 +543,22 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Repo { subcommand } => match subcommand {
-            RepoSubcommand::List {} => subcommands::repo::list(),
-            RepoSubcommand::Repair {} => subcommands::repo::repair(app),
+            RepoSubcommand::List {} => operation::repo::list(),
+            RepoSubcommand::Repair {} => operation::repo::repair(app),
         },
 
         Subcommand::DetectBuildGraphChanges { repo } => {
             let repo = expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
-            subcommands::detect_build_graph_changes::run(app, &repo)
+            operation::detect_build_graph_changes::run(app, &repo)
         }
 
         Subcommand::UserInterfaceTest {} => {
             let ui = cloned_app.ui();
             ui.status("UI Test");
             ui.set_enabled(interactive);
-            subcommands::user_interface_test::run(app)
+            operation::user_interface_test::run(app)
         }
 
         Subcommand::Layer { repo, subcommand } => {
@@ -561,12 +572,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 LayerSubcommand::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
-                subcommands::sync::ensure_working_trees_are_clean(
-                    app.clone(),
-                    repo.as_path(),
-                    None,
-                )
-                .context("Ensuring working trees are clean failed")?;
+                operation::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+                    .context("Ensuring working trees are clean failed")?;
             }
 
             let selected_layer_stack_backup = {
@@ -581,11 +588,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             };
 
             let mutated = match subcommand {
-                LayerSubcommand::Available {} => layer::available(&repo)?,
-                LayerSubcommand::List {} => layer::list(&repo)?,
-                LayerSubcommand::Push { names } => layer::push(&repo, names)?,
-                LayerSubcommand::Pop { count } => layer::pop(&repo, count)?,
-                LayerSubcommand::Remove { names } => layer::remove(&repo, names)?,
+                LayerSubcommand::Available {} => operation::layer::available(&repo)?,
+                LayerSubcommand::List {} => operation::layer::list(&repo)?,
+                LayerSubcommand::Push { names } => operation::layer::push(&repo, names)?,
+                LayerSubcommand::Pop { count } => operation::layer::pop(&repo, count)?,
+                LayerSubcommand::Remove { names } => operation::layer::remove(&repo, names)?,
             };
 
             if mutated {
@@ -594,7 +601,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     "Syncing focused paths since the selected content has changed",
                 );
                 app.ui().set_enabled(interactive);
-                subcommands::sync::run(app, repo.as_path())
+                operation::sync::run(app, repo.as_path())
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
 
@@ -616,12 +623,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 AdhocSubcommand::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
-                subcommands::sync::ensure_working_trees_are_clean(
-                    app.clone(),
-                    repo.as_path(),
-                    None,
-                )
-                .context("Ensuring working trees are clean failed")?;
+                operation::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+                    .context("Ensuring working trees are clean failed")?;
             }
 
             let adhoc_layer_set_backup = {
@@ -634,11 +637,15 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             };
 
             let mutated: bool = match subcommand {
-                AdhocSubcommand::List {} => adhoc::list(app.clone(), repo.clone())?,
-                AdhocSubcommand::Push { names } => adhoc::push(app.clone(), repo.clone(), names)?,
-                AdhocSubcommand::Pop { count } => adhoc::pop(app.clone(), repo.clone(), count)?,
+                AdhocSubcommand::List {} => operation::adhoc::list(app.clone(), repo.clone())?,
+                AdhocSubcommand::Push { names } => {
+                    operation::adhoc::push(app.clone(), repo.clone(), names)?
+                }
+                AdhocSubcommand::Pop { count } => {
+                    operation::adhoc::pop(app.clone(), repo.clone(), count)?
+                }
                 AdhocSubcommand::Remove { names } => {
-                    adhoc::remove(app.clone(), repo.clone(), names)?
+                    operation::adhoc::remove(app.clone(), repo.clone(), names)?
                 }
             };
 
@@ -648,7 +655,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     "Syncing focused paths since the selected content has changed",
                 );
                 app.ui().set_enabled(interactive);
-                subcommands::sync::run(app, repo.as_path())
+                operation::sync::run(app, repo.as_path())
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
 
@@ -682,19 +689,19 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
             let target = expanded.as_path();
 
-            let mut init_opts: Vec<InitOpt> = Vec::new();
+            let mut init_opts: Vec<operation::init::InitOpt> = Vec::new();
 
-            let mut add_if_true = |n: bool, opt: InitOpt| {
+            let mut add_if_true = |n: bool, opt: operation::init::InitOpt| {
                 if n {
                     init_opts.push(opt)
                 };
             };
 
-            add_if_true(no_checkout, InitOpt::NoCheckout);
-            add_if_true(bare, InitOpt::Bare);
-            add_if_true(sparse, InitOpt::Sparse);
-            add_if_true(follow_tags, InitOpt::FollowTags);
-            add_if_true(progress, InitOpt::Progress);
+            add_if_true(no_checkout, operation::init::InitOpt::NoCheckout);
+            add_if_true(bare, operation::init::InitOpt::Bare);
+            add_if_true(sparse, operation::init::InitOpt::Sparse);
+            add_if_true(follow_tags, operation::init::InitOpt::FollowTags);
+            add_if_true(progress, operation::init::InitOpt::Progress);
 
             ui.set_enabled(interactive);
 
@@ -703,7 +710,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 format!("setting up a copy of the repo in {:?}", target),
             );
 
-            init::run(
+            operation::init::run(
                 shallow_since,
                 Some(branch_name),
                 if no_filter { None } else { Some(filter) },
@@ -726,8 +733,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 exec_path,
                 config_path,
                 time_period,
-            } => maintenance::run(
-                maintenance::RunOptions {
+            } => operation::maintenance::run(
+                operation::maintenance::RunOptions {
                     git_binary_path,
                     config_key,
                     exec_path,
@@ -738,7 +745,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             MaintenanceSubcommand::Register {
                 repo_path,
                 config_path,
-            } => maintenance::register(maintenance::RegisterOpts {
+            } => operation::maintenance::register(operation::maintenance::RegisterOpts {
                 repo_path,
                 config_key,
                 global_config_path: config_path,
@@ -748,21 +755,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 time_period,
                 all,
             } => {
-                let time_periods: Vec<TimePeriod> = if all {
-                    maintenance::TimePeriod::iter().collect()
-                } else {
-                    vec![time_period]
-                };
-
-                for tp in time_periods {
-                    maintenance::write_plist(
-                        launchd::PlistOpts::default(),
-                        tp,
-                        &expand_tilde(&launch_agents_path)?,
-                    )?;
-                }
-
-                todo!("implement calling launchctl with new jobs");
+                let launch_agents_path = expand_tilde(&launch_agents_path)?;
+                operation::maintenance::schedule(operation::maintenance::ScheduleOpts {
+                    launch_agents_path,
+                    time_period,
+                    all,
+                })
             }
         },
 

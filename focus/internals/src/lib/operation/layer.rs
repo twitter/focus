@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use focus_internals::model::{self, LayerSets};
+use crate::model::{self, LayerSets};
 
 pub fn available(repo: &Path) -> Result<bool> {
     let layer_sets = model::LayerSets::new(repo);
