@@ -5,8 +5,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
-use crate::util::temporary_working_directory::TemporaryWorkingDirectory;
-
 pub struct ScratchGitRepo {
     path: PathBuf,
 }
@@ -109,17 +107,27 @@ impl ScratchGitRepo {
         Ok(())
     }
 
-    pub fn commit(&self, filename: &Path, content: &[u8], message: &str) -> Result<git2::Oid> {
-        let _wd = TemporaryWorkingDirectory::new(self.path.as_path());
+    pub fn commit(
+        &self,
+        relative_filename: impl AsRef<Path>,
+        content: impl AsRef<[u8]>,
+        message: impl AsRef<str>,
+    ) -> Result<git2::Oid> {
+        let relative_filename = relative_filename.as_ref();
+        let absolute_filename = self.path.join(relative_filename);
+        if let Some(parent_dir) = absolute_filename.parent() {
+            std::fs::create_dir_all(parent_dir).context("creating intermediate directories")?;
+        }
 
         // Write the file
-        std::fs::write(filename, content).context("writing content")?;
+        std::fs::write(&absolute_filename, content).context("writing content")?;
 
         // Run `git add`
         if !Command::new("git")
             .arg("add")
             .arg("--")
-            .arg(filename.as_os_str())
+            .arg(relative_filename.as_os_str())
+            .current_dir(&self.path)
             .spawn()
             .context("running `git add`")?
             .wait()
@@ -134,7 +142,8 @@ impl ScratchGitRepo {
             .arg("commit")
             .arg("-a")
             .arg("-m")
-            .arg(message)
+            .arg(message.as_ref())
+            .current_dir(&self.path)
             .spawn()
             .context("running `git commit`")?
             .wait()
