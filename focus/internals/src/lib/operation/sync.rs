@@ -146,6 +146,11 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
 
         Ok(coordinates)
     })?;
+    // Add coordinates count to TI custom map.
+    app.tool_insights_client().get_context().add_to_custom_map(
+        "coordinates_and_layers_count",
+        coordinates.len().to_string(),
+    );
 
     let coordinate_set =
         CoordinateSet::try_from(coordinates.as_ref()).context("constructing coordinate set")?;

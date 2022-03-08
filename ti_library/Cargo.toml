@@ -1,0 +1,22 @@
+[package]
+name = "ti_library"
+description = """
+Library to instrument tools via the tool insights service.
+The library, currently, is only useful on MacOS since it relies on the
+tool insights daemon to upload the logs to tool insights service.
+"""
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.45"
+env_logger = "0.9.0"
+log = "0.4.14"
+rand = "0.8.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+shellexpand = "2.1.0"
+uuid = {version = "1.0.0-alpha.1", features = ["v4"] }
+whoami = "1.2.1"
