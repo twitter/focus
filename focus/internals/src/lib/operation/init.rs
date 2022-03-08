@@ -105,7 +105,7 @@ pub fn run(
     }
 
     {
-        let (mut cmd, scmd) = git_helper::git_command("Clone repo".to_owned(), app)?;
+        let (mut cmd, scmd) = git_helper::git_command("Clone repo", app)?;
         scmd.ensure_success_or_log(
             cmd.arg("fetch")
                 .arg("--no-tags")
@@ -197,7 +197,7 @@ impl CloneBuilder {
             opt_args.push(kv);
         }
 
-        let (mut cmd, scmd) = git_helper::git_command("Clone repo".to_owned(), app)?;
+        let (mut cmd, scmd) = git_helper::git_command("Clone repo", app)?;
 
         cmd.args(self.git_args)
             .arg("clone")

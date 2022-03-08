@@ -97,7 +97,7 @@ impl TryFrom<&str> for Coordinate {
     type Error = CoordinateError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.split_once(":") {
+        match value.split_once(':') {
             Some((prefix, rest)) => {
                 let rest = rest.to_owned();
                 if prefix.eq_ignore_ascii_case("bazel") {
