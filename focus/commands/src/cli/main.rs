@@ -1,12 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
-use std::{
-    convert::TryFrom,
-    env,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Instant,
-};
+use std::{convert::TryFrom, env, path::PathBuf, sync::Arc, time::Instant};
 
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
@@ -412,54 +406,6 @@ fn ensure_directories_exist() -> Result<()> {
     Ok(())
 }
 
-fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Result<PathBuf> {
-    let p = path_user_input.as_ref();
-    if !p.starts_with("~") {
-        return Ok(p.to_path_buf());
-    }
-    if p == Path::new("~") {
-        if let Some(home_dir) = dirs::home_dir() {
-            return Ok(home_dir);
-        } else {
-            bail!("Could not determine home directory");
-        }
-    }
-
-    let result = dirs::home_dir().map(|mut h| {
-        if h == Path::new("/") {
-            // Corner case: `h` root directory;
-            // don't prepend extra `/`, just drop the tilde.
-            p.strip_prefix("~").unwrap().to_path_buf()
-        } else {
-            h.push(p.strip_prefix("~/").unwrap());
-            h
-        }
-    });
-
-    if let Some(path) = result {
-        Ok(path)
-    } else {
-        bail!("Failed to expand tildes in path '{}'", p.display());
-    }
-}
-
-fn path_has_ancestor(subject: &Path, ancestor: &Path) -> Result<bool> {
-    if subject == ancestor {
-        return Ok(true);
-    }
-
-    let mut subject = subject;
-    while let Some(parent) = subject.parent() {
-        if parent == ancestor {
-            return Ok(true);
-        }
-
-        subject = parent;
-    }
-
-    Ok(false)
-}
-
 fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
@@ -477,12 +423,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         } => {
             let ui = cloned_app.ui();
             let dense_repo =
-                expand_tilde(dense_repo).context("Failed to expand dense repo path")?;
+                paths::expand_tilde(dense_repo).context("Failed to expand dense repo path")?;
             let sparse_repo = {
                 let current_dir =
                     env::current_dir().context("Failed to obtain current directory")?;
-                let expanded =
-                    expand_tilde(sparse_repo).context("Failed to expand sparse repo path")?;
+                let expanded = paths::expand_tilde(sparse_repo)
+                    .context("Failed to expand sparse repo path")?;
                 current_dir.join(expanded)
             };
             ui.log(
@@ -490,7 +436,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 format!("Using the dense repo in {}", dense_repo.display()),
             );
 
-            if path_has_ancestor(&sparse_repo, &dense_repo)
+            if paths::has_ancestor(&sparse_repo, &dense_repo)
                 .context("Could not determine if the sparse repo is in the dense repo")?
             {
                 bail!("The sparse repo ({}) must not be be inside the dense repo ({}). Note: the sparse repo path is treated as relative to the current directory.", sparse_repo.display(), dense_repo.display())
@@ -529,8 +475,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Sync { sparse_repo } => {
-            // TODO: Add total number of paths in repo to TI.
-            let sparse_repo = expand_tilde(sparse_repo)?;
+            let sparse_repo = paths::expand_tilde(sparse_repo)?;
             app.ui().set_enabled(interactive);
             operation::sync::run(app, &sparse_repo)?;
             Ok(ExitCode(0))
@@ -611,7 +556,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         },
 
         Subcommand::DetectBuildGraphChanges { repo } => {
-            let repo = expand_tilde(repo)?;
+            let repo = paths::expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
             operation::detect_build_graph_changes::run(app, &repo)
@@ -749,8 +694,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let ui = app.ui();
             ui.status("Init repo");
 
-            let expanded =
-                expand_tilde(target_path).context("expanding tilde on target_path argument")?;
+            let expanded = paths::expand_tilde(target_path)
+                .context("expanding tilde on target_path argument")?;
 
             let target = expanded.as_path();
 
@@ -826,7 +771,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 time_period,
                 all,
             } => {
-                let launch_agents_path = expand_tilde(&launch_agents_path)?;
+                let launch_agents_path = paths::expand_tilde(&launch_agents_path)?;
                 operation::maintenance::schedule(operation::maintenance::ScheduleOpts {
                     launch_agents_path,
                     time_period,
