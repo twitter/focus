@@ -403,12 +403,10 @@ impl LayerSets {
 
     // Return a layer_set containing the layers a user has selected
     pub fn selected_layers(&self) -> Result<Option<LayerSet>> {
-        let layer_stack: LayerStack;
-        if let Ok(Some(stack)) = self.user_layers() {
-            layer_stack = stack;
-        } else {
-            return Ok(None);
-        }
+        let layer_stack = match self.user_layers()? {
+            Some(stack) => stack,
+            None => return Ok(None),
+        };
 
         let indexed_available_layers = RichLayerSet::new(
             self.available_layers()

@@ -777,7 +777,7 @@ impl Trace {
 
     fn git_trace_from_dir<P: AsRef<Path>>(path: P) -> Result<Trace> {
         let events = git_trace2::Events::from_dir(path.as_ref())?;
-        trace::Builder::from_iter(events.into_iter().map(|ev| ev.into_inner()).flatten()).build()
+        trace::Builder::from_iter(events.into_iter().flat_map(|ev| ev.into_inner())).build()
     }
 
     pub fn git_trace_from<P: AsRef<Path>>(path: P) -> Result<Trace> {

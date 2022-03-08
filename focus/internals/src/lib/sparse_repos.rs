@@ -177,7 +177,7 @@ fn copy_user_relevant_refs_to_sparse_repo(
     let ui = cloned_app.ui();
 
     let tokenize_ref_and_commit_ids = |line: &str| -> Result<(String, String)> {
-        if let Some((ref_name, commit_id)) = line.split_once(" ") {
+        if let Some((ref_name, commit_id)) = line.split_once(' ') {
             Ok((ref_name.to_owned(), commit_id.to_owned()))
         } else {
             bail!(format!(
@@ -582,10 +582,8 @@ pub fn set_sparse_checkout(sparse_repo: &Path, sparse_profile: &Path, app: Arc<A
     set_sparse_config(sparse_repo, app.clone())?;
     {
         // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-        let (mut cmd, scmd) = git_helper::git_command(
-            "Initializing baseline sparse checkout".to_owned(),
-            app.clone(),
-        )?;
+        let (mut cmd, scmd) =
+            git_helper::git_command("Initializing baseline sparse checkout", app.clone())?;
         scmd.ensure_success_or_log(
             cmd.current_dir(sparse_repo)
                 .arg("sparse-checkout")
@@ -626,7 +624,7 @@ pub fn set_sparse_checkout(sparse_repo: &Path, sparse_profile: &Path, app: Arc<A
 
 pub fn checkout_working_copy(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     // TODO: If the git version supports it, add --no-sparse-index since the sparse index performs poorly
-    let (mut cmd, scmd) = git_helper::git_command("Checking out a working copy".to_owned(), app)?;
+    let (mut cmd, scmd) = git_helper::git_command("Checking out a working copy", app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(sparse_repo).arg("checkout"),
         SandboxCommandOutput::Stderr,
