@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use std::sync::{mpsc, Arc};
 
-use crate::app::App;
+use crate::app::{App, ExitCode};
 use crate::util::git_helper;
 
 fn build_graph_involved_filename_predicate(name: &Path) -> bool {
@@ -84,7 +84,7 @@ fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     Ok(!&build_involved_changed_paths.is_empty())
 }
 
-pub fn run(app: Arc<App>, repo: &Path) -> Result<()> {
+pub fn run(app: Arc<App>, repo: &Path) -> Result<ExitCode> {
     // TODO: Consider removing uncommitted change detection since we can't perform operations in repos without a clean working tree anyway.
     let (uncommitted_tx, uncommitted_rx) = mpsc::channel();
     let uncommited_finder_thread = {
@@ -132,14 +132,15 @@ pub fn run(app: Arc<App>, repo: &Path) -> Result<()> {
 
     if has_committed_changes && has_uncommitted_changes {
         eprintln!("Committed and uncommitted changes affect the build graph, please run `focus sync` to update the sparse checkout!");
-        std::process::exit(1);
+        Ok(ExitCode(1))
     } else if has_committed_changes {
         eprintln!("Committed changes affect the build graph, please run `focus sync` to update the sparse checkout!");
-        std::process::exit(1);
+        Ok(ExitCode(1))
     } else if has_uncommitted_changes {
         eprintln!("Uncommitted changes affect the build graph, please run `focus sync` to update the sparse checkout!");
-        std::process::exit(1);
+        Ok(ExitCode(1))
+    } else {
+        debug!("No changes to files affecting the build graph were detected");
+        Ok(ExitCode(0))
     }
-    debug!("No changes to files affecting the build graph were detected");
-    Ok(())
 }
