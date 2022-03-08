@@ -23,6 +23,7 @@ use crate::tracker::Tracker;
 use crate::util::git_helper;
 use crate::util::git_helper::run_consuming_stdout;
 use crate::util::lock_file::LockFile;
+use crate::util::paths;
 use crate::util::sandbox_command::SandboxCommand;
 use crate::util::sandbox_command::SandboxCommandOutput;
 use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
@@ -723,7 +724,7 @@ fn resolve_involved_directories(
     for path in result.paths() {
         let qualified_path = repo.join(path);
         if let Some(path_to_closest_build_file) =
-            find_closest_directory_with_build_file(&qualified_path, repo)
+            paths::find_closest_directory_with_build_file(&qualified_path, repo)
                 .context("locating closest build file")?
         {
             debug!(
@@ -781,34 +782,4 @@ pub fn generate_sparse_profile(
     f.sync_data().context("syncing data")?;
 
     Ok(())
-}
-
-fn find_closest_directory_with_build_file(file: &Path, ceiling: &Path) -> Result<Option<PathBuf>> {
-    let mut dir = if file.is_dir() {
-        file
-    } else if let Some(parent) = file.parent() {
-        parent
-    } else {
-        warn!(?file, "Path has no parent");
-        return Ok(None);
-    };
-    loop {
-        if dir == ceiling {
-            return Ok(None);
-        }
-
-        for entry in std::fs::read_dir(&dir)
-            .with_context(|| format!("reading directory contents {}", dir.display()))?
-        {
-            let entry = entry.context("reading directory entry")?;
-            if entry.file_name() == "BUILD" {
-                // Match BUILD, BUILD.*
-                return Ok(Some(dir.to_owned()));
-            }
-        }
-
-        dir = dir
-            .parent()
-            .context("getting parent of current directory")?;
-    }
 }
