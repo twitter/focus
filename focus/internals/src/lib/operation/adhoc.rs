@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::{
     app::App,
-    model::{Layer, LayerSet, LayerSets},
+    model::layering::{Layer, LayerSet, LayerSets},
 };
 use tracing::warn;
 
