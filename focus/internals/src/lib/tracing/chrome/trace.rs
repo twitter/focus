@@ -198,42 +198,6 @@ impl Session {
                     Self::push_event(self.pid, c.into(), &mut res);
                 }
 
-                /*
-                                // data is special because it has a t_rel so we can use a Complete event
-                                GitEvent::Data(data) => {
-                                    let mut c = Complete::from(GitEvent::Data(data.clone()));
-                                    // calculates the duration of this event from the t_rel field
-                                    c.dur = (data.t_rel * MICROS_PER_SEC as f64) as i64;
-
-                                    // ok this is super super gross, but "data" seems to be emitted at
-                                    // the end of the work done (so its time is at the end of work) but
-                                    // it really started at (time - t_rel). WE make the adjustment here
-                                    // because it "looks right"
-                                    c.common.ts -= (data.t_rel * MICROS_PER_SEC as f64) as i64;
-
-                                    // using the thread id like this allows us to have another "lane"
-                                    // where the supplemental thread and region specific info can be displayed
-                                    c.common.tid = data.nesting;
-
-                                    Self::push_event(self.pid, c.into(), &mut res);
-                                }
-
-                                GitEvent::DataJson(data) => {
-                                    // TODO: figure out how to avoid this copy-pasta
-                                    let mut c = Complete::from(GitEvent::DataJson(data.clone()));
-                                    // calculates the duration of this event from the t_rel field
-                                    c.dur = (data.t_rel * MICROS_PER_SEC as f64) as i64;
-
-                                    // see note above in GitEvent::Data about the adjustment we're making here
-                                    c.common.ts -= (data.t_rel * MICROS_PER_SEC as f64) as i64;
-
-                                    // using the thread id like this allows us to have another "lane"
-                                    // where the supplemental thread and region specific info can be displayed
-                                    c.common.tid = data.nesting;
-
-                                    Self::push_event(self.pid, c.into(), &mut res);
-                                }
-                */
                 GitEvent::Signal(_)
                 | GitEvent::Error(_)
                 | GitEvent::CmdPath(_)
