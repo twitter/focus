@@ -11,7 +11,6 @@ use std::{
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use clap::Parser;
-use env_logger::{self, Env};
 use git2::Repository;
 
 use focus_internals::{
@@ -23,6 +22,9 @@ use focus_internals::{
     util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
 };
 use tracing::debug;
+use tracing_error::ErrorLayer;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::EnvFilter;
 
 use strum::VariantNames;
 
@@ -864,13 +866,12 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     }
     setup_thread_pool(options.resolution_threads)?;
 
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    let is_tty = termion::is_tty(&std::io::stdout());
+    let interactive = if options.ugly { false } else { is_tty };
 
-    let interactive = if options.ugly {
-        false
-    } else {
-        termion::is_tty(&std::io::stdout())
-    };
+    if !interactive {
+        init_logging(is_tty)?;
+    }
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
     let app = Arc::from(App::new(options.preserve_sandbox, interactive)?);
@@ -898,6 +899,25 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     );
 
     Ok(exit_code)
+}
+
+fn init_logging(is_tty: bool) -> Result<()> {
+    let nocolor_requested = std::env::var_os("NOCOLOR").is_some(); // see https://no-color.org/
+    let use_color = is_tty && !nocolor_requested;
+
+    tracing_subscriber::registry()
+        .with(ErrorLayer::default())
+        .with(EnvFilter::new(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
+        ))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_target(false)
+                .with_ansi(use_color),
+        )
+        .try_init()?;
+    Ok(())
 }
 
 fn main() -> Result<()> {
