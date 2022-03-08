@@ -1,6 +1,5 @@
 use std::{
     ffi::{OsStr, OsString},
-    fmt::{self, Display},
     os::unix::prelude::OsStringExt,
     path::PathBuf,
     process::Stdio,
@@ -288,44 +287,6 @@ impl Drop for BranchSwitch {
     }
 }
 
-/// The state of a repository encompassing its origin URL and current commit ID.
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub struct RepoState {
-    origin_url: String,
-    commit_id: String,
-}
-
-impl RepoState {
-    pub fn new(repo_path: &dyn AsRef<Path>, app: Arc<App>) -> Result<Self> {
-        let origin_url = run_consuming_stdout(
-            "Reading origin URL".to_owned(),
-            repo_path,
-            &["remote", "get-url", "origin"],
-            app.clone(),
-        )
-        .context("Failed to determine the origin URL")?;
-
-        let commit_id = run_consuming_stdout(
-            "Determining commit ID".to_owned(),
-            repo_path,
-            &["rev-parse", "HEAD"],
-            app,
-        )
-        .context("Failed to determine the commit ID")?;
-
-        Ok(Self {
-            origin_url,
-            commit_id,
-        })
-    }
-}
-
-impl Display for RepoState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}?@={}", self.origin_url, self.commit_id)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
 /// Represents a git "ident", which is a signature and timestamp.
 pub struct Ident {
@@ -355,8 +316,8 @@ impl Ident {
     }
 }
 
-impl fmt::Display for Ident {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Ident {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{} <{}> {}",
