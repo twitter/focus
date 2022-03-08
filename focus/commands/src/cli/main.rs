@@ -178,6 +178,47 @@ enum Subcommand {
     },
 }
 
+/// Helper method to extract subcommand name. Tool insights client uses this to set
+/// feature name.
+fn feature_name_for(subcommand: &Subcommand) -> String {
+    let subcommand_name = match subcommand {
+        Subcommand::Clone { .. } => "clone",
+        Subcommand::Sync { .. } => "sync",
+        Subcommand::Repo { subcommand } => match subcommand {
+            RepoSubcommand::List { .. } => "repo-list",
+            RepoSubcommand::Repair { .. } => "repo-repair",
+        },
+        Subcommand::Layer { subcommand, .. } => match subcommand {
+            LayerSubcommand::Available { .. } => "layer-available",
+            LayerSubcommand::List { .. } => "layer-list",
+            LayerSubcommand::Push { .. } => "layer-push",
+            LayerSubcommand::Pop { .. } => "layer-pop",
+            LayerSubcommand::Remove { .. } => "layer-remove",
+        },
+        Subcommand::Adhoc { subcommand, .. } => match subcommand {
+            AdhocSubcommand::List { .. } => "adhoc-list",
+            AdhocSubcommand::Push { .. } => "adhoc-push",
+            AdhocSubcommand::Pop { .. } => "adhoc-pop",
+            AdhocSubcommand::Remove { .. } => "adhoc-remove",
+        },
+        Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes",
+        Subcommand::Refs { subcommand, .. } => match subcommand {
+            RefsSubcommand::Delete { .. } => "refs-delete",
+            RefsSubcommand::ListExpired { .. } => "refs-list-expired",
+            RefsSubcommand::ListCurrent { .. } => "refs-list-current",
+        },
+        Subcommand::Init { .. } => "init",
+        Subcommand::UserInterfaceTest { .. } => "ui-test",
+        Subcommand::Maintenance { subcommand, .. } => match subcommand {
+            MaintenanceSubcommand::Run { .. } => "maintenance-run",
+            MaintenanceSubcommand::Register { .. } => "maintenance-register",
+            MaintenanceSubcommand::Schedule { .. } => "maintenance-schedule",
+        },
+        Subcommand::GitTrace { .. } => "git-trace",
+    };
+    subcommand_name.into()
+}
+
 #[derive(Parser, Debug)]
 enum MaintenanceSubcommand {
     /// Runs global (i.e. system-wide) git maintenance tasks on repositories listed in
@@ -419,6 +460,10 @@ fn path_has_ancestor(subject: &Path, ancestor: &Path) -> Result<bool> {
 
 fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Result<()> {
     let cloned_app = app.clone();
+    let ti_client = cloned_app.tool_insights_client();
+    ti_client
+        .get_context()
+        .set_tool_feature_name(feature_name_for(&options.cmd));
 
     match options.cmd {
         Subcommand::Clone {
@@ -463,6 +508,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             ));
             ui.set_enabled(interactive);
 
+            // Add coordinates length to TI custom map.
+            ti_client.get_context().add_to_custom_map(
+                "coordinates_and_layers_count",
+                coordinates.len().to_string(),
+            );
+
             operation::clone::run(
                 dense_repo,
                 sparse_repo,
@@ -475,6 +526,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         }
 
         Subcommand::Sync { sparse_repo } => {
+            // TODO: Add total number of paths in repo to TI.
             let sparse_repo = expand_tilde(sparse_repo)?;
             app.ui().set_enabled(interactive);
             operation::sync::run(app, &sparse_repo)
@@ -563,6 +615,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
         Subcommand::Layer { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
+            ti_client.get_context().set_tool_feature_name("layer");
 
             let should_check_tree_cleanliness = match subcommand {
                 LayerSubcommand::Available {} => false,
@@ -800,7 +853,19 @@ fn main() -> Result<()> {
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
     let app = Arc::from(App::new(options.preserve_sandbox, interactive)?);
-    run_subcommand(app, options, interactive)?;
+    let ti_context = app.tool_insights_client();
+
+    match run_subcommand(app.clone(), options, interactive) {
+        Ok(_) => ti_context
+            .get_inner()
+            .write_invocation_message(Some(0), None),
+        Err(e) => {
+            ti_context
+                .get_inner()
+                .write_invocation_message(Some(1), None);
+            return Err(e);
+        }
+    }
 
     let total_runtime = started_at.elapsed();
     debug!(
