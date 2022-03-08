@@ -18,7 +18,7 @@ use crate::coordinate_resolver::CacheOptions;
 use crate::coordinate_resolver::ResolutionRequest;
 use crate::coordinate_resolver::Resolver;
 use crate::coordinate_resolver::RoutingResolver;
-use crate::model::{Layer, LayerSet, LayerSets, RichLayerSet};
+use crate::model::layering::{Layer, LayerSet, LayerSets, RichLayerSet};
 use crate::tracker::Tracker;
 use crate::util::git_helper;
 use crate::util::git_helper::run_consuming_stdout;

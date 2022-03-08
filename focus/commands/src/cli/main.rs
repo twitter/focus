@@ -17,7 +17,7 @@ use git2::Repository;
 use focus_internals::{
     app::App,
     coordinate::Coordinate,
-    model::LayerSets,
+    model::layering::LayerSets,
     operation,
     tracker::Tracker,
     util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},

@@ -1,7 +1,6 @@
 use crate::app::App;
 use crate::coordinate::CoordinateSet;
-use crate::model::Layer;
-use crate::model::LayerSets;
+use crate::model::layering::{Layer, LayerSets};
 use crate::util::git_helper;
 use crate::util::git_helper::get_current_revision;
 use crate::util::git_helper::BranchSwitch;

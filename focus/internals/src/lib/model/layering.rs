@@ -544,22 +544,17 @@ impl LayerSets {
     }
 }
 
+pub fn write_adhoc_layer_set(sparse_repo: &Path, layer_set: &LayerSet) -> Result<()> {
+    let layer_sets = LayerSets::new(sparse_repo);
+    layer_sets.store_adhoc_layers(layer_set)
+}
 #[cfg(test)]
 mod tests {
+    use crate::testing::init_logging;
+
     use super::*;
     use anyhow::Result;
-    use std::sync::Once;
     use tempfile::{tempdir, TempDir};
-
-    static INIT_LOGGING_ONCE: Once = Once::new();
-
-    fn init_logging() {
-        INIT_LOGGING_ONCE.call_once(|| {
-            let _ =
-                env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-                    .init();
-        });
-    }
 
     fn layers() -> Vec<Layer> {
         vec![
