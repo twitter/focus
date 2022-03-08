@@ -6,6 +6,9 @@ use anyhow::{Context, Result};
 use std::time::SystemTime;
 use ti_library::tool_insights_client::ToolInsightsClient;
 
+#[must_use = "The exit code for the application should be returned and bubbled up to `main` so that it can be passed to `std::process::exit`."]
+pub struct ExitCode(pub i32);
+
 #[derive(Clone)]
 pub struct App {
     ui: Arc<UserInterface>,

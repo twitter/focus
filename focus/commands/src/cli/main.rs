@@ -15,7 +15,7 @@ use env_logger::{self, Env};
 use git2::Repository;
 
 use focus_internals::{
-    app::App,
+    app::{App, ExitCode},
     coordinate::Coordinate,
     model::layering::LayerSets,
     operation,
@@ -458,7 +458,7 @@ fn path_has_ancestor(subject: &Path, ancestor: &Path) -> Result<bool> {
     Ok(false)
 }
 
-fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Result<()> {
+fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
     ti_client
@@ -522,14 +522,16 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 layers,
                 !single_branch,
                 cloned_app,
-            )
+            )?;
+            Ok(ExitCode(0))
         }
 
         Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = expand_tilde(sparse_repo)?;
             app.ui().set_enabled(interactive);
-            operation::sync::run(app, &sparse_repo)
+            operation::sync::run(app, &sparse_repo)?;
+            Ok(ExitCode(0))
         }
 
         Subcommand::Refs {
@@ -551,7 +553,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                         check_merge_base,
                         use_transaction,
                         app,
-                    )
+                    )?;
+                    Ok(ExitCode(0))
                 }
 
                 RefsSubcommand::ListExpired {
@@ -570,7 +573,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
                     println!("{}", expired.join("\n"));
 
-                    Ok(())
+                    Ok(ExitCode(0))
                 }
 
                 RefsSubcommand::ListCurrent {
@@ -589,14 +592,20 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
                     println!("{}", current.join("\n"));
 
-                    Ok(())
+                    Ok(ExitCode(0))
                 }
             }
         }
 
         Subcommand::Repo { subcommand } => match subcommand {
-            RepoSubcommand::List {} => operation::repo::list(),
-            RepoSubcommand::Repair {} => operation::repo::repair(app),
+            RepoSubcommand::List {} => {
+                operation::repo::list()?;
+                Ok(ExitCode(0))
+            }
+            RepoSubcommand::Repair {} => {
+                operation::repo::repair(app)?;
+                Ok(ExitCode(0))
+            }
         },
 
         Subcommand::DetectBuildGraphChanges { repo } => {
@@ -610,7 +619,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             let ui = cloned_app.ui();
             ui.status("UI Test");
             ui.set_enabled(interactive);
-            operation::user_interface_test::run(app)
+            operation::user_interface_test::run(app)?;
+            Ok(ExitCode(0))
         }
 
         Subcommand::Layer { repo, subcommand } => {
@@ -663,7 +673,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 backup.set_restore(false);
             }
 
-            Ok(())
+            Ok(ExitCode(0))
         }
 
         Subcommand::Adhoc { repo, subcommand } => {
@@ -717,7 +727,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 backup.set_restore(false);
             }
 
-            Ok(())
+            Ok(ExitCode(0))
         }
 
         Subcommand::Init {
@@ -774,7 +784,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 app,
             )?;
 
-            Ok(())
+            Ok(ExitCode(0))
         }
 
         Subcommand::Maintenance {
@@ -786,23 +796,29 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 exec_path,
                 config_path,
                 time_period,
-            } => operation::maintenance::run(
-                operation::maintenance::RunOptions {
-                    git_binary_path,
-                    config_key,
-                    exec_path,
-                    config_path,
-                },
-                time_period,
-            ),
+            } => {
+                operation::maintenance::run(
+                    operation::maintenance::RunOptions {
+                        git_binary_path,
+                        config_key,
+                        exec_path,
+                        config_path,
+                    },
+                    time_period,
+                )?;
+                Ok(ExitCode(0))
+            }
             MaintenanceSubcommand::Register {
                 repo_path,
                 config_path,
-            } => operation::maintenance::register(operation::maintenance::RegisterOpts {
-                repo_path,
-                config_key,
-                global_config_path: config_path,
-            }),
+            } => {
+                operation::maintenance::register(operation::maintenance::RegisterOpts {
+                    repo_path,
+                    config_key,
+                    global_config_path: config_path,
+                })?;
+                Ok(ExitCode(0))
+            }
             MaintenanceSubcommand::Schedule {
                 launch_agents_path,
                 time_period,
@@ -813,13 +829,14 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     launch_agents_path,
                     time_period,
                     all,
-                })
+                })?;
+                Ok(ExitCode(0))
             }
         },
 
         Subcommand::GitTrace { input, output } => {
-            Ok(focus_internals::tracing::Trace::git_trace_from(input)?
-                .write_trace_json_to(output)?)
+            focus_internals::tracing::Trace::git_trace_from(input)?.write_trace_json_to(output)?;
+            Ok(ExitCode(0))
         }
     }
 }
@@ -835,7 +852,11 @@ fn setup_thread_pool(resolution_threads: usize) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
+/// Run the main and any destructors. Local variables are not guaranteed to be
+/// dropped if `std::process::exit` is called, so make sure to bubble up the
+/// return code to the top level, which is the only place in the code that's
+/// allowed to call `std::process::exit`.
+fn main_and_drop_locals() -> Result<ExitCode> {
     let started_at = Instant::now();
     let options = FocusOpts::parse();
     if let Some(working_directory) = &options.working_directory {
@@ -855,17 +876,20 @@ fn main() -> Result<()> {
     let app = Arc::from(App::new(options.preserve_sandbox, interactive)?);
     let ti_context = app.tool_insights_client();
 
-    match run_subcommand(app.clone(), options, interactive) {
-        Ok(_) => ti_context
-            .get_inner()
-            .write_invocation_message(Some(0), None),
+    let exit_code = match run_subcommand(app.clone(), options, interactive) {
+        Ok(exit_code) => {
+            ti_context
+                .get_inner()
+                .write_invocation_message(Some(0), None);
+            exit_code
+        }
         Err(e) => {
             ti_context
                 .get_inner()
                 .write_invocation_message(Some(1), None);
             return Err(e);
         }
-    }
+    };
 
     let total_runtime = started_at.elapsed();
     debug!(
@@ -873,5 +897,10 @@ fn main() -> Result<()> {
         "Finished normally"
     );
 
-    Ok(())
+    Ok(exit_code)
+}
+
+fn main() -> Result<()> {
+    let ExitCode(exit_code) = main_and_drop_locals()?;
+    std::process::exit(exit_code);
 }
