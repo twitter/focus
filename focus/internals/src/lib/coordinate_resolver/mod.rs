@@ -5,7 +5,6 @@ mod pants_resolver;
 use crate::{
     app::App,
     coordinate::{Coordinate, CoordinateSet},
-    util::git_helper::RepoState,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -23,7 +22,6 @@ use self::{
 #[derive(Clone, Debug)]
 pub struct ResolutionRequest {
     pub repo: PathBuf,
-    pub repo_state: RepoState,
     pub coordinate_set: CoordinateSet,
 }
 
