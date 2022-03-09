@@ -15,7 +15,7 @@ use lazy_static::lazy_static;
 const MAIN_SEPARATOR_BYTE: u8 = MAIN_SEPARATOR as u8;
 const MAIN_SEPARATOR_BYTES: &[u8] = &[MAIN_SEPARATOR_BYTE];
 
-#[derive(Clone, Debug, Eq, Ord)]
+#[derive(Clone, Debug, Eq)]
 pub enum Pattern {
     Verbatim {
         precedence: usize,
@@ -46,9 +46,9 @@ impl PartialOrd for Pattern {
                 None => None,
             },
             (Pattern::Verbatim { .. }, Pattern::RecursiveDirectory { .. }) => {
-                Some(Ordering::Greater)
+                Some(Ordering::Less)
             }
-            (Pattern::RecursiveDirectory { .. }, Pattern::Verbatim { .. }) => Some(Ordering::Less),
+            (Pattern::RecursiveDirectory { .. }, Pattern::Verbatim { .. }) => Some(Ordering::Greater),
             (
                 Pattern::RecursiveDirectory {
                     precedence: i0,
@@ -64,6 +64,12 @@ impl PartialOrd for Pattern {
                 None => None,
             },
         }
+    }
+}
+
+impl Ord for Pattern {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 
@@ -114,9 +120,9 @@ impl From<(usize, String)> for Pattern {
     }
 }
 
-impl Into<Vec<OsString>> for Pattern {
-    fn into(self) -> Vec<OsString> {
-        match self {
+impl From<Pattern> for Vec<OsString> {
+    fn from(other: Pattern) -> Vec<OsString> {
+        match other {
             Pattern::Verbatim {
                 precedence: _i,
                 fragment,
