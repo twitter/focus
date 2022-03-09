@@ -10,11 +10,13 @@ use std::{
 
 use crate::util::git_helper;
 use anyhow::{Context, Result};
-use strum::IntoEnumIterator;
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
-use self::launchd::PlistOpts;
+pub use self::launchd::{
+    schedule_disable, schedule_enable, Launchctl, PlistOpts, ScheduleOpts, DEFAULT_FOCUS_PATH,
+    DEFAULT_GIT_BINARY_PATH_FOR_PLISTS,
+};
 
 #[allow(dead_code)]
 #[derive(
@@ -151,7 +153,6 @@ fn does_repo_exist(path: &Path) -> Result<bool> {
 
 pub struct Runner {
     pub git_binary_path: PathBuf,
-    pub exec_path: PathBuf,
     /// the config key in the global git config that contains the list of paths to check.
     /// By default this is "maintenance.repo", a multi value key.
     pub config_key: String,
@@ -159,32 +160,35 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub fn new(config_opt: Option<git2::Config>) -> Result<Runner> {
-        let config = match config_opt {
-            Some(c) => c,
-            None => git2::Config::open_default()?,
-        }
-        .open_level(git2::ConfigLevel::Global)?;
+    pub fn new(opts: RunOptions) -> Result<Runner> {
+        let RunOptions {
+            git_binary_path,
+            config_key,
+            config_path,
+        } = opts;
 
-        let git_binary_path = git_helper::git_binary_path()?;
-        let exec_path = git_helper::git_exec_path()?;
-        let config_key = DEFAULT_CONFIG_KEY.to_owned();
+        let git_binary_path = if git_binary_path == Path::new(DEFAULT_GIT_BINARY_PATH) {
+            git_helper::git_binary_path()?
+        } else {
+            git_binary_path
+        };
 
         Ok(Runner {
             git_binary_path,
-            exec_path,
             config_key,
-            config,
+            config: use_config_path_or_default_global(config_path.as_deref())?,
         })
     }
 
     fn run_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<Output> {
+        let exec_path: PathBuf = git_helper::git_exec_path(&self.git_binary_path)?;
+
         // TODO: this needs to log and capture output for debugging if necessary
         Command::new(&self.git_binary_path)
             .arg({
                 let mut s = OsString::new();
                 s.push("--exec-path=");
-                s.push(&self.exec_path);
+                s.push(exec_path);
                 s
             })
             .arg("maintenance")
@@ -273,17 +277,17 @@ impl Runner {
 // lets us test the construction of the Maintenance instance
 #[derive(Debug, Clone)]
 pub struct RunOptions {
-    pub git_binary_path: Option<PathBuf>,
-    pub exec_path: Option<PathBuf>,
+    pub git_binary_path: PathBuf,
     pub config_key: String,
     pub config_path: Option<PathBuf>,
 }
 
+pub const DEFAULT_GIT_BINARY_PATH: &str = "git";
+
 impl Default for RunOptions {
     fn default() -> Self {
         Self {
-            git_binary_path: None,
-            exec_path: None,
+            git_binary_path: DEFAULT_GIT_BINARY_PATH.into(),
             config_key: DEFAULT_CONFIG_KEY.to_owned(),
             config_path: None,
         }
@@ -293,54 +297,8 @@ impl Default for RunOptions {
 impl TryFrom<RunOptions> for Runner {
     type Error = anyhow::Error;
     fn try_from(opts: RunOptions) -> Result<Self> {
-        let RunOptions {
-            git_binary_path,
-            exec_path,
-            config_key,
-            config_path,
-        } = opts;
-        let config = use_config_path_or_default_global(config_path.as_deref())?;
-
-        let mut maint = Runner::new(Some(config))?;
-
-        if let Some(gbp) = git_binary_path {
-            // TODO: check for sanity here
-            maint.git_binary_path = gbp;
-        }
-
-        if let Some(ep) = exec_path {
-            maint.exec_path = ep;
-        }
-
-        maint.config_key = config_key;
-        Ok(maint)
+        Runner::new(opts)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct ScheduleOpts {
-    /// The path where file constrolling launch agents should be written.
-    pub launch_agents_path: PathBuf,
-
-    /// The time period of job to schedule.
-    pub time_period: TimePeriod,
-
-    /// Whether to register jobs for all time periods.
-    pub all: bool,
-}
-
-pub fn schedule(opts: ScheduleOpts) -> Result<()> {
-    let time_periods: Vec<TimePeriod> = if opts.all {
-        TimePeriod::iter().collect()
-    } else {
-        vec![opts.time_period]
-    };
-
-    for tp in time_periods {
-        write_plist(launchd::PlistOpts::default(), tp, &opts.launch_agents_path)?;
-    }
-
-    todo!("implement calling launchctl with new jobs");
 }
 
 trait ConfigExt {
@@ -410,8 +368,8 @@ mod tests {
     use tempfile::TempDir;
 
     struct ConfigFixture {
-        tempdir: TempDir,
-        config_path: PathBuf,
+        pub tempdir: TempDir,
+        pub config_path: PathBuf,
     }
 
     impl ConfigFixture {
@@ -444,7 +402,10 @@ mod tests {
             config.set_multivar(DEFAULT_CONFIG_KEY, "^/path/to/foo$", "/path/to/foo")?;
             config.set_multivar(DEFAULT_CONFIG_KEY, "^/path/to/bar$", "/path/to/bar")?;
 
-            let mut maint = Runner::new(Some(config))?;
+            let mut maint = Runner::new(RunOptions {
+                config_path: Some(fix.config_path.to_owned()),
+                ..Default::default()
+            })?;
 
             maint.handle_missing_config_entry("/path/to/foo")?;
         }
@@ -469,8 +430,10 @@ mod tests {
         }
 
         {
-            let config = fix.config()?;
-            let maint = Runner::new(Some(config))?;
+            let maint = Runner::new(RunOptions {
+                config_path: Some(fix.config_path),
+                ..Default::default()
+            })?;
 
             let paths = maint.get_repo_paths()?;
             assert_eq!(paths, vec!["/path/to/foo", "/path/to/bar"])
@@ -512,24 +475,21 @@ mod tests {
         }
 
         let git_binary_path = "/path/to/bin/git";
-        let exec_path = "/path/to/libexec/git";
         let config_key = "other.key";
         let config_path = fix.config_path.clone();
 
         let opts = RunOptions {
-            git_binary_path: Some(git_binary_path.into()),
-            exec_path: Some(exec_path.into()),
+            git_binary_path: git_binary_path.into(),
             config_key: config_key.into(),
             config_path: Some(config_path.into()),
         };
 
-        let maint = Runner::try_from(opts)?;
+        let runner = Runner::new(opts)?;
 
-        assert_eq!(maint.git_binary_path, PathBuf::from(git_binary_path));
-        assert_eq!(maint.exec_path, PathBuf::from(exec_path));
-        assert_eq!(maint.config_key, config_key.to_string());
+        assert_eq!(runner.git_binary_path, PathBuf::from(git_binary_path));
+        assert_eq!(runner.config_key, config_key.to_string());
 
-        let conf = &maint.config;
+        let conf = &runner.config;
         assert!(conf.get_bool("testing.testing.onetwothree")?);
 
         Ok(())

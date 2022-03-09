@@ -617,7 +617,7 @@ mod tests {
 
     use super::*;
     use anyhow::{bail, Result};
-    use serde_json::{self};
+    use serde_json;
 
     pub(super) mod data {
         use std::collections::HashMap;

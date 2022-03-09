@@ -27,21 +27,19 @@ pub fn git_binary() -> OsString {
     OsString::from("git")
 }
 
-/// returns the canonical path to the git binary in PATH
+/// resolves the git binary in PATH
 pub fn git_binary_path() -> Result<PathBuf> {
-    which::which(&git_binary())?
-        .canonicalize()
-        .context("failed to locate git binary in PATH")
+    Ok(which::which(&git_binary())?)
 }
 
 const NL: u8 = b'\n';
 
-pub fn git_exec_path() -> Result<PathBuf> {
-    let mut output = Command::new(git_binary())
-        .arg("--exec-path")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()?;
+pub fn git_exec_path(git_binary_path: &Path) -> Result<PathBuf> {
+    let mut output = Command::new(git_binary_path)
+    .arg("--exec-path")
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null())
+    .output()?;
 
     if !output.status.success() {
         bail!("git --exec-path failed to run");
@@ -53,7 +51,7 @@ pub fn git_exec_path() -> Result<PathBuf> {
     }
 
     let out = OsString::from_vec(output.stdout);
-    Ok(PathBuf::from(out))
+    Ok(PathBuf::from(out).canonicalize()?)
 }
 
 pub fn git_command<S: AsRef<str>>(
@@ -448,7 +446,7 @@ mod tests {
     #[test]
     fn test_git_exec_path() -> Result<()> {
         // just make sure this doesn't barf
-        git_exec_path()?;
+        git_exec_path(&git_binary_path()?)?;
         Ok(())
     }
 }

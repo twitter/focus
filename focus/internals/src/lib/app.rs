@@ -1,5 +1,5 @@
-use std::borrow::Borrow;
 use std::sync::Arc;
+use std::{borrow::Borrow, fmt::Debug};
 
 use crate::{ui::UserInterface, util::sandbox::Sandbox};
 use anyhow::{Context, Result};
@@ -14,6 +14,12 @@ pub struct App {
     ui: Arc<UserInterface>,
     sandbox: Arc<Sandbox>,
     tool_insights_client: ToolInsightsClient,
+}
+
+impl Debug for App {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("App").finish()
+    }
 }
 
 impl App {

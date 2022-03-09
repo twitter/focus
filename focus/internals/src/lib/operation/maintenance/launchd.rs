@@ -1,6 +1,12 @@
 use super::*;
+use anyhow::{bail, Result};
 use plist::{dictionary::Dictionary, Value};
 use std::{io::Write, path::PathBuf};
+use strum::IntoEnumIterator;
+use tracing::{debug, error};
+
+pub const DEFAULT_FOCUS_PATH: &str = "/opt/twitter_mde/bin/focus";
+pub const DEFAULT_GIT_BINARY_PATH_FOR_PLISTS: &str = "/opt/twitter_mde/bin/git";
 
 #[derive(Debug, Clone)]
 pub struct PlistOpts {
@@ -12,11 +18,17 @@ pub struct PlistOpts {
     pub schedule_defaults: Option<CalendarInterval>,
 }
 
+impl PlistOpts {
+    pub fn label(&self) -> String {
+        format!("com.twitter.git-maintenance.{}", self.time_period)
+    }
+}
+
 impl Default for PlistOpts {
     fn default() -> Self {
         Self {
-            focus_path: PathBuf::new(),
-            git_binary_path: PathBuf::new(),
+            focus_path: DEFAULT_FOCUS_PATH.into(),
+            git_binary_path: DEFAULT_GIT_BINARY_PATH_FOR_PLISTS.into(),
             time_period: TimePeriod::Hourly,
             config_key: DEFAULT_CONFIG_KEY.into(),
             config_path: None,
@@ -84,7 +96,7 @@ fn random_minute() -> u32 {
 
 impl CalendarInterval {
     fn daily(minute: u32, hour: u32) -> Vec<CalendarInterval> {
-        (0..6)
+        (0..7)
             .into_iter()
             .map(|weekday| CalendarInterval {
                 weekday: Some(weekday),
@@ -96,7 +108,7 @@ impl CalendarInterval {
     }
 
     fn hourly(minute: u32) -> Vec<CalendarInterval> {
-        (0..23)
+        (0..24)
             .into_iter()
             .map(|hour: u32| CalendarInterval {
                 hour: Some(hour),
@@ -223,7 +235,7 @@ impl From<PlistOpts> for LaunchdPlist {
     fn from(plist_opts: PlistOpts) -> Self {
         LaunchdPlist {
             disabled: false,
-            label: format!("com.twitter.git-maintenance.{}", plist_opts.time_period),
+            label: plist_opts.label(),
             program_args: plist_opts.clone().into(),
             start_calendar_interval: CalendarInterval::for_time_period(
                 plist_opts.time_period,
@@ -238,7 +250,221 @@ pub fn write_plist<W: Write>(writer: W, plist_opts: PlistOpts) -> Result<()> {
 
     let v: Value = lp.into();
 
-    plist::to_writer_xml(writer, &v)?;
+    Ok(plist::to_writer_xml(writer, &v)?)
+}
+
+const LAUNCHCTL_BIN: &str = "/bin/launchctl";
+const LAUNCH_AGENTS_RELPATH: &str = "Library/LaunchAgents";
+
+trait CommandExt {
+    fn debug_command_line(&self) -> OsString;
+}
+
+impl CommandExt for Command {
+    fn debug_command_line(&self) -> OsString {
+        let mut s = self.get_program().to_owned();
+        for arg in self.get_args() {
+            s.push(" ");
+            s.push(arg)
+        }
+        s
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Launchctl {
+    pub launchctl_bin: PathBuf,
+    pub launch_agents_path: PathBuf,
+}
+
+impl Launchctl {
+    fn gui_domain_id() -> String {
+        let uid = nix::unistd::Uid::current();
+        format!("gui/{}", uid)
+    }
+
+    fn gui_service_id<S: AsRef<str>>(label: S) -> String {
+        format!("{}/{}", Self::gui_domain_id(), label.as_ref())
+    }
+
+    #[tracing::instrument]
+    fn is_service_loaded_os_str(&self, label: &str) -> Result<bool> {
+        let svc_id = Self::gui_service_id(label);
+        let out = Command::new(&self.launchctl_bin)
+            .arg("print")
+            .arg(svc_id)
+            .output()?;
+
+        debug!(label = ?label, success = ?out.status.success(), "is service loaded");
+        Ok(out.status.success())
+    }
+
+    /// Returns true if the given service is loaded into launchd.
+    /// The process may be *stopped* but launchd knows of its existence.
+    pub fn is_service_loaded<S: AsRef<str>>(&self, label: S) -> Result<bool> {
+        self.is_service_loaded_os_str(label.as_ref())
+    }
+
+    #[tracing::instrument]
+    fn exec_cmd(&self, args: &[&str]) -> Result<()> {
+        let (cmd, target, rest) = match args {
+            [cmd, target, args @ ..] => (*cmd, *target, args),
+            _ =>  panic!("args must have at least two items"),
+        };
+        assert!(args.len() >= 2, "args must have at least 2 items");
+
+        debug!("running launchctl {:?}", args);
+
+        let res = Command::new(&self.launchctl_bin)
+            .arg(cmd)
+            .arg(target)
+            .args(rest)
+            .spawn()?
+            .wait()?;
+
+        if !res.success() {
+            let msg = format!("failed to run launchctl {} {}: {}", cmd, target, res);
+            error!("launchctl error: {}", msg);
+            bail!(msg)
+        }
+
+        Ok(())
+    }
+
+    pub fn enable<S: AsRef<str>>(&self, label: S) -> Result<()> {
+        let label = label.as_ref();
+        self.exec_cmd(&["enable", Self::gui_service_id(label).as_str()])
+    }
+
+    pub fn bootstrap<S: AsRef<str>>(&self, label: S) -> Result<()> {
+        self.exec_cmd(&[
+            "bootstrap",
+            &Self::gui_domain_id(),
+            self.plist_path(label.as_ref())
+                .to_str()
+                .expect("plist path was not valid UTF-8"),
+        ])
+    }
+
+    pub fn bootout<S: AsRef<str>>(&self, label: S) -> Result<()> {
+        self.exec_cmd(&["bootout", Self::gui_service_id(label).as_str()])
+    }
+
+    pub fn plist_path(&self, label: &str) -> PathBuf {
+        let mut output_path = self.launch_agents_path.to_path_buf();
+        output_path.push(format!("{}.plist", label));
+        output_path
+    }
+
+    pub fn write_plist(&self, opts: &PlistOpts) -> Result<PathBuf> {
+        let output_path = self.plist_path(&opts.label());
+
+        let mut temp = tempfile::NamedTempFile::new_in(&self.launch_agents_path)?;
+        launchd::write_plist(&mut temp, opts.clone())?;
+        temp.as_file().sync_all()?;
+        std::fs::rename(temp.path(), &output_path)?;
+
+        Ok(output_path)
+    }
+}
+
+impl Default for Launchctl {
+    fn default() -> Self {
+        let home = dirs::home_dir().expect("could not determine HOME dir");
+
+        Self {
+            launchctl_bin: LAUNCHCTL_BIN.into(),
+            launch_agents_path: home.join(LAUNCH_AGENTS_RELPATH),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ScheduleOpts {
+    pub time_period: Option<TimePeriod>,
+    pub git_path: PathBuf,
+    pub focus_path: PathBuf,
+    pub skip_if_running: bool,
+}
+
+impl Default for ScheduleOpts {
+    fn default() -> Self {
+        Self {
+            time_period: Default::default(),
+            git_path: Default::default(),
+            focus_path: Default::default(),
+            skip_if_running: true,
+        }
+    }
+}
+
+/// This is the function that main calls to write out the plists and load them.
+/// If time_period is None that means "all"
+#[tracing::instrument]
+pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
+    let ScheduleOpts {
+        time_period,
+        git_path,
+        focus_path,
+        skip_if_running,
+    } = opts;
+
+    let launchctl = Launchctl::default();
+
+    let time_periods: Vec<TimePeriod> = match time_period {
+        Some(tp) => vec![tp],
+        None => TimePeriod::iter().collect(),
+    };
+
+    let plist_opts = PlistOpts {
+        focus_path,
+        git_binary_path: git_path,
+        ..Default::default()
+    };
+
+    for tp in time_periods {
+        let plist_opts = PlistOpts {
+            time_period: tp,
+            ..plist_opts.clone()
+        };
+        let label = plist_opts.label();
+
+        launchctl.write_plist(&plist_opts)?;
+
+        if launchctl.is_service_loaded(&label)? {
+            // the service is already registered and scheduled
+            if skip_if_running {
+                continue; // and a forced reload hasn't been requested, so check the next one
+            } else {
+                launchctl.bootout(&label)?; // otherwise stop the service and unload it
+            }
+        }
+
+        launchctl.enable(&label)?;
+        launchctl.bootstrap(&label)?;
+    }
+
+    Ok(())
+}
+
+#[tracing::instrument]
+pub fn schedule_disable() -> Result<()> {
+    let launchctl = Launchctl::default();
+    let time_periods: Vec<TimePeriod> = TimePeriod::iter().collect();
+
+    for tp in time_periods {
+        let plist_opts = PlistOpts {
+            time_period: tp,
+            ..Default::default()
+        };
+
+        let label = plist_opts.label();
+
+        if launchctl.is_service_loaded(&label)? {
+            launchctl.bootout(&label)?; // otherwise stop the service and unload it
+        }
+    }
+
     Ok(())
 }
 
