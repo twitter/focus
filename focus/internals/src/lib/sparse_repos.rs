@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Result};
 use tracing::debug;
-use tracing::warn;
 
 use std::convert::TryFrom;
 use std::fs::File;

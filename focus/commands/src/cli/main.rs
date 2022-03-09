@@ -11,14 +11,12 @@ use focus_internals::{
     app::{App, ExitCode},
     coordinate::Coordinate,
     model::layering::LayerSets,
-    operation,
+    operation::{self, maintenance},
+    tracing as focus_tracing,
     tracker::Tracker,
     util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
 };
 use tracing::debug;
-use tracing_error::ErrorLayer;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::EnvFilter;
 
 use strum::VariantNames;
 
@@ -208,7 +206,10 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
             MaintenanceSubcommand::Run { .. } => "maintenance-run",
             MaintenanceSubcommand::Register { .. } => "maintenance-register",
-            MaintenanceSubcommand::Schedule { .. } => "maintenance-schedule",
+            MaintenanceSubcommand::Schedule { subcommand } => match subcommand {
+                MaintenanceScheduleSubcommand::Enable { .. } => "maintenance-schedule-enable",
+                MaintenanceScheduleSubcommand::Disable { .. } => "maintenance-schedule-disable",
+            },
         },
         Subcommand::GitTrace { .. } => "git-trace",
     };
@@ -224,13 +225,8 @@ enum MaintenanceSubcommand {
     Run {
         /// The absolute path to the git binary to use. If not given, the first 'git' in PATH
         /// will be used.
-        #[clap(long)]
-        git_binary_path: Option<PathBuf>,
-
-        /// The absolute path to the git 'libexec' directory to use. If not given, the output of
-        /// `git --exec-path` will be used.
-        #[clap(long)]
-        exec_path: Option<PathBuf>,
+        #[clap(long, default_value = maintenance::DEFAULT_GIT_BINARY_PATH_FOR_PLISTS)]
+        git_binary_path: PathBuf,
 
         /// The git config file to use to read the list of repos to run maintenance in. If not
         /// given, then use the default 'global' config which is usually $HOME/.gitconfig.
@@ -255,9 +251,16 @@ enum MaintenanceSubcommand {
     },
 
     Schedule {
-        #[clap(long, parse(from_os_str), default_value = "~/Library/LaunchAgents")]
-        launch_agents_path: PathBuf,
+        #[clap(subcommand)]
+        subcommand: MaintenanceScheduleSubcommand,
+    },
+}
 
+#[derive(Parser, Debug)]
+enum MaintenanceScheduleSubcommand {
+    /// Set up a system-appropriate periodic job (launchctl, systemd, etc.) for running
+    /// maintenance tasks on hourly, daily, and weekly bases
+    Enable {
         /// The time period of job to schedule
         #[clap(
             long,
@@ -269,7 +272,24 @@ enum MaintenanceSubcommand {
         /// register jobs for all time periods
         #[clap(long, conflicts_with = "time-period")]
         all: bool,
+
+        /// path to the focus binary, defaults to the current running focus binary
+        #[clap(long)]
+        focus_path: Option<PathBuf>,
+
+        /// path to git
+        #[clap(long, default_value = operation::maintenance::DEFAULT_GIT_BINARY_PATH_FOR_PLISTS)]
+        git_path: PathBuf,
+
+        /// Normally, we check to see if the scheduled job is already defined and if it is
+        /// we do nothing. IF this flag is given, stop the existing job, remove its definition,
+        /// rewrite the job manifest (eg. plist) and reload it.
+        #[clap(long)]
+        force_reload: bool,
     },
+
+    /// Unload all the scheduled jobs from the system scheduler (if loaded).
+    Disable {},
 }
 
 #[derive(Parser, Debug)]
@@ -740,7 +760,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         } => match subcommand {
             MaintenanceSubcommand::Run {
                 git_binary_path,
-                exec_path,
                 config_path,
                 time_period,
             } => {
@@ -748,13 +767,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     operation::maintenance::RunOptions {
                         git_binary_path,
                         config_key,
-                        exec_path,
                         config_path,
                     },
                     time_period,
                 )?;
                 Ok(ExitCode(0))
             }
+
             MaintenanceSubcommand::Register {
                 repo_path,
                 config_path,
@@ -766,18 +785,32 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 })?;
                 Ok(ExitCode(0))
             }
-            MaintenanceSubcommand::Schedule {
-                launch_agents_path,
-                time_period,
-                all,
-            } => {
-                let launch_agents_path = paths::expand_tilde(&launch_agents_path)?;
-                operation::maintenance::schedule(operation::maintenance::ScheduleOpts {
-                    launch_agents_path,
+
+            MaintenanceSubcommand::Schedule { subcommand } => match subcommand {
+                MaintenanceScheduleSubcommand::Enable {
                     time_period,
                     all,
-                })?;
-                Ok(ExitCode(0))
+                    focus_path,
+                    git_path,
+                    force_reload,
+                } => {
+                    maintenance::schedule_enable(maintenance::ScheduleOpts {
+                        time_period: if all { None } else { Some(time_period) },
+                        git_path,
+                        focus_path: match focus_path {
+                            Some(fp) => fp,
+                            None => std::env::current_exe()
+                                .context("could not determine current executable path")?,
+                        },
+                        skip_if_running: !force_reload,
+                    })?;
+                    Ok(ExitCode(0))
+                }
+
+                MaintenanceScheduleSubcommand::Disable { .. } => {
+                    maintenance::schedule_disable()?;
+                    Ok(ExitCode(0))
+                }
             }
         },
 
@@ -814,9 +847,11 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     let is_tty = termion::is_tty(&std::io::stdout());
     let interactive = if options.ugly { false } else { is_tty };
 
-    if !interactive {
-        init_logging(is_tty)?;
-    }
+    let _guard = if interactive {
+        focus_tracing::Guard::default()
+    } else {
+        init_logging(is_tty)?
+    };
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
     let app = Arc::from(App::new(options.preserve_sandbox, interactive)?);
@@ -846,23 +881,13 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     Ok(exit_code)
 }
 
-fn init_logging(is_tty: bool) -> Result<()> {
-    let nocolor_requested = std::env::var_os("NOCOLOR").is_some(); // see https://no-color.org/
-    let use_color = is_tty && !nocolor_requested;
+fn init_logging(is_tty: bool) -> Result<focus_tracing::Guard> {
+    let nocolor_requested = std::env::var_os("NO_COLOR").is_some(); // see https://no-color.org/
 
-    tracing_subscriber::registry()
-        .with(ErrorLayer::default())
-        .with(EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
-        ))
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-                .with_target(false)
-                .with_ansi(use_color),
-        )
-        .try_init()?;
-    Ok(())
+    focus_tracing::init_tracing(focus_tracing::TracingOpts {
+        is_tty,
+        nocolor_requested,
+    })
 }
 
 fn main() -> Result<()> {

@@ -1,8 +1,7 @@
 ---
-source: focus/commands/src/cli/subcommands/maintenance/launchd.rs
-assertion_line: 272
+source: focus/internals/src/lib/operation/maintenance/launchd.rs
+assertion_line: 500
 expression: v
-
 ---
 Disabled: false
 Label: com.twitter.git-maintenance.hourly
@@ -60,5 +59,7 @@ StartCalendarInterval:
   - Hour: 21
     Minute: 12
   - Hour: 22
+    Minute: 12
+  - Hour: 23
     Minute: 12
 
