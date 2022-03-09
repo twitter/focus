@@ -45,6 +45,11 @@ pub fn merge_maps(
     }
 }
 
+/// Generates a temporary filename appended to the passed in prefix.
+/// If there is no prefix passed to tmp_filename, the default prefix is the TMPDIR env variable.
+/// If TMPDIR does not exist, the default is in /tmp.
+///
+/// Example: `/tmp/abcdefghijklmnopqrst`
 pub fn tmp_filename(prefix: Option<&Path>) -> String {
     let mut tmp_filepath: PathBuf = PathBuf::new();
 
@@ -62,4 +67,60 @@ pub fn tmp_filename(prefix: Option<&Path>) -> String {
     );
 
     tmp_filepath.to_str().unwrap().to_string()
+}
+
+#[cfg(test)]
+mod tmp_filename_tests {
+    use crate::util::tmp_filename;
+    use std::path::Path;
+
+    #[test]
+    fn creates_temp_filename_in_given_prefix_directory() {
+        let prefix = "/tmp_prefix_path";
+        assert!(tmp_filename(Some(Path::new(prefix))).contains(prefix))
+    }
+}
+
+#[cfg(test)]
+mod merge_maps_tests {
+    use super::*;
+
+    #[test]
+    fn with_two_maps() {
+        let map1 = Some(HashMap::from([
+            ("one".to_string(), "1".to_string()),
+            ("two".to_string(), "2".to_string()),
+        ]));
+        let map2 = Some(HashMap::from([("three".to_string(), "3".to_string())]));
+        assert_eq!(
+            HashMap::from([
+                ("one".to_string(), "1".to_string()),
+                ("two".to_string(), "2".to_string()),
+                ("three".to_string(), "3".to_string())
+            ]),
+            merge_maps(map1, map2).unwrap()
+        )
+    }
+
+    #[test]
+    fn with_one_map() {
+        let map1 = Some(HashMap::from([("one".to_string(), "1".to_string())]));
+        let map2 = None;
+        assert_eq!(
+            HashMap::from([("one".to_string(), "1".to_string()),]),
+            merge_maps(map1.clone(), map2.clone()).unwrap()
+        );
+
+        assert_eq!(
+            HashMap::from([("one".to_string(), "1".to_string()),]),
+            merge_maps(map2.clone(), map1.clone()).unwrap()
+        )
+    }
+
+    #[test]
+    fn with_no_maps() {
+        let map1 = None;
+        let map2 = None;
+        assert_eq!(None, merge_maps(map1.clone(), map2.clone()));
+    }
 }
