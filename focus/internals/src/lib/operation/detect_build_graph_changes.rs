@@ -6,20 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
 
 use crate::app::{App, ExitCode};
-use crate::util::git_helper;
-
-fn build_graph_involved_filename_predicate(name: &Path) -> bool {
-    if let Some(extension) = name.extension() {
-        if extension.eq("bzl") {
-            return true;
-        }
-    }
-    if let Some(file_name) = name.file_name() {
-        return file_name.eq("BUILD") || file_name.eq("WORKSPACE");
-    }
-
-    false
-}
+use crate::util::{git_helper, paths};
 
 fn find_committed_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     let sync_state = {
@@ -47,7 +34,7 @@ fn find_committed_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
     for line in &changed_paths {
         let parsed = PathBuf::from(line);
-        if build_graph_involved_filename_predicate(parsed.as_path()) {
+        if paths::is_relevant_to_build_graph(parsed.as_path()) {
             info!(path = ?parsed, "Committed path");
             build_involved_changed_paths.push(parsed);
         }
@@ -75,7 +62,7 @@ fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
             bail!("missing second token parsing line {}", &line);
         }
         let parsed = PathBuf::from(path.unwrap());
-        if build_graph_involved_filename_predicate(parsed.as_path()) {
+        if paths::is_relevant_to_build_graph(parsed.as_path()) {
             info!(path = ?parsed, "Uncommitted path");
             build_involved_changed_paths.push(parsed);
         }

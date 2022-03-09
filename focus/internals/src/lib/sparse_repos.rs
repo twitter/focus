@@ -698,12 +698,13 @@ pub fn create_empty_sparse_clone(
     Ok(())
 }
 
-fn resolve_involved_directories(
-    repo: &Path,
+fn resolve_involved_directories<P: AsRef<Path> + std::fmt::Debug>(
+    repo: P,
     coordinate_set: CoordinateSet,
     app: Arc<App>,
     into: &mut BTreeSet<PathBuf>,
 ) -> Result<usize> {
+    let repo = repo.as_ref();
     let cache_dir = dirs::cache_dir()
         .context("failed to determine cache dir")?
         .join("focus")
@@ -711,7 +712,7 @@ fn resolve_involved_directories(
     let resolver = RoutingResolver::new(cache_dir.as_path());
 
     let request = ResolutionRequest {
-        repo: repo.to_path_buf(),
+        repo: repo.to_owned(),
         coordinate_set,
     };
     let cache_options = CacheOptions::default();
@@ -734,7 +735,7 @@ fn resolve_involved_directories(
             into.insert(path_to_closest_build_file);
         } else {
             debug!(?qualified_path, "Adding directory verbatim");
-            into.insert(qualified_path);
+            into.insert(qualified_path.to_owned());
         }
     }
 
