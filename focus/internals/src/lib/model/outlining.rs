@@ -45,10 +45,10 @@ impl PartialOrd for Pattern {
                 Some(nonequal_ordering) => Some(nonequal_ordering),
                 None => None,
             },
-            (Pattern::Verbatim { .. }, Pattern::RecursiveDirectory { .. }) => {
-                Some(Ordering::Less)
+            (Pattern::Verbatim { .. }, Pattern::RecursiveDirectory { .. }) => Some(Ordering::Less),
+            (Pattern::RecursiveDirectory { .. }, Pattern::Verbatim { .. }) => {
+                Some(Ordering::Greater)
             }
-            (Pattern::RecursiveDirectory { .. }, Pattern::Verbatim { .. }) => Some(Ordering::Greater),
             (
                 Pattern::RecursiveDirectory {
                     precedence: i0,

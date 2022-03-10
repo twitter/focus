@@ -1,57 +1,66 @@
 use anyhow::{bail, Context, Result};
-use tracing::{debug, info};
+use tracing::info;
 
 use std::path::{Path, PathBuf};
 
 use std::sync::{mpsc, Arc};
 
 use crate::app::{App, ExitCode};
+use crate::model::repo::Repo;
 use crate::util::{git_helper, paths};
 
-fn find_committed_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
-    let sync_state = {
-        if let Some(sync_point) = git_helper::read_config(repo, "focus.sync-point", app.clone())
+fn find_committed_changes(app: Arc<App>, repo_path: &Path) -> Result<Vec<PathBuf>> {
+    let repo = Repo::open(repo_path, app.clone())?;
+    let working_tree = {
+        if let Some(t) = repo.working_tree() {
+            t
+        } else {
+            bail!("No working tree");
+        }
+    };
+
+    let sync_state_oid = {
+        if let Some(sync_point) = working_tree
+            .read_sync_point_ref()
             .context("reading sync state")?
         {
             sync_point
         } else {
-            bail!("Could not read sync state in repo {}", repo.display());
+            bail!("No sync state!");
         }
     };
 
-    let revspec = format!("{}..HEAD", &sync_state.trim());
+    let revspec = format!("{}..HEAD", &sync_state_oid);
     let description = format!(
         "Finding committed changes since the last sync point ({})",
         &revspec
     );
     let output = git_helper::run_consuming_stdout(
         description,
-        repo,
+        repo_path,
         &["diff", "--name-only", &revspec],
         app,
     )?;
-    let changed_paths: Vec<&str> = output.lines().collect::<_>();
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
-    for line in &changed_paths {
+    for line in output.lines() {
         let parsed = PathBuf::from(line);
         if paths::is_relevant_to_build_graph(parsed.as_path()) {
             info!(path = ?parsed, "Committed path");
             build_involved_changed_paths.push(parsed);
         }
     }
-    Ok(!&changed_paths.is_empty())
+    Ok(build_involved_changed_paths)
 }
 
-fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
+fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<Vec<PathBuf>> {
     let output = git_helper::run_consuming_stdout(
-        "Finding uncommitted changes".to_owned(),
+        "Finding uncommitted changes",
         repo,
         &["status", "--porcelain", "--no-renames"],
         app,
     )?;
-    let all_changes: Vec<&str> = output.lines().collect::<_>();
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
-    for line in &all_changes {
+    for line in output.lines() {
         let mut tokens = line.split_ascii_whitespace().take(2);
         let status = tokens.next();
         if status.is_none() {
@@ -68,10 +77,17 @@ fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<bool> {
         }
     }
 
-    Ok(!&build_involved_changed_paths.is_empty())
+    Ok(build_involved_changed_paths)
 }
 
-pub fn run(app: Arc<App>, repo: &Path) -> Result<ExitCode> {
+pub fn run(repo: &Path, args: Vec<String>, app: Arc<App>) -> Result<ExitCode> {
+    if let Some(verb) = args.get(0) {
+        if verb.eq_ignore_ascii_case("lint") {
+            // Twitter specific behavior: Do not stop `bazel lint` running under `arc lint` as happens frequently. Act as if we didn't run.
+            return Ok(ExitCode(0));
+        }
+    }
+
     // TODO: Consider removing uncommitted change detection since we can't perform operations in repos without a clean working tree anyway.
     let (uncommitted_tx, uncommitted_rx) = mpsc::channel();
     let uncommited_finder_thread = {
@@ -103,10 +119,10 @@ pub fn run(app: Arc<App>, repo: &Path) -> Result<ExitCode> {
         })
     };
 
-    let has_uncommitted_changes = uncommitted_rx
+    let uncommitted_changes = uncommitted_rx
         .recv()
         .expect("could not receive whether there were uncommitted changes");
-    let has_committed_changes = committed_rx
+    let committed_changes = committed_rx
         .recv()
         .expect("could not receive whether there were committed changes");
 
@@ -117,17 +133,17 @@ pub fn run(app: Arc<App>, repo: &Path) -> Result<ExitCode> {
         .join()
         .expect("thread crashed detecting uncommitted changes");
 
-    if has_committed_changes && has_uncommitted_changes {
+    if !committed_changes.is_empty() && !uncommitted_changes.is_empty() {
         eprintln!("Committed and uncommitted changes affect the build graph, please run `focus sync` to update the sparse checkout!");
         Ok(ExitCode(1))
-    } else if has_committed_changes {
+    } else if !committed_changes.is_empty() {
         eprintln!("Committed changes affect the build graph, please run `focus sync` to update the sparse checkout!");
         Ok(ExitCode(1))
-    } else if has_uncommitted_changes {
+    } else if !uncommitted_changes.is_empty() {
         eprintln!("Uncommitted changes affect the build graph, please run `focus sync` to update the sparse checkout!");
         Ok(ExitCode(1))
     } else {
-        debug!("No changes to files affecting the build graph were detected");
+        eprintln!("No changes to files affecting the build graph were detected");
         Ok(ExitCode(0))
     }
 }

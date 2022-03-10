@@ -12,7 +12,7 @@ use std::{
     },
     time::Duration,
 };
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
     use std::io;
@@ -24,7 +24,7 @@ fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
     #[allow(clippy::manual_flatten)]
     for line in lines {
         if let Ok(line) = line {
-            ui.log("Error", line);
+            error!("Error, {}", line);
         }
     }
     ui.log("Error", format!("End '{}'", title));
@@ -236,7 +236,7 @@ impl SandboxCommand {
         debug!("Command {:?} exited with status {}", cmd, &status);
         if !status.success() {
             self.log(output, description).context("logging output")?;
-            bail!("Command {:?} failed: {}", cmd, description);
+            bail!("Command failed: {}", description);
         }
 
         Ok(status)

@@ -7,6 +7,7 @@ use std::time::SystemTime;
 use ti_library::tool_insights_client::ToolInsightsClient;
 
 #[must_use = "The exit code for the application should be returned and bubbled up to `main` so that it can be passed to `std::process::exit`."]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ExitCode(pub i32);
 
 #[derive(Clone)]

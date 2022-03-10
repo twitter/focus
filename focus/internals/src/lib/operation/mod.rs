@@ -1,11 +1,13 @@
 pub mod adhoc;
 pub mod clone;
 pub mod detect_build_graph_changes;
+pub mod ensure_clean;
 pub mod init;
 pub mod layer;
 pub mod maintenance;
 pub mod refs;
 pub mod repo;
 pub mod sync;
-pub mod testing;
+pub(crate) mod testing;
 pub mod user_interface_test;
+pub(crate) mod util;

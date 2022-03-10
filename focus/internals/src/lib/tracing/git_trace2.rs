@@ -8,6 +8,8 @@ use anyhow::{bail, Result};
 use serde_derive::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
+use tracing::debug;
+
 #[allow(dead_code)]
 #[derive(
     Debug,
@@ -231,7 +233,7 @@ impl Events {
         let mut result: Vec<Event> = Vec::new();
 
         let bytes = std::fs::read(&path)?;
-        log::debug!("parsing: {:?}", &path);
+        debug!("parsing: {:?}", &path);
         for line in BufReader::new(bytes.as_slice()).lines() {
             let s = line?;
             let event: Event = serde_json::from_str(&s)?;
@@ -688,7 +690,7 @@ mod tests {
     fn test_from_definition_macro_works() -> Result<()> {
         let v = event::Version::default();
         if let Event::Version(event::Version { .. }) = v.into() {
-            ()
+            
         } else {
             panic!("wtf?! wrong type returned from into")
         };

@@ -3,11 +3,9 @@ pub mod coordinate;
 pub mod coordinate_resolver;
 pub mod model;
 pub mod operation;
-pub mod repository;
-pub mod sparse_repos;
+#[cfg(test)]
 pub mod testing;
 pub mod tracing;
 pub mod tracker;
 pub mod ui;
 pub mod util;
-pub mod working_tree_synchronizer;

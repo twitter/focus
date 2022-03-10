@@ -122,16 +122,17 @@ pub fn unset_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> R
     Ok(())
 }
 
-pub fn run_consuming_stdout<P, I, S>(
-    description: String,
+pub fn run_consuming_stdout<S, P, I, O>(
+    description: S,
     repo: P,
     args: I,
     app: Arc<App>,
 ) -> Result<String>
 where
+    S: AsRef<str>,
     P: AsRef<Path>,
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
+    I: IntoIterator<Item = O>,
+    O: AsRef<OsStr>,
 {
     let (mut cmd, scmd) = git_command(description, app)?;
     if let Err(e) = cmd.current_dir(repo).args(args).status() {
@@ -414,7 +415,7 @@ mod tests {
         Ok(())
     }
 
-    static TIMESTAMP: &'static str = "2022-02-03T00:00:00-05:00";
+    static TIMESTAMP: &str = "2022-02-03T00:00:00-05:00";
 
     #[test]
     fn test_ident_to_signature() -> Result<()> {

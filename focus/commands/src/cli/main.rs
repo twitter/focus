@@ -1,8 +1,8 @@
 #![allow(clippy::too_many_arguments)]
 
-use std::{convert::TryFrom, env, path::PathBuf, sync::Arc, time::Instant};
+use std::{convert::TryFrom, path::PathBuf, sync::Arc, time::Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use chrono::NaiveDate;
 use clap::Parser;
 use git2::Repository;
@@ -24,13 +24,9 @@ use strum::VariantNames;
 enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build coordinates
     Clone {
-        /// Copy only the specified branch rather than all local branches.
-        #[clap(long)]
-        single_branch: bool,
-
-        /// Path to the dense repository to base the clone on.
-        #[clap(long, parse(from_os_str), default_value = "~/workspace/source")]
-        dense_repo: PathBuf,
+        /// Path to the repository to clone.
+        #[clap(long, default_value = "~/workspace/source")]
+        dense_repo: String,
 
         /// Path where the new sparse repository should be created.
         #[clap(parse(from_os_str))]
@@ -39,6 +35,14 @@ enum Subcommand {
         /// The name of the branch to clone.
         #[clap(long, default_value = "master")]
         branch: String,
+
+        /// Days of history to maintain in the sparse repo.
+        #[clap(long, default_value = "90")]
+        days_of_history: u64,
+
+        /// Copy only the specified branch rather than all local branches.
+        #[clap(parse(try_from_str), default_value = "true")]
+        copy_branches: bool,
 
         /// Named layers and ad-hoc coordinates to include in the clone. Named layers are loaded from the dense repo's `focus/projects` directory.
         coordinates_and_layers: Vec<String>,
@@ -79,9 +83,12 @@ enum Subcommand {
 
     /// Detect whether there are changes to the build graph (used internally)
     DetectBuildGraphChanges {
-        // Path to the repository.
+        /// Path to the repository.
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
+
+        /// Extra arguments.
+        args: Vec<String>,
     },
 
     /// Utility methods for listing and expiring outdated refs. Used to maintain a time windowed
@@ -435,46 +442,34 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
 
     match options.cmd {
         Subcommand::Clone {
-            single_branch,
             dense_repo,
             sparse_repo,
             branch,
+            days_of_history,
+            copy_branches,
             coordinates_and_layers,
         } => {
             let ui = cloned_app.ui();
-            let dense_repo =
-                paths::expand_tilde(dense_repo).context("Failed to expand dense repo path")?;
+
+            let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
                 let current_dir =
-                    env::current_dir().context("Failed to obtain current directory")?;
+                    std::env::current_dir().context("Failed to obtain current directory")?;
                 let expanded = paths::expand_tilde(sparse_repo)
                     .context("Failed to expand sparse repo path")?;
                 current_dir.join(expanded)
             };
-            ui.log(
-                "Clone",
-                format!("Using the dense repo in {}", dense_repo.display()),
-            );
 
-            if paths::has_ancestor(&sparse_repo, &dense_repo)
-                .context("Could not determine if the sparse repo is in the dense repo")?
-            {
-                bail!("The sparse repo ({}) must not be be inside the dense repo ({}). Note: the sparse repo path is treated as relative to the current directory.", sparse_repo.display(), dense_repo.display())
-            }
-
-            let dense_repo = git_helper::find_top_level(cloned_app.clone(), &dense_repo)
-                .context("Failed to canonicalize dense repo path")?;
+            ui.status(format!(
+                "Cloning {:?} into {}",
+                dense_repo,
+                sparse_repo.display()
+            ));
+            ui.set_enabled(interactive);
 
             let (coordinates, layers): (Vec<String>, Vec<String>) = coordinates_and_layers
                 .into_iter()
                 .partition(|item| Coordinate::try_from(item.as_str()).is_ok());
-
-            ui.status(format!(
-                "Cloning {} into {}",
-                dense_repo.display(),
-                sparse_repo.display()
-            ));
-            ui.set_enabled(interactive);
 
             // Add coordinates length to TI custom map.
             ti_client.get_context().add_to_custom_map(
@@ -483,21 +478,23 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             );
 
             operation::clone::run(
-                dense_repo,
+                origin,
                 sparse_repo,
                 branch,
                 coordinates,
                 layers,
-                !single_branch,
-                cloned_app,
+                copy_branches,
+                days_of_history,
+                app,
             )?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Sync { sparse_repo } => {
+            // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
             app.ui().set_enabled(interactive);
-            operation::sync::run(app, &sparse_repo)?;
+            operation::sync::run(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
 
@@ -575,11 +572,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             }
         },
 
-        Subcommand::DetectBuildGraphChanges { repo } => {
+        Subcommand::DetectBuildGraphChanges { repo, args } => {
             let repo = paths::expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
-            operation::detect_build_graph_changes::run(app, &repo)
+            operation::detect_build_graph_changes::run(&repo, args, app)
         }
 
         Subcommand::UserInterfaceTest {} => {
@@ -602,7 +599,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 LayerSubcommand::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
-                operation::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+                operation::ensure_clean::run(repo.as_path(), app.clone())
                     .context("Ensuring working trees are clean failed")?;
             }
 
@@ -631,7 +628,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     "Syncing focused paths since the selected content has changed",
                 );
                 app.ui().set_enabled(interactive);
-                operation::sync::run(app, repo.as_path())
+                operation::sync::run(repo.as_path(), app)
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
 
@@ -653,7 +650,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 AdhocSubcommand::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
-                operation::sync::ensure_working_trees_are_clean(app.clone(), repo.as_path(), None)
+                operation::ensure_clean::run(repo.as_path(), app.clone())
                     .context("Ensuring working trees are clean failed")?;
             }
 
@@ -685,7 +682,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     "Syncing focused paths since the selected content has changed",
                 );
                 app.ui().set_enabled(interactive);
-                operation::sync::run(app, repo.as_path())
+                operation::sync::run(repo.as_path(), app)
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
 

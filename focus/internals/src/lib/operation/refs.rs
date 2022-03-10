@@ -242,11 +242,11 @@ mod tests {
 
     use crate::operation::testing::refs::Fixture;
 
-    static OLD_MERGE_BASE_BRANCH_NAME: &'static str = "refs/heads/oldmergebase";
-    static OLD_TIP_BRANCH_NAME: &'static str = "refs/heads/oldtip";
-    static REFS_HEADS_MAIN: &'static str = "refs/heads/main";
-    static FIRST_COMMIT_TIMESTAMP: &'static str = "2016-02-03T00:00:00-05:00";
-    static REFS_HEADS_REPOD_MASTER: &'static str = "refs/heads/repo.d/master";
+    const OLD_MERGE_BASE_BRANCH_NAME: &str = "refs/heads/oldmergebase";
+    const OLD_TIP_BRANCH_NAME: &str = "refs/heads/oldtip";
+    const REFS_HEADS_MAIN: &str = "refs/heads/main";
+    const FIRST_COMMIT_TIMESTAMP: &str = "2016-02-03T00:00:00-05:00";
+    const REFS_HEADS_REPOD_MASTER: &str = "refs/heads/repo.d/master";
 
     // we want a repo that has commits like:
     //

@@ -160,7 +160,7 @@ mod tests {
             }
             _ => bail!("expected a file"),
         }
-        match sandbox.create_file(Some("adieu"), Some("too"), Some(2 as usize)) {
+        match sandbox.create_file(Some("adieu"), Some("too"), Some(2_usize)) {
             Ok((_, path, ser)) => {
                 assert_eq!(ser, 2);
                 let s = format!("adieu-{:09}.too", ser);

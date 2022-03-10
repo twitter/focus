@@ -1,126 +1,33 @@
 use crate::app::App;
 use crate::coordinate::CoordinateSet;
-use crate::model::layering::{Layer, LayerSets};
-use crate::util::git_helper;
-use crate::util::git_helper::get_current_revision;
-use crate::util::git_helper::BranchSwitch;
-use crate::util::paths;
-use crate::util::sandbox_command::SandboxCommand;
-use crate::util::sandbox_command::SandboxCommandOutput;
-use crate::working_tree_synchronizer::WorkingTreeSynchronizer;
+use crate::model::layering::Layer;
+use crate::model::layering::LayerSets;
+use crate::model::repo::Repo;
+use crate::operation::util::perform;
+use crate::util::backed_up_file::BackedUpFile;
+
 use std::convert::TryFrom;
-use std::fs::File;
-use tracing::error;
 
 use std::path::Path;
-use std::path::PathBuf;
-use std::process::Stdio;
+
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
-pub fn perform<F, J>(description: &str, f: F) -> Result<J>
-where
-    F: FnOnce() -> Result<J>,
-{
-    let result = f();
-    if let Err(e) = result {
-        error!(?e, "Failed {}", description.to_ascii_lowercase());
-        bail!(e);
-    }
-
-    result
-}
-
-fn find_dense_repo(app: Arc<App>, sparse_repo: &Path) -> Result<PathBuf> {
-    let dense_repo = git_helper::run_consuming_stdout(
-        "Reading dense repo URL".to_owned(),
-        &sparse_repo,
-        &["remote", "get-url", "dense"],
-        app.clone(),
-    )
-    .context("Failed reading the dense repo URL")
-    .map(PathBuf::from)?;
-    let dense_repo = git_helper::find_top_level(app, &dense_repo)
-        .context("Failed finding dense repo top level")?;
-    Ok(dense_repo)
-}
-
-pub fn ensure_working_trees_are_clean(
-    app: Arc<App>,
-    sparse_repo: &Path,
-    dense_repo: Option<PathBuf>,
-) -> Result<()> {
-    let sparse_repo = git_helper::find_top_level(app.clone(), sparse_repo)
-        .context("canonicalizing sparse repo path")?;
-    let dense_repo = {
-        if let Some(dense_repo) = dense_repo {
-            dense_repo
-        } else {
-            find_dense_repo(app.clone(), &sparse_repo)?
-        }
-    };
-    let sparse_sync = WorkingTreeSynchronizer::new(&sparse_repo, app.clone())?;
-    let dense_sync = WorkingTreeSynchronizer::new(&dense_repo, app)?;
-
-    if let Ok(clean) = perform("Checking that dense repo is in a clean state", || {
-        dense_sync.is_working_tree_clean()
-    }) {
-        if !clean {
-            eprintln!("The working tree in the dense repo must be in a clean state. Commit or stash changes and try to run the sync again.");
-            bail!("Dense repo working tree is not in a clean state");
-        }
-    } else {
-        bail!("Could not determine whether the dense repo is in a clean state");
-    }
-
-    if let Ok(clean) = perform("Checking that sparse repo is in a clean state", || {
-        sparse_sync.is_working_tree_clean()
-    }) {
-        if !clean {
-            eprintln!("The working tree in the sparse repo must be in a clean state. Commit or stash changes and try to run the sync again.");
-            bail!("Sparse repo working tree is not in a clean state");
-        }
-    } else {
-        bail!("Could not determine whether the sparse repo is in a clean state");
-    }
-
-    Ok(())
-}
-
-pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
-    // TODO(wilhelm): Make this multi-threaded where possible.
-    use crate::sparse_repos;
+pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     let ui = app.ui();
-    let sparse_repo = git_helper::find_top_level(app.clone(), sparse_repo)
-        .context("canonicalizing sparse repo path")?;
-    paths::assert_focused_repo(&sparse_repo)?;
-
-    let dense_repo = find_dense_repo(app.clone(), &sparse_repo)?;
-
-    let sparse_profile_path = sparse_repo
-        .join(".git")
-        .join("info")
-        .join("sparse-checkout");
-    if !sparse_profile_path.is_file() {
-        bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
-    }
-
-    let (sparse_profile_output_file, sparse_profile_output_path, _) =
-        app.sandbox()
-            .create_file(Some("sparse-profile"), None, None)?;
-    drop(sparse_profile_output_file);
-
-    let sparse_checkout_backup_path = {
-        let mut path = sparse_profile_path.clone();
-        path.set_extension("backup");
-        path
-    };
 
     ui.status(format!("Syncing {}", &sparse_repo.display()));
 
-    ensure_working_trees_are_clean(app.clone(), sparse_repo.as_path(), Some(dense_repo.clone()))
+    let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
+    let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
+    if !sparse_profile_path.is_file() {
+        bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
+    }
+    super::ensure_clean::run(sparse_repo, app.clone())
         .context("Failed trying to determine whether working trees were clean")?;
+
+    let backed_up_sparse_profile = BackedUpFile::new(&sparse_profile_path)?;
 
     // Figure out all of the coordinates we will be resolving
     let coordinates = perform("Enumerating coordinates", || {
@@ -135,7 +42,7 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
         };
 
         // Add mandatory layers
-        let sets = LayerSets::new(&sparse_repo);
+        let sets = LayerSets::new(sparse_repo);
         let layer_set = sets
             .computed_layers()
             .context("Failed resolving applied layers")?;
@@ -154,101 +61,163 @@ pub fn run(app: Arc<App>, sparse_repo: &Path) -> Result<()> {
     let coordinate_set =
         CoordinateSet::try_from(coordinates.as_ref()).context("constructing coordinate set")?;
 
-    let cloned_app = app.clone();
-    let sparse_revision = perform("Determining the current commit in the sparse repo", || {
-        get_current_revision(cloned_app, sparse_repo.as_path())
+    perform("Computing the new sparse profile", || {
+        repo.sync(&coordinate_set, app).context("Sync failed")
     })?;
 
-    perform("Backing up the current sparse checkout file", || {
-        std::fs::copy(&sparse_profile_path, &sparse_checkout_backup_path)
-            .context("copying to the backup file")?;
-
-        Ok(())
-    })?;
-
-    let sparse_objects_directory = std::fs::canonicalize(&sparse_repo)
-        .context("canonicalizing sparse path")?
-        .join(".git")
-        .join("objects");
-
-    {
-        let cloned_app = app.clone();
-        let _dense_switch = perform("Switching in the dense repo", || {
-            // When checking out in the dense repo, we make the sparse repo objects available as an alternate so as to not need to push to the dense repo.
-            BranchSwitch::temporary(
-                cloned_app,
-                &dense_repo,
-                sparse_revision,
-                Some(sparse_objects_directory.clone()),
-            )
-        })?;
-
-        let cloned_app = app.clone();
-        perform("Computing the new sparse profile", || {
-            sparse_repos::generate_sparse_profile(
-                &dense_repo,
-                &sparse_profile_output_path,
-                coordinate_set,
-                cloned_app,
-            )
-        })?;
-
-        // The dense switch will go out of scope and that repo will switch back.
-    }
-
-    let cloned_app = app.clone();
-    if let Err(_e) = perform("Applying the sparse profile", || {
-        sparse_repos::set_sparse_config(&sparse_repo, cloned_app.clone())?;
-
-        let sparse_profile_output_file =
-            File::open(&sparse_profile_output_path).context("opening new sparse profile")?;
-        let (mut cmd, scmd) = SandboxCommand::new_with_handles(
-            "Applying the sparse profile".to_owned(),
-            git_helper::git_binary(),
-            Some(Stdio::from(sparse_profile_output_file)),
-            None,
-            None,
-            cloned_app.clone(),
-        )?;
-        scmd.ensure_success_or_log(
-            cmd.current_dir(&sparse_repo)
-                .arg("sparse-checkout")
-                .arg("set")
-                .arg("--stdin"),
-            SandboxCommandOutput::Stderr,
-            "sparse-checkout set",
-        )
-        .map(|_| ())
-        .context("setting sparse checkout from new profile")
-    }) {
-        perform("Restoring and reapplying the backup profile", || {
-            let backup_file = File::open(&sparse_checkout_backup_path)
-                .context("opening backup sparse profile")?;
-            let (mut cmd, scmd) = SandboxCommand::new_with_handles(
-                "Restoring and reapplying the backup profile".to_owned(),
-                git_helper::git_binary(),
-                Some(Stdio::from(backup_file)),
-                None,
-                None,
-                cloned_app.clone(),
-            )?;
-            scmd.ensure_success_or_log(
-                cmd.current_dir(&sparse_repo)
-                    .arg("sparse-checkout")
-                    .arg("set")
-                    .arg("--cone")
-                    .arg("--stdin"),
-                SandboxCommandOutput::Stderr,
-                "sparse-checkout set",
-            )
-            .map(|_| ())
-        })?;
-    }
-
-    let cloned_app = app;
     perform("Updating the sync point", || {
-        sparse_repos::configure_sparse_sync_point(&sparse_repo, cloned_app)
+        repo.working_tree().unwrap().write_sync_point_ref()
     })?;
+
+    // The profile was successfully applied, so do not restore the backup.
+    backed_up_sparse_profile.set_restore(false);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use std::path::Path;
+
+    use anyhow::Result;
+
+    use crate::{
+        app,
+        operation::{
+            self,
+            testing::integration::{RepoDisposition, RepoPairFixture},
+        },
+        testing::init_logging,
+    };
+
+    #[test]
+    fn sync_upstream_changes() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+
+        fixture.perform_clone()?;
+
+        // Commit new files affecting the build graph to the dense repo
+        let build_bazel_content = r#"filegroup(
+    name = "excerpts",
+    srcs = [
+        "catz.txt",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)"#;
+        fixture.dense_repo.commit(
+            Path::new("x/BUILD.bazel"),
+            build_bazel_content.as_bytes(),
+            "Add excerpts",
+        )?;
+        let catz_txt_content = r#"The Naming of Cats is a difficult matter,
+It isn't just one of your holiday games
+        )"#;
+        fixture.dense_repo.commit(
+            Path::new("x/catz.txt"),
+            catz_txt_content.as_bytes(),
+            "Add excerpts",
+        )?;
+
+        // Fetch in the sparse repo from the dense repo
+        fixture.perform_pull(RepoDisposition::Sparse, "origin", "master")?;
+
+        // Make sure that the graph is seen as having changed
+        assert_eq!(
+            operation::detect_build_graph_changes::run(
+                &fixture.sparse_repo_path,
+                vec![],
+                fixture.app.clone(),
+            )?,
+            app::ExitCode(1)
+        );
+
+        // Sync in the sparse repo
+        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone())?;
+
+        let x_dir = fixture.sparse_repo_path.join("x");
+        assert!(!x_dir.is_dir());
+
+        // Add as an ad-hoc coordinate
+        operation::adhoc::push(
+            fixture.app.clone(),
+            fixture.sparse_repo_path.clone(),
+            vec![String::from("bazel://x/...")],
+        )?;
+
+        // Sync
+        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone())?;
+
+        assert!(x_dir.is_dir());
+
+        Ok(())
+    }
+
+    #[test]
+    fn sync_layer_manipulation() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let path = fixture.sparse_repo_path.clone();
+        let library_a_dir = path.join("library_a");
+        let project_a_dir = path.join("project_a");
+        let library_b_dir = path.join("library_b");
+        let project_b_dir = path.join("project_b");
+
+        assert!(!library_b_dir.is_dir());
+        assert!(!project_b_dir.is_dir());
+        operation::layer::push(&path, vec![String::from("team_zissou/project_b")])?;
+        operation::sync::run(&path, fixture.app.clone())?;
+        assert!(library_b_dir.is_dir());
+        assert!(project_b_dir.is_dir());
+
+        assert!(!library_a_dir.is_dir());
+        assert!(!project_a_dir.is_dir());
+        operation::layer::push(&path, vec![String::from("team_banzai/project_a")])?;
+        operation::sync::run(&path, fixture.app.clone())?;
+        assert!(library_a_dir.is_dir());
+        assert!(project_a_dir.is_dir());
+
+        operation::layer::pop(&path, 1)?;
+        operation::sync::run(&path, fixture.app.clone())?;
+        assert!(!library_a_dir.is_dir());
+        assert!(!project_a_dir.is_dir());
+
+        operation::layer::pop(&path, 1)?;
+        operation::sync::run(&path, fixture.app.clone())?;
+        assert!(!library_b_dir.is_dir());
+        assert!(!project_b_dir.is_dir());
+
+        Ok(())
+    }
+
+    #[test]
+    fn sync_adhoc_manipulation() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let path = fixture.sparse_repo_path.clone();
+        let library_b_dir = path.join("library_b");
+
+        operation::adhoc::push(
+            fixture.app.clone(),
+            fixture.sparse_repo_path.clone(),
+            vec![String::from("bazel://library_b/...")],
+        )?;
+        operation::sync::run(&path, fixture.app.clone())?;
+        assert!(library_b_dir.is_dir());
+
+        operation::adhoc::pop(fixture.app.clone(), fixture.sparse_repo_path.clone(), 1)?;
+        operation::sync::run(&path, fixture.app.clone())?;
+        assert!(!library_b_dir.is_dir());
+
+        Ok(())
+    }
 }

@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn test_set_defaults() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let fix = ScratchGitRepo::new_fixture(temp.path())?;
+        let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
         let repo = fix.repo()?;
         let mut config = repo.config()?;
 
@@ -476,12 +476,12 @@ mod tests {
 
         let git_binary_path = "/path/to/bin/git";
         let config_key = "other.key";
-        let config_path = fix.config_path.clone();
+        let config_path = fix.config_path;
 
         let opts = RunOptions {
             git_binary_path: git_binary_path.into(),
             config_key: config_key.into(),
-            config_path: Some(config_path.into()),
+            config_path: Some(config_path),
         };
 
         let runner = Runner::new(opts)?;
@@ -498,7 +498,7 @@ mod tests {
     #[test]
     fn test_register() -> Result<()> {
         let fix = ConfigFixture::new()?;
-        let scratch = ScratchGitRepo::new_fixture(fix.tempdir.path())?;
+        let scratch = ScratchGitRepo::new_static_fixture(fix.tempdir.path())?;
         let repo = scratch.repo()?;
 
         register(RegisterOpts {
@@ -515,7 +515,7 @@ mod tests {
         let global_config = fix.config()?;
 
         let values = global_config.multivar_values(DEFAULT_CONFIG_KEY, None)?;
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
 
         Ok(())
     }
