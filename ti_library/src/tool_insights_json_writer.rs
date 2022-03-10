@@ -35,11 +35,12 @@ impl ToolInsightsJsonWriter {
 
         ToolInsightsJsonWriter { write_location }
     }
-}
 
-impl ToolInsightsMessageWriter for ToolInsightsJsonWriter {
-    fn write(&self, messages: &[ToolInsightsMessage]) -> Result<()> {
-        for message in messages {
+    fn write_data<D>(&self, data: &[D]) -> Result<()>
+    where
+        D: serde::Serialize,
+    {
+        for message in data {
             let message_string: String =
                 serde_json::to_string(message).context("Could not serialize json string")?;
             fs::write(
@@ -48,6 +49,41 @@ impl ToolInsightsMessageWriter for ToolInsightsJsonWriter {
             )
             .context("Could not write tool insights message")?;
         }
+        Ok(())
+    }
+}
+
+impl ToolInsightsMessageWriter for ToolInsightsJsonWriter {
+    fn write(&self, messages: &[ToolInsightsMessage]) -> Result<()> {
+        ToolInsightsJsonWriter::write_data(self, messages)
+    }
+}
+
+#[cfg(test)]
+mod ti_json_writer_tests {
+    use super::*;
+    use maplit::hashmap;
+
+    #[test]
+    fn ti_json_writer_writes_to_specified_write_location() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let write_location = PathBuf::from(temp_dir.path());
+        let writer = ToolInsightsJsonWriter::new(Some(write_location));
+
+        let data = hashmap! { "hello".to_string() => vec!["world".to_string()] };
+        let serialized_data = serde_json::to_string(&data)?;
+
+        writer.write_data(&[data])?;
+
+        let mut entries = std::fs::read_dir(&temp_dir)?;
+
+        assert_eq!(
+            std::fs::read_to_string(entries.next().unwrap()?.path())?,
+            serialized_data
+        );
+        assert!(entries.next().is_none());
+
+        temp_dir.close()?;
         Ok(())
     }
 }
