@@ -309,7 +309,7 @@ impl Launchctl {
     fn exec_cmd(&self, args: &[&str]) -> Result<()> {
         let (cmd, target, rest) = match args {
             [cmd, target, args @ ..] => (*cmd, *target, args),
-            _ =>  panic!("args must have at least two items"),
+            _ => panic!("args must have at least two items"),
         };
         assert!(args.len() >= 2, "args must have at least 2 items");
 

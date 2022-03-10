@@ -808,7 +808,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     maintenance::schedule_disable()?;
                     Ok(ExitCode(0))
                 }
-            }
+            },
         },
 
         Subcommand::GitTrace { input, output } => {

@@ -329,16 +329,8 @@ fn clone_shallow(
     days_of_history: u64,
     app: Arc<App>,
 ) -> Result<()> {
-    if days_of_history <= 0 {
-        bail!("Days of history must be positive")
-    }
     // Unfortunately time::duration is signed
-    let days_of_history = {
-        if days_of_history > i64::MAX as u64 {
-            bail!("Days of history overflows i64");
-        }
-        days_of_history as i64
-    };
+    let days_of_history: i64 = days_of_history.try_into()?;
 
     let sparse_repo_dir_parent = destination_path
         .parent()
@@ -512,8 +504,8 @@ fn copy_local_branches(
                 }
             },
             Err(_) => {
-                ui.log("Branch Copy", 
-                format!("Could not create branch {} in the sparse repo because the commit ({}) does not exist!", 
+                ui.log("Branch Copy",
+                format!("Could not create branch {} in the sparse repo because the commit ({}) does not exist!",
                 name, dense_commit.id()));
             }
         }

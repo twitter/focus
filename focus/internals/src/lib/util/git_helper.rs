@@ -36,10 +36,10 @@ const NL: u8 = b'\n';
 
 pub fn git_exec_path(git_binary_path: &Path) -> Result<PathBuf> {
     let mut output = Command::new(git_binary_path)
-    .arg("--exec-path")
-    .stdout(Stdio::piped())
-    .stderr(Stdio::null())
-    .output()?;
+        .arg("--exec-path")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()?;
 
     if !output.status.success() {
         bail!("git --exec-path failed to run");
