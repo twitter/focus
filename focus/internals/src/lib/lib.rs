@@ -3,6 +3,7 @@
 pub mod app;
 pub mod coordinate;
 pub mod coordinate_resolver;
+pub mod index;
 pub mod model;
 pub mod operation;
 #[cfg(test)]

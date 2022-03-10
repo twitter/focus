@@ -6,15 +6,16 @@ mod pants_resolver;
 use crate::{
     app::App,
     coordinate::{Coordinate, CoordinateSet},
+    index::{DependencyKey, DependencyValue},
 };
 use anyhow::{Context, Result};
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use self::{
+pub(crate) use self::{
     bazel_resolver::BazelResolver, directory_resolver::DirectoryResolver,
     pants_resolver::PantsResolver,
 };
@@ -27,9 +28,14 @@ pub struct ResolutionRequest {
 }
 
 /// Result of resolving a set of coordinates; namely a set of paths.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ResolutionResult {
+    /// The set of files/directories which must be materialized.
     pub paths: BTreeSet<PathBuf>,
+
+    /// The set of coordinates which were resolved as part of this request and
+    /// the dependencies they had.
+    pub package_deps: BTreeMap<DependencyKey, DependencyValue>,
 }
 
 impl ResolutionResult {
@@ -38,14 +44,21 @@ impl ResolutionResult {
     }
 
     pub fn merge(&mut self, other: ResolutionResult) {
-        let Self { paths } = other;
+        let Self {
+            paths,
+            package_deps,
+        } = other;
         self.paths.extend(paths);
+        self.package_deps.extend(package_deps);
     }
 }
 
 impl From<BTreeSet<PathBuf>> for ResolutionResult {
     fn from(paths: BTreeSet<PathBuf>) -> Self {
-        Self { paths }
+        Self {
+            paths,
+            package_deps: Default::default(),
+        }
     }
 }
 
