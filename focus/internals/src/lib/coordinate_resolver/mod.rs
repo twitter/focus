@@ -1,3 +1,4 @@
+mod bazel_de;
 mod bazel_resolver;
 mod directory_resolver;
 mod pants_resolver;
