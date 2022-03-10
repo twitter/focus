@@ -95,6 +95,12 @@ impl Resolver for PantsResolver {
             }
         }
 
-        Ok(ResolutionResult::from(directories))
+        Ok(ResolutionResult {
+            paths: directories,
+
+            // FIXME: not implemented for Pants under the assumption that we
+            // won't support it as part of the index.
+            package_deps: Default::default(),
+        })
     }
 }
