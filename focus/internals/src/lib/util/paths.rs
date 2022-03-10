@@ -6,6 +6,11 @@ use std::{
 };
 use tracing::warn;
 
+lazy_static! {
+    pub static ref MAIN_SEPARATOR_PATH: PathBuf =
+        PathBuf::from(format!("{}", std::path::MAIN_SEPARATOR));
+}
+
 pub fn assert_focused_repo(path: &Path) -> Result<()> {
     if !path.is_dir() || !path.join(".focus").is_dir() {
         bail!("This does not appear to be a focused repo -- it is missing a `.focus` directory");

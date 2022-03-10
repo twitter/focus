@@ -138,7 +138,7 @@ impl UserInterfaceRenderer {
 
         while !ui_state.enabled() {
             // Wait around until we're enabled, or if the thread is told to exit, just leave.
-            sleep(Duration::from_millis(50));
+            sleep(Duration::from_millis(100));
             if !render_state.running.load(Ordering::SeqCst) {
                 return;
             }
@@ -156,7 +156,7 @@ impl UserInterfaceRenderer {
 
         while render_state.running.load(Ordering::SeqCst) {
             if last_update.elapsed().lt(&update_interval) {
-                sleep(Duration::from_millis(50));
+                sleep(Duration::from_millis(100));
                 continue;
             }
 
@@ -317,10 +317,19 @@ impl UserInterfaceRenderer {
         self.interactive
     }
 
-    pub fn stop_and_join(&self) -> Result<()> {
-        self.renderer_state.running.store(false, Ordering::SeqCst);
-        self.render_thread_exited.wait();
-        Ok(())
+    pub fn stop_and_join(&self) -> Result<bool> {
+        match self.renderer_state.running.compare_exchange(
+            true,
+            false,
+            Ordering::Acquire,
+            Ordering::Relaxed,
+        ) {
+            Ok(true) => {
+                self.render_thread_exited.wait();
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
     }
 }
 
@@ -531,6 +540,10 @@ impl UserInterface {
 
     pub fn status(&self, status: impl Into<String>) {
         self.state.set_status(status.into());
+    }
+
+    pub fn wait_for_render_thread(&self) -> Result<bool> {
+        self.renderer.stop_and_join()
     }
 }
 

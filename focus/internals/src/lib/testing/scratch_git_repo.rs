@@ -5,13 +5,15 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
 
+use super::fixture_dir;
+
 pub struct ScratchGitRepo {
     path: PathBuf,
 }
 
 impl ScratchGitRepo {
     // Create a new fixture repo with a unique random name in the given directory
-    pub fn new_fixture(containing_dir: &Path) -> Result<Self> {
+    pub fn new_static_fixture(containing_dir: &Path) -> Result<Self> {
         Ok(Self {
             path: Self::create_fixture_repo(containing_dir)?,
         })
@@ -26,6 +28,51 @@ impl ScratchGitRepo {
 
         Ok(Self {
             path: target_path.to_owned(),
+        })
+    }
+
+    // Create a new copied fixture
+    pub fn new_copied_fixture(fixture_name: &Path, destination_path: &Path) -> Result<Self> {
+        if destination_path.exists() {
+            bail!("Destination path {} exists");
+        }
+
+        let fixture_path = fixture_dir()?.join("repos").join(fixture_name);
+        assert!(fixture_path.is_absolute());
+
+        // Copy to destination dir
+        Command::new("cp")
+            .arg("-r")
+            .arg(fixture_path)
+            .arg(destination_path)
+            .status()
+            .expect("copy failed");
+
+        // Initialize the destination path as a Git repo
+        Command::new("git")
+            .arg("init")
+            .current_dir(destination_path)
+            .status()
+            .expect("init failed");
+
+        // Add everything and commit it
+        Command::new("git")
+            .arg("add")
+            .arg("--")
+            .arg(".")
+            .current_dir(&destination_path)
+            .status()
+            .expect("add failed");
+
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("Initial import")
+            .current_dir(&destination_path)
+            .status()
+            .expect("commit failed");
+        Ok(Self {
+            path: destination_path.to_owned(),
         })
     }
 
@@ -183,7 +230,7 @@ mod tests {
     #[test]
     fn test_git_test_helper() -> Result<()> {
         let containing_dir = tempdir()?;
-        if let Ok(repo) = ScratchGitRepo::new_fixture(containing_dir.path()) {
+        if let Ok(repo) = ScratchGitRepo::new_static_fixture(containing_dir.path()) {
             let repo = Repository::open(repo.path());
             assert!(repo.is_ok());
         }

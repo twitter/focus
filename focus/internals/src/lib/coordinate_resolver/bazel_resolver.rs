@@ -4,9 +4,9 @@ use std::{
     sync::Mutex,
 };
 
-use crate::util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
-
 use anyhow::{bail, Result};
+
+use crate::util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
 
 use super::*;
 

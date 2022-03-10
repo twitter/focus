@@ -39,7 +39,7 @@ pub(in crate::operation) mod refs {
 
         /// creates the temp repo and returns the path created
         fn init(containing_dir: &Path) -> Result<PathBuf> {
-            let name = format!("repo_{}", Uuid::new_v4().to_string());
+            let name = format!("repo_{}", Uuid::new_v4());
             Command::new("git")
                 .arg("init")
                 .arg(&name)
@@ -145,9 +145,9 @@ pub(in crate::operation) mod refs {
             oid: git2::Oid,
         ) -> Result<git2::Reference> {
             let br = self.create_branch(branch_name, oid)?;
-            self.repo().set_head(&br.name().unwrap())?;
+            self.repo().set_head(br.name().unwrap())?;
             self.repo().reset(
-                &br.peel_to_commit()?.as_object(),
+                br.peel_to_commit()?.as_object(),
                 git2::ResetType::Soft,
                 Some(git2::build::CheckoutBuilder::new().safe()),
             )?;
@@ -183,6 +183,186 @@ pub(in crate::operation) mod refs {
             self.write(&filename, content)?;
             self.add(&filename)?;
             self.commit(message, author_opt, committer_opt)
+        }
+    }
+}
+
+#[cfg(test)]
+pub(in crate::operation) mod integration {
+    use std::{
+        path::{Path, PathBuf},
+        process::Command,
+        sync::Arc,
+    };
+
+    use anyhow::Result;
+
+    use tempfile::TempDir;
+
+    use tracing::{info, warn};
+
+    use crate::{
+        app::App, model::repo::Repo, operation, testing::scratch_git_repo::ScratchGitRepo,
+    };
+
+    #[allow(dead_code)]
+    pub enum RepoDisposition {
+        Dense,
+        Sparse,
+    }
+
+    #[allow(dead_code)]
+    pub struct RepoPairFixture {
+        pub dir: TempDir,
+        pub dense_repo_path: PathBuf,
+        pub sparse_repo_path: PathBuf,
+        pub dense_repo: ScratchGitRepo,
+        pub branch: String,
+        pub coordinates: Vec<String>,
+        pub layers: Vec<String>,
+        pub app: Arc<App>,
+    }
+
+    impl RepoPairFixture {
+        #[allow(dead_code)]
+        pub fn new() -> Result<Self> {
+            let dir = TempDir::new()?;
+            let dense_repo_path = dir.path().join("dense");
+            let dense_repo = ScratchGitRepo::new_copied_fixture(
+                Path::new("bazel_java_example"),
+                &dense_repo_path,
+            )?;
+            let sparse_repo_path = dir.path().join("sparse");
+            let branch = "master".to_owned();
+            let coordinates: Vec<String> = vec![];
+            let layers: Vec<String> = vec![];
+            let app = Arc::new(App::new(false, false)?);
+
+            Ok(Self {
+                dir,
+                dense_repo_path,
+                sparse_repo_path,
+                dense_repo,
+                branch,
+                coordinates,
+                layers,
+                app,
+            })
+        }
+
+        #[allow(dead_code)]
+        pub fn perform_clone(&self) -> Result<()> {
+            operation::clone::run(
+                operation::clone::Origin::Local(self.dense_repo_path.clone()),
+                self.sparse_repo_path.clone(),
+                self.branch.clone(),
+                self.coordinates.clone(),
+                self.layers.clone(),
+                true,
+                90,
+                self.app.clone(),
+            )
+        }
+
+        #[allow(dead_code)]
+        pub fn perform_sync(&self) -> Result<()> {
+            operation::sync::run(&self.sparse_repo_path, self.app.clone())
+        }
+
+        #[allow(dead_code)]
+        pub fn perform_pull(
+            &self,
+            repo: RepoDisposition,
+            remote_name: &str,
+            branch: &str,
+        ) -> Result<()> {
+            let path = match repo {
+                RepoDisposition::Dense => &self.dense_repo_path,
+                RepoDisposition::Sparse => &self.sparse_repo_path,
+            };
+
+            Command::new("git")
+                .arg("pull")
+                .arg(remote_name)
+                .arg(branch)
+                .current_dir(&path)
+                .status()
+                .expect("git pull failed");
+
+            Ok(())
+        }
+
+        #[allow(dead_code)]
+        /// Open a Repo instance modeling the sparse repo
+        pub fn sparse_repo(&self) -> Result<Repo> {
+            Repo::open(&self.sparse_repo_path, self.app.clone())
+        }
+
+        /// Stop Bazel if it is running in both repos
+        fn stop_bazel(&self) {
+            let mut commands = vec![(
+                Command::new("bazel")
+                    .arg("shutdown")
+                    .current_dir(&self.dense_repo_path)
+                    .spawn(),
+                self.dense_repo_path.to_owned(),
+            )];
+            if let Ok(sparse_repo) = self.sparse_repo() {
+                if let Some(working_tree) = sparse_repo.working_tree() {
+                    commands.push((
+                        Command::new("bazel")
+                            .arg("shutdown")
+                            .current_dir(working_tree.path())
+                            .spawn(),
+                        working_tree.path().to_owned(),
+                    ));
+                }
+                if let Some(outlining_tree) = sparse_repo.outlining_tree() {
+                    commands.push((
+                        Command::new("bazel")
+                            .arg("shutdown")
+                            .current_dir(outlining_tree.underlying().path())
+                            .spawn(),
+                        outlining_tree.underlying().path().to_owned(),
+                    ));
+                }
+            }
+
+            for spawn in commands {
+                match spawn {
+                    (Ok(mut child), path) => {
+                        // We can't really do anything anyway.
+                        match child.wait() {
+                            Ok(status) => {
+                                if status.code() == Some(0) {
+                                    info!(
+                                        "Bazel shutdown in {} shutdown succeeded",
+                                        path.display()
+                                    );
+                                } else {
+                                    warn!("Bazel shutdown in {} failed", path.display());
+                                }
+                            }
+                            Err(e) => warn!(
+                                "Failed to wait for Bazel shutdown in {}: {}",
+                                path.display(),
+                                e
+                            ),
+                        }
+                    }
+                    (Err(e), path) => warn!(
+                        "Failed to spawn Bazel shutdown in {}: {}",
+                        path.display(),
+                        e
+                    ),
+                }
+            }
+        }
+    }
+
+    impl Drop for RepoPairFixture {
+        fn drop(&mut self) {
+            self.stop_bazel();
         }
     }
 }

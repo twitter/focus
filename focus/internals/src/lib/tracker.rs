@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::{app::App, repository::Repo, util::paths::focus_config_dir};
+use crate::{app::App, model::repo::Repo, util::paths::focus_config_dir};
 
 pub struct TrackedRepo {
     identifier: Uuid,
@@ -29,9 +29,15 @@ impl TrackedRepo {
     }
 
     pub fn get_or_generate_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
-        let cloned_app = app.clone();
-        Repo::read_uuid(repo_path, app)
-            .or_else(|_e| Repo::write_generated_uuid(repo_path, cloned_app))
+        let repo = Repo::open(repo_path, app)?;
+        if let Some(working_tree) = repo.working_tree() {
+            match working_tree.read_uuid() {
+                Ok(Some(uuid)) => Ok(uuid),
+                _ => working_tree.write_generated_uuid(),
+            }
+        } else {
+            bail!("No working tree");
+        }
     }
 
     pub fn identifier(&self) -> &Uuid {
@@ -148,12 +154,17 @@ impl Tracker {
                                         Uuid::parse_str(utf_file_name.unwrap())
                                             .context("parsing file name as a uuid")?;
 
+                                    let repo = Repo::open(&canonical_path, app.clone())?;
                                     let uuid_from_config =
-                                        Repo::read_uuid(&canonical_path, app.clone());
+                                        if let Some(working_tree) = repo.working_tree() {
+                                            Ok(working_tree.read_uuid()?)
+                                        } else {
+                                            Err("No working tree")
+                                        };
 
                                     let mismatched_uuid = match uuid_from_config {
-                                        Ok(configured) => configured != uuid_from_filename,
-                                        Err(_) => true,
+                                        Ok(Some(configured)) => configured != uuid_from_filename,
+                                        _ => true,
                                     };
 
                                     if mismatched_uuid {
