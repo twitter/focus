@@ -104,7 +104,7 @@ mod test {
         "//visibility:public",
     ],
 )"#;
-        fixture.dense_repo.commit(
+        fixture.dense_repo.write_and_commit_file(
             Path::new("x/BUILD.bazel"),
             build_bazel_content.as_bytes(),
             "Add excerpts",
@@ -112,7 +112,7 @@ mod test {
         let catz_txt_content = r#"The Naming of Cats is a difficult matter,
 It isn't just one of your holiday games
         )"#;
-        fixture.dense_repo.commit(
+        fixture.dense_repo.write_and_commit_file(
             Path::new("x/catz.txt"),
             catz_txt_content.as_bytes(),
             "Add excerpts",

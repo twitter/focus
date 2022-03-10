@@ -316,6 +316,18 @@ mod tests {
 
     use super::*;
 
+    fn write_files(fix: &ScratchGitRepo, files: &str) -> anyhow::Result<()> {
+        let files = files
+            .trim()
+            .split("file: ")
+            .filter_map(|file_contents| file_contents.split_once("\n"));
+        for (file_name, file_contents) in files {
+            fix.write_file(file_name, file_contents.trim())?;
+            fix.add_file(file_name)?;
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_get_files_to_materialize() -> anyhow::Result<()> {
         init_logging();
@@ -323,44 +335,34 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
 
-        fix.commit("WORKSPACE", "", "create WORKSPACE")?;
-        fix.commit(
-            "package1/foo.sh",
-            r#"\
+        write_files(
+            &fix,
+            r#"
+file: WORKSPACE
+
+file: package1/foo.sh
 #!/bin/sh
 echo "Hello, world!"
-"#,
-            "create package1 contents",
-        )?;
-        fix.commit(
-            "package1/BUILD",
-            r#"\
+
+file: package1/BUILD
 sh_binary(
     name = "foo",
     srcs = ["foo.sh"],
     deps = ["//package2:bar"],
 )
-"#,
-            "create package1/BUILD",
-        )?;
-        fix.commit(
-            "package2/bar.sh",
-            r#"\
+
+file: package2/bar.sh
 #!/bin/sh
 echo "Loaded dependency contents"
-"#,
-            "create package2 contents",
-        )?;
-        let head_oid = fix.commit(
-            "package2/BUILD",
-            r#"\
+
+file: package2/BUILD
 sh_binary(
     name = "bar",
     srcs = ["bar.sh"],
 )
 "#,
-            "create package2/BUILD",
         )?;
+        let head_oid = fix.commit_all("Wrote files")?;
 
         let odb = ObjectDatabase::new();
         let repo = fix.repo()?;
@@ -378,7 +380,7 @@ sh_binary(
                         path: "package1",
                     },
                     ContentHash(
-                        9f53fc9b16211de75a2c77b56847baed78924647,
+                        bf2d1c53ba89122100ff058ca5881d089e54f0cd,
                     ),
                 ),
             },

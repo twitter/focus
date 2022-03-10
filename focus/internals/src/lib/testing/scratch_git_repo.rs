@@ -154,26 +154,25 @@ impl ScratchGitRepo {
         Ok(())
     }
 
-    pub fn commit(
+    pub fn write_file(
         &self,
         relative_filename: impl AsRef<Path>,
         content: impl AsRef<[u8]>,
-        message: impl AsRef<str>,
-    ) -> Result<git2::Oid> {
+    ) -> Result<()> {
         let relative_filename = relative_filename.as_ref();
         let absolute_filename = self.path.join(relative_filename);
         if let Some(parent_dir) = absolute_filename.parent() {
             std::fs::create_dir_all(parent_dir).context("creating intermediate directories")?;
         }
-
-        // Write the file
         std::fs::write(&absolute_filename, content).context("writing content")?;
+        Ok(())
+    }
 
-        // Run `git add`
+    pub fn add_file(&self, relative_filename: impl AsRef<Path>) -> Result<()> {
         if !Command::new("git")
             .arg("add")
             .arg("--")
-            .arg(relative_filename.as_os_str())
+            .arg(relative_filename.as_ref())
             .current_dir(&self.path)
             .spawn()
             .context("running `git add`")?
@@ -183,7 +182,10 @@ impl ScratchGitRepo {
         {
             bail!("`git add` exited abnormally");
         }
+        Ok(())
+    }
 
+    pub fn commit_all(&self, message: impl AsRef<str>) -> Result<git2::Oid> {
         // Run `git commit`
         if !Command::new("git")
             .arg("commit")
@@ -209,6 +211,18 @@ impl ScratchGitRepo {
             .context("finding commit")?
             .id();
         Ok(id)
+    }
+
+    pub fn write_and_commit_file(
+        &self,
+        relative_filename: impl AsRef<Path>,
+        content: impl AsRef<[u8]>,
+        message: impl AsRef<str>,
+    ) -> Result<git2::Oid> {
+        let relative_filename = relative_filename.as_ref();
+        self.write_file(relative_filename, content)?;
+        self.add_file(relative_filename)?;
+        self.commit_all(message)
     }
 
     pub fn path(&self) -> &Path {
