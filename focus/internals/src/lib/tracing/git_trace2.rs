@@ -690,7 +690,6 @@ mod tests {
     fn test_from_definition_macro_works() -> Result<()> {
         let v = event::Version::default();
         if let Event::Version(event::Version { .. }) = v.into() {
-            
         } else {
             panic!("wtf?! wrong type returned from into")
         };

@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 pub mod app;
 pub mod coordinate;
 pub mod coordinate_resolver;

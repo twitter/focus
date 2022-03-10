@@ -6,8 +6,8 @@ use anyhow::Result;
 use tracing::dispatcher::DefaultGuard;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_error::ErrorLayer;
-use tracing_subscriber::{self, util::SubscriberInitExt, EnvFilter};
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::{self, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Debug)]
 pub enum GuardWrapper {
@@ -18,17 +18,16 @@ pub enum GuardWrapper {
 #[derive(Debug, Default)]
 /// opaque struct for returning tracing WorkerGuard instances to main
 pub struct Guard {
-    _inner: Vec<GuardWrapper>
+    _inner: Vec<GuardWrapper>,
 }
 
 impl From<WorkerGuard> for Guard {
     fn from(wg: WorkerGuard) -> Self {
         Guard {
-            _inner: vec![GuardWrapper::WorkerGuard(wg)]
+            _inner: vec![GuardWrapper::WorkerGuard(wg)],
         }
     }
 }
-
 
 #[derive(Debug, Default)]
 pub struct TracingOpts {
@@ -37,7 +36,10 @@ pub struct TracingOpts {
 }
 
 pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
-    let TracingOpts { is_tty, nocolor_requested } = opts;
+    let TracingOpts {
+        is_tty,
+        nocolor_requested,
+    } = opts;
     let use_color = is_tty && !nocolor_requested;
     let (non_blocking, guard) = tracing_appender::non_blocking(io::stderr());
 
