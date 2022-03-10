@@ -29,7 +29,7 @@ pub struct ResolutionRequest {
 /// Result of resolving a set of coordinates; namely a set of paths.
 #[derive(Default)]
 pub struct ResolutionResult {
-    paths: BTreeSet<PathBuf>,
+    pub paths: BTreeSet<PathBuf>,
 }
 
 impl ResolutionResult {
@@ -37,12 +37,9 @@ impl ResolutionResult {
         Default::default()
     }
 
-    pub fn paths(&self) -> &BTreeSet<PathBuf> {
-        &self.paths
-    }
-
-    pub fn merge(&mut self, other: &ResolutionResult) {
-        self.paths.extend(other.paths().to_owned());
+    pub fn merge(&mut self, other: ResolutionResult) {
+        let Self { paths } = other;
+        self.paths.extend(paths);
     }
 }
 
@@ -144,7 +141,7 @@ impl Resolver for RoutingResolver {
                 .with_context(|| format!("failed to resolve coordinate {}", coordinate))
             })
             .try_reduce(ResolutionResult::new, |mut acc, result| {
-                acc.merge(&result);
+                acc.merge(result);
                 Ok(acc)
             })
             .context("Resolving coordinates failed")

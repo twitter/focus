@@ -354,7 +354,7 @@ impl OutliningTree {
         };
 
         const LAST: usize = usize::MAX;
-        for path in result.paths() {
+        for path in result.paths {
             let qualified_path = repo_path.join(path);
             match paths::find_closest_directory_with_build_file(&qualified_path, &repo_path)
                 .context("locating closest build file")?
