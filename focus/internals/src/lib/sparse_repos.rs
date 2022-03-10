@@ -721,7 +721,8 @@ fn resolve_involved_directories<P: AsRef<Path> + std::fmt::Debug>(
         .context("Failed to resolve coordinates")?;
 
     let before = into.len();
-    for path in result.paths() {
+    let total = result.paths.len();
+    for path in result.paths {
         let qualified_path = repo.join(path);
         if let Some(path_to_closest_build_file) =
             paths::find_closest_directory_with_build_file(&qualified_path, repo)
@@ -743,8 +744,7 @@ fn resolve_involved_directories<P: AsRef<Path> + std::fmt::Debug>(
         String::from("Resolver"),
         format!(
             "Resolution yielded {} directories ({} total)",
-            difference,
-            &result.paths().len()
+            difference, total,
         ),
     );
 
