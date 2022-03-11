@@ -407,7 +407,7 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository) -> Result<(
                 }
             }
         } else {
-            bail!("Fetch URL for remote '{}' has no host");
+            bail!("Fetch URL for remote '{}' has no host", remote_name);
         }
 
         // Delete any existing remote with the same name in the sparse repo.
