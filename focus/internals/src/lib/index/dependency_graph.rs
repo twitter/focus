@@ -370,6 +370,7 @@ sh_binary(
         let head_commit = repo.find_commit(head_oid)?;
         let head_tree = head_commit.tree()?;
         let ctx = HashContext {
+            repo: &repo,
             head_tree: &head_tree,
         };
         let files_to_materialize =
@@ -444,6 +445,7 @@ sh_binary(
         let head_commit = repo.find_commit(head_oid)?;
         let head_tree = head_commit.tree()?;
         let ctx = HashContext {
+            repo: &repo,
             head_tree: &head_tree,
         };
         update_object_database_from_resolution(&ctx, odb.clone(), &resolve_result)?;
