@@ -31,6 +31,7 @@ impl FromStr for ContentHash {
 }
 
 pub struct HashContext<'a> {
+    pub repo: &'a git2::Repository,
     pub head_tree: &'a git2::Tree<'a>,
 }
 
