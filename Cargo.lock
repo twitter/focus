@@ -375,7 +375,6 @@ dependencies = [
  "heck",
  "insta",
  "lazy_static",
- "log",
  "maplit",
  "nix",
  "once_cell",
