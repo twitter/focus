@@ -1,10 +1,6 @@
 [package]
 name = "focus-commands"
 version = "0.3.3"
-authors = [
-  "Wilhelm Bierbaum <wilhelm@twitter.com>",
-  "Jonathan Simms <jsimms@twitter.com>"
-]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
