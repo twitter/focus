@@ -30,6 +30,10 @@ impl FromStr for ContentHash {
     }
 }
 
+pub struct HashContext<'a> {
+    pub head_tree: &'a git2::Tree<'a>,
+}
+
 /// Indicates that the implementing type can be content-hashed with respect to a
 /// state of the repository. Callers will want to use
 /// [`ContentHashable::content_hash`].
@@ -40,13 +44,13 @@ pub trait ContentHashable {
     /// In order to hash the [`ContentHashable`] values which make up the
     /// current item, the implementor can call [`ContentHashable::write`] on
     /// those values recursively.
-    fn write(&self, hasher: Hasher, head_tree: &git2::Tree) -> anyhow::Result<()>;
+    fn write(&self, hasher: Hasher, ctx: &HashContext) -> anyhow::Result<()>;
 
     /// Construct a hasher, hash this value, finalize the hash, and return the
     /// overall hash of this value.
-    fn content_hash(&self, head_tree: &git2::Tree) -> anyhow::Result<ContentHash> {
+    fn content_hash(&self, ctx: &HashContext) -> anyhow::Result<ContentHash> {
         let mut hasher = Sha1::new();
-        self.write(&mut hasher, head_tree)?;
+        self.write(&mut hasher, ctx)?;
         let result = hasher.finalize();
         let oid = git2::Oid::from_bytes(&result)?;
         Ok(ContentHash(oid))
@@ -54,10 +58,10 @@ pub trait ContentHashable {
 }
 
 impl ContentHashable for PathBuf {
-    fn write(&self, hasher: Hasher, head_tree: &git2::Tree) -> anyhow::Result<()> {
+    fn write(&self, hasher: Hasher, ctx: &HashContext) -> anyhow::Result<()> {
         hasher.update(b"PathBuf(");
 
-        match head_tree.get_path(self) {
+        match ctx.head_tree.get_path(self) {
             Ok(entry) => {
                 hasher.update(entry.id().as_bytes());
             }
@@ -74,7 +78,7 @@ impl ContentHashable for PathBuf {
 }
 
 impl ContentHashable for DependencyKey {
-    fn write(&self, hasher: Hasher, head_tree: &git2::Tree) -> anyhow::Result<()> {
+    fn write(&self, hasher: Hasher, ctx: &HashContext) -> anyhow::Result<()> {
         hasher.update(b"DependencyKey");
 
         match self {
@@ -83,12 +87,12 @@ impl ContentHashable for DependencyKey {
                 path,
             } => {
                 hasher.update(b"::BazelPackage(");
-                path.write(hasher, head_tree)?;
+                path.write(hasher, ctx)?;
             }
 
             DependencyKey::Path(path) => {
                 hasher.update(b"::Path(");
-                path.write(hasher, head_tree)?;
+                path.write(hasher, ctx)?;
             }
 
             DependencyKey::BazelPackage {

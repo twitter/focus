@@ -7,6 +7,7 @@ use crate::coordinate::{Label, TargetName};
 use crate::coordinate_resolver::ResolutionResult;
 use crate::index::content_hash::ContentHashable;
 
+use super::content_hash::HashContext;
 use super::{ContentHash, ObjectDatabase};
 
 /// A key into the "Focus Build Graph" which lets us identify a corresponding
@@ -116,7 +117,7 @@ pub enum DependencyValue {
 /// Add content-addressable key-value pairs corresponding to the calculated
 /// dependencies to the [`ObjectDatabase`].
 pub fn update_object_database_from_resolution(
-    head_tree: &git2::Tree,
+    ctx: &HashContext,
     odb: ObjectDatabase,
     resolution_result: &ResolutionResult,
 ) -> anyhow::Result<()> {
@@ -142,7 +143,7 @@ pub fn update_object_database_from_resolution(
             }
         }
 
-        let dep_hash = dep_key.content_hash(head_tree)?;
+        let dep_hash = dep_key.content_hash(ctx)?;
         odb.insert(dep_hash, dep_value.clone())?;
     }
     Ok(())
@@ -202,7 +203,7 @@ fn try_label_into_path(label: Label) -> anyhow::Result<PathBuf> {
 /// packages. This uses the [`ObjectDatabase`] and avoids querying Bazel or the
 /// working copy.
 pub fn get_files_to_materialize(
-    head_tree: &git2::Tree,
+    ctx: &HashContext,
     odb: &ObjectDatabase,
     packages: HashSet<Label>,
 ) -> anyhow::Result<PathsToMaterializeResult> {
@@ -225,7 +226,7 @@ pub fn get_files_to_materialize(
         for dep_key in dep_keys {
             seen_keys.insert(dep_key.clone());
 
-            let dep_hash = dep_key.content_hash(head_tree)?;
+            let dep_hash = dep_key.content_hash(ctx)?;
             let dep_value = odb.get(&dep_hash)?;
             debug!(
                 ?dep_hash,
@@ -368,8 +369,11 @@ sh_binary(
         let repo = fix.repo()?;
         let head_commit = repo.find_commit(head_oid)?;
         let head_tree = head_commit.tree()?;
+        let ctx = HashContext {
+            head_tree: &head_tree,
+        };
         let files_to_materialize =
-            get_files_to_materialize(&head_tree, &odb, hashset! { "//package1:foo".parse()? })?;
+            get_files_to_materialize(&ctx, &odb, hashset! { "//package1:foo".parse()? })?;
         // Confirm that the object for package1 is not yet in the database.
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
@@ -439,9 +443,12 @@ sh_binary(
         let repo = fix.repo()?;
         let head_commit = repo.find_commit(head_oid)?;
         let head_tree = head_commit.tree()?;
-        update_object_database_from_resolution(&head_tree, odb.clone(), &resolve_result)?;
+        let ctx = HashContext {
+            head_tree: &head_tree,
+        };
+        update_object_database_from_resolution(&ctx, odb.clone(), &resolve_result)?;
         let files_to_materialize =
-            get_files_to_materialize(&head_tree, &odb, hashset! { "//package1:foo".parse()? })?;
+            get_files_to_materialize(&ctx, &odb, hashset! { "//package1:foo".parse()? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
             paths: {
