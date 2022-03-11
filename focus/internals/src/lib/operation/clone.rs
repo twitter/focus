@@ -11,7 +11,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
 use git2::Repository;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, info_span, warn};
 use url::Url;
 
 use std::{
@@ -101,33 +101,29 @@ fn clone_local(
         bail!("Sparse repo directory already exists");
     }
 
-    let ui = app.ui();
-
     enable_filtering(&dense_repo_path)
         .context("setting configuration options in the dense repo")?;
 
     let url = Url::from_file_path(&dense_repo_path)
         .expect("Failed to convert dense repo path to a file URL");
 
-    ui.status(format!(
-        "Cloning {} -> {}",
-        &dense_repo_path.display(),
-        &sparse_repo_path.display()
-    ));
-    clone_shallow(
-        &url,
-        sparse_repo_path,
-        &branch,
-        copy_branches,
-        days_of_history,
-        app.clone(),
-    )
-    .context("Failed to clone the repository")?;
+    {
+        let span = info_span!("Cloning", dense_repo_path = ?dense_repo_path, sparse_repo_path = ?sparse_repo_path);
+        let _guard = span.enter();
+        clone_shallow(
+            &url,
+            sparse_repo_path,
+            &branch,
+            copy_branches,
+            days_of_history,
+            app.clone(),
+        )
+        .context("Failed to clone the repository")?;
+    }
 
     let dense_repo = Repository::open(&dense_repo_path).context("Opening dense repo")?;
     let sparse_repo = Repository::open(&sparse_repo_path).context("Opening sparse repo")?;
 
-    ui.log("Clone", "Configuring remotes");
     set_up_remotes(&dense_repo, &sparse_repo).context("Failed to set up the remotes")?;
 
     // Set fetchspec for primary branch
@@ -139,8 +135,8 @@ fn clone_local(
     }
 
     if copy_branches {
-        ui.log("Clone", "Copying branches from dense repo");
-        info!("Copying branches");
+        let span = info_span!("Copying branches");
+        let _guard = span.enter();
         copy_local_branches(&dense_repo, &sparse_repo, &branch, app)
             .context("Failed to copy references")?;
     }
@@ -179,13 +175,11 @@ fn clone_remote(
         bail!("Sparse repo directory already exists");
     }
 
-    let ui = app.ui();
-
-    ui.status(format!(
-        "Cloning {} -> {}",
+    info!(
+        "Cloning {} to {}",
         &dense_repo_url,
         &sparse_repo_path.display()
-    ));
+    );
 
     // Clone the repository.
     clone_shallow(
@@ -205,16 +199,14 @@ fn set_up_sparse_repo(
     coordinates: Vec<String>,
     app: Arc<App>,
 ) -> Result<()> {
-    let ui = app.ui();
-
     {
         let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
         // TODO: Parallelize these tree set up processes.
-        ui.log("Sparse Repo", "Setting up outlining tree");
+        info!("Setting up the outlining tree");
         repo.create_outlining_tree()
             .context("Failed to create the outlining tree")?;
 
-        ui.log("Sparse Repo", "Setting up the working tree");
+        info!("Setting up the working tree");
         repo.create_working_tree()
             .context("Failed to create the working tree")?;
     }
@@ -231,7 +223,6 @@ fn set_up_sparse_repo(
             working_tree.path(),
             layers,
             coordinates,
-            app.clone(),
         )?
     };
 
@@ -274,7 +265,6 @@ fn compute_and_store_initial_selection(
     working_tree_path: &Path,
     layers: Vec<String>,
     coordinates: Vec<String>,
-    app: Arc<App>,
 ) -> Result<CoordinateSet> {
     let working_tree_layers = LayerSets::new(working_tree_path);
 
@@ -302,10 +292,10 @@ fn compute_and_store_initial_selection(
         .collect();
 
     // Write the ad-hoc set into the working tree
-    app.ui().log("Clone", "writing ad-hoc layer set");
+    info!("Writing ad-hoc layer set");
     working_tree_layers.store_adhoc_layers(&adhoc_set)?;
 
-    app.ui().log("Clone", "writing selected layer set");
+    info!("Writing selected layer set");
     let selected_layer_names: Vec<String> = layers_from_outlining_tree
         .layers()
         .iter()
@@ -390,8 +380,8 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository) -> Result<(
         };
 
         let push_url = dense_remote.pushurl().unwrap_or(url);
-        info!(
-            "remote: {} fetch-url:{} push-url:{}",
+        debug!(
+            "Setting up remote {} (fetch={}, push={})",
             remote_name, url, push_url
         );
 
@@ -456,11 +446,8 @@ fn copy_local_branches(
     dense_repo: &Repository,
     sparse_repo: &Repository,
     branch: &str,
-    app: Arc<App>,
+    _app: Arc<App>,
 ) -> Result<()> {
-    let cloned_app = app;
-    let ui = cloned_app.ui();
-
     let branches = dense_repo
         .branches(Some(git2::BranchType::Local))
         .context("Failed to enumerate local branches in the dense repo")?;
@@ -491,22 +478,15 @@ fn copy_local_branches(
         match sparse_repo.find_commit(dense_commit.id()) {
             Ok(sparse_commit) => match sparse_repo.branch(name, &sparse_commit, false) {
                 Ok(_new_branch) => {
-                    ui.log(
-                        "Branch Copy",
-                        format!("Created branch {} ({})", name, sparse_commit.id()),
-                    );
+                    info!("Created branch {} ({})", name, sparse_commit.id());
                 }
                 Err(e) => {
-                    ui.log(
-                        "Branch Copy",
-                        format!("Could not create branch {} in the sparse repo: {}", name, e),
-                    );
+                    error!("Could not create branch {} in the sparse repo: {}", name, e);
                 }
             },
             Err(_) => {
-                ui.log("Branch Copy",
-                format!("Could not create branch {} in the sparse repo because the commit ({}) does not exist!",
-                name, dense_commit.id()));
+                error!("Could not create branch {} in the sparse repo because the associated commit ({}) does not exist!", 
+                    name, dense_commit.id());
             }
         }
     }
@@ -574,9 +554,9 @@ mod test {
 
         let mut fixture = RepoPairFixture::new()?;
         let library_a_coord = String::from("bazel://library_a/...");
-        fixture.coordinates.push(library_a_coord.clone());
+        fixture.coordinates.push(library_a_coord);
         let project_b_layer_label = String::from("team_zissou/project_b");
-        fixture.layers.push(project_b_layer_label.clone());
+        fixture.layers.push(project_b_layer_label);
 
         fixture.perform_clone()?;
 
@@ -647,7 +627,7 @@ mod test {
             .status()
             .expect("git switch failed");
 
-        let app = Arc::new(App::new(false, false)?);
+        let app = Arc::new(App::new(false)?);
 
         fixture.perform_clone()?;
 

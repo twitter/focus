@@ -26,7 +26,7 @@ pub(in crate::operation) mod refs {
             let _tempdir = tempfile::tempdir()?;
             let repo_path = Self::init(_tempdir.path())?;
 
-            let app = Arc::new(App::new(false, false)?);
+            let app = Arc::new(App::new(false)?);
             let repo = git2::Repository::open(&repo_path).context("failed to open Repository")?;
 
             Ok(Fixture {
@@ -236,7 +236,7 @@ pub(in crate::operation) mod integration {
             let branch = "master".to_owned();
             let coordinates: Vec<String> = vec![];
             let layers: Vec<String> = vec![];
-            let app = Arc::new(App::new(false, false)?);
+            let app = Arc::new(App::new(false)?);
 
             Ok(Self {
                 dir,

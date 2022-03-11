@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Result};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::{
     coordinate::{Label, TargetName},
@@ -124,10 +124,7 @@ impl BazelResolver {
                 }
             }
         }
-        app.ui().log(
-            "Bazel Resolver",
-            format!("'{}' requires {} directories", &query, paths.len()),
-        );
+        info!("'{}' requires {} directories", &query, paths.len(),);
 
         let deps = self.extract_dependencies(app, request, packages)?;
         Ok((paths, deps))

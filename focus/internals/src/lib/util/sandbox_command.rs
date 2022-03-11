@@ -1,4 +1,4 @@
-use crate::{app::App, ui::ProgressReporter};
+use crate::app::App;
 use anyhow::{bail, Context, Result};
 use std::{
     ffi::OsStr,
@@ -12,31 +12,27 @@ use std::{
     },
     time::Duration,
 };
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, info_span, warn};
 
-fn exhibit_file(app: Arc<App>, file: &Path, title: &str) -> Result<()> {
+fn exhibit_file(file: &Path, title: &str) -> Result<()> {
     use std::io;
 
     let file = File::open(file)?;
     let lines = io::BufReader::new(file).lines();
-    let ui = app.ui();
-    ui.log("Error", format!("Begin '{}'", title));
+    error!("Begin {}", &title);
     #[allow(clippy::manual_flatten)]
     for line in lines {
         if let Ok(line) = line {
-            error!("Error, {}", line);
+            error!("{}", &line);
         }
     }
-    ui.log("Error", format!("End '{}'", title));
+    error!("End {}", &title);
 
     Ok(())
 }
 
 // SandboxCommandRunner is a command that captures stdout and stderr into sandbox logs unless other destinations are specified.
 pub struct SandboxCommand {
-    app: Arc<App>,
-    #[allow(dead_code)]
-    progress_reporter: ProgressReporter,
     stdout_path: PathBuf,
     stderr_path: PathBuf,
 }
@@ -132,13 +128,7 @@ impl SandboxCommand {
 
         command.stdin(stdin).stdout(stdout).stderr(stderr);
 
-        let cloned_app_for_progress_reporter = app.clone();
         Ok(Self {
-            app,
-            progress_reporter: ProgressReporter::new(
-                cloned_app_for_progress_reporter,
-                description,
-            )?,
             stdout_path,
             stderr_path,
         })
@@ -178,8 +168,7 @@ impl SandboxCommand {
         };
 
         for (title, path) in items {
-            exhibit_file(self.app.clone(), path, title.as_str())
-                .with_context(|| format!("Exhibiting {}", title))?
+            exhibit_file(path, title.as_str()).with_context(|| format!("Exhibiting {}", title))?
         }
 
         Ok(())
@@ -220,14 +209,15 @@ impl SandboxCommand {
         output: SandboxCommandOutput,
         description: &str,
     ) -> Result<ExitStatus> {
-        debug!("Starting {:?} ({})", cmd, description);
+        let span = info_span!("Running command", %description);
+        let _guard = span.enter();
         let mut launch = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn command {}", description))?;
 
-        let program_desc = format!("{:?}", cmd.get_program());
-        let tailer = Self::tail(self.app.clone(), &program_desc, &self.stderr_path)
-            .context("Could not create log tailer");
+        let program_desc = format!("{}", cmd.get_program().to_string_lossy());
+        let tailer =
+            Self::tail(&program_desc, &self.stderr_path).context("Could not create log tailer");
 
         let status = launch
             .wait()
@@ -242,9 +232,9 @@ impl SandboxCommand {
         Ok(status)
     }
 
-    fn tail(app: Arc<App>, description: &str, path: &Path) -> Result<Tailer> {
+    fn tail(description: &str, path: &Path) -> Result<Tailer> {
         Ok(match File::options().read(true).open(path) {
-            Ok(f) => Tailer::new(app, description, f),
+            Ok(f) => Tailer::new(description, f),
             Err(_e) => bail!("Could not open {} for tailing", path.display()),
         })
     }
@@ -256,10 +246,10 @@ struct Tailer {
 }
 
 impl Tailer {
-    pub fn new(app: Arc<App>, description: &str, file: File) -> Self {
+    pub fn new(description: &str, file: File) -> Self {
         let (cancel_tx, cancel_rx) = mpsc::channel::<()>();
         let description = description.to_owned();
-        let _ = std::thread::spawn(move || Self::work(app, description, file, cancel_rx));
+        let _ = std::thread::spawn(move || Self::work(description, file, cancel_rx));
         Self {
             cancel_tx,
             stopped: AtomicBool::new(false),
@@ -279,17 +269,18 @@ impl Tailer {
         }
     }
 
-    fn work(app: Arc<App>, description: String, file: File, cancel_rx: mpsc::Receiver<()>) {
-        let desc = format!("{}#stderr", description);
+    // TODO: Fix waiting for all tailer instances.
+    fn work(description: String, file: File, cancel_rx: mpsc::Receiver<()>) {
         let buffered_reader = BufReader::new(file);
         let mut lines = buffered_reader.lines();
+        let span = info_span!("Output", program=?description);
+        let _guard = span.enter();
         while cancel_rx.try_recv().is_err() {
             while let Some(Ok(line)) = lines.next() {
-                app.ui().log(desc.clone(), line);
+                info!("{}", line);
             }
-            std::thread::sleep(Duration::from_millis(100));
+            std::thread::sleep(Duration::from_millis(50));
         }
-        app.ui().log(desc, "Exited loop");
     }
 }
 
@@ -301,6 +292,8 @@ impl Drop for Tailer {
 
 #[cfg(test)]
 mod tests {
+    use crate::testing::init_logging;
+
     use super::*;
     use anyhow::Result;
     use std::fs::File;
@@ -308,8 +301,10 @@ mod tests {
 
     #[test]
     fn sandboxed_command_capture_all() -> Result<()> {
-        let app = Arc::from(App::new(false, false)?);
-        let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app)?;
+        init_logging();
+        
+        let app = Arc::from(App::new(false)?);
+        let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app.clone())?;
         cmd.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
         scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
@@ -320,7 +315,9 @@ mod tests {
 
     #[test]
     fn sandboxed_command_specific_stdin() -> Result<()> {
-        let app = Arc::from(App::new(false, false)?);
+        init_logging();
+
+        let app = Arc::from(App::new(false)?);
         let sandbox = app.sandbox();
         let path = {
             let (mut file, path, _) = sandbox.create_file(None, None, None)?;

@@ -15,10 +15,6 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
-    let ui = app.ui();
-
-    ui.status(format!("Syncing {}", &sparse_repo.display()));
-
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
     if !sparse_profile_path.is_file() {
@@ -143,7 +139,6 @@ It isn't just one of your holiday games
 
         // Add as an ad-hoc coordinate
         operation::adhoc::push(
-            fixture.app.clone(),
             fixture.sparse_repo_path.clone(),
             vec![String::from("bazel://x/...")],
         )?;
@@ -207,14 +202,13 @@ It isn't just one of your holiday games
         let library_b_dir = path.join("library_b");
 
         operation::adhoc::push(
-            fixture.app.clone(),
             fixture.sparse_repo_path.clone(),
             vec![String::from("bazel://library_b/...")],
         )?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(library_b_dir.is_dir());
 
-        operation::adhoc::pop(fixture.app.clone(), fixture.sparse_repo_path.clone(), 1)?;
+        operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(!library_b_dir.is_dir());
 

@@ -9,5 +9,4 @@ pub mod refs;
 pub mod repo;
 pub mod sync;
 pub(crate) mod testing;
-pub mod user_interface_test;
 pub(crate) mod util;

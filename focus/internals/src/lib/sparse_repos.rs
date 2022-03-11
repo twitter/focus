@@ -84,7 +84,7 @@ pub fn config_sparse_disable_filesystem_monitor(sparse_repo: &Path, app: Arc<App
 }
 
 // Set git config key focus.sync-point to HEAD
-fn setup_bazel_preflight_script(sparse_repo: &Path, _app: Arc<App>) -> Result<()> {
+fn setup_bazel_preflight_script(sparse_repo: &Path) -> Result<()> {
     use std::os::unix::prelude::PermissionsExt;
 
     let sparse_focus_dir = sparse_repo.join(".focus");
