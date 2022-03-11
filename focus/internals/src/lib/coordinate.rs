@@ -179,7 +179,8 @@ impl Display for Label {
 
 impl Debug for Label {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, r#"Label("{}")"#, self)
+        let label_string: String = format!("{}", self);
+        write!(f, r#"Label({:?})"#, label_string)
     }
 }
 
