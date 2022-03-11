@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::tool_insights_client::ToolInsightsContext;
+use crate::client::Context;
 use crate::util::{duration_in_seconds, get_cwd, merge_maps, seconds_since_time};
 
 const SCHEMA_VERSION: u32 = 1;
@@ -15,48 +15,48 @@ const TOOL_INSIGHTS_SESSION_ID_ENV_VAR: &str = "TOOL_INSIGHTS_SESSION_ID";
 // Even though there is a provision to have more than one message here, I'm only
 // seeing a single message for every record so that's how we will use it.
 #[derive(Serialize, Debug)]
-pub struct ToolInsightsMessage {
+pub struct Message {
     schema_version: u32,
-    messages: Vec<ToolInsightsMessageBody>,
+    messages: Vec<MessageBody>,
 }
 
-impl ToolInsightsMessage {
+impl Message {
     pub fn new(
-        message_type: MessageType,
-        ti_context: &ToolInsightsContext,
+        message_type: MessageKind,
+        ti_context: &Context,
         end_time: Option<SystemTime>,
         map: Option<&HashMap<String, String>>,
-    ) -> ToolInsightsMessage {
-        let message = ToolInsightsMessageBody::new(message_type, ti_context, end_time, map);
+    ) -> Message {
+        let message = MessageBody::new(message_type, ti_context, end_time, map);
         let messages = vec![message];
-        ToolInsightsMessage {
+        Message {
             schema_version: SCHEMA_VERSION,
             messages,
         }
     }
     #[allow(dead_code)]
-    fn add_message(&mut self, message: ToolInsightsMessageBody) -> &ToolInsightsMessage {
+    fn add_message(&mut self, message: MessageBody) -> &Message {
         self.messages.push(message);
         self
     }
 }
 
 #[derive(Serialize, Debug)]
-pub struct ToolInsightsMessageBody {
+pub struct MessageBody {
     message_type: String,
     core_data: CoreData,
     #[serde(skip_serializing_if = "Option::is_none")]
     duration_seconds: Option<f64>,
 }
 
-impl ToolInsightsMessageBody {
+impl MessageBody {
     pub fn new(
-        message_type: MessageType,
-        ti_context: &ToolInsightsContext,
+        message_type: MessageKind,
+        ti_context: &Context,
         end_time: Option<SystemTime>,
         map: Option<&HashMap<String, String>>,
-    ) -> ToolInsightsMessageBody {
-        ToolInsightsMessageBody {
+    ) -> MessageBody {
+        MessageBody {
             message_type: message_type.to_string(),
             core_data: CoreData::new(ti_context, map),
             duration_seconds: end_time.map(|t| duration_in_seconds(ti_context.get_start_time(), t)),
@@ -84,7 +84,7 @@ pub struct CoreData {
 }
 
 impl CoreData {
-    fn new(ti_context: &ToolInsightsContext, map: Option<&HashMap<String, String>>) -> CoreData {
+    fn new(ti_context: &Context, map: Option<&HashMap<String, String>>) -> CoreData {
         let final_map: Option<HashMap<String, String>> =
             merge_maps(map.cloned(), ti_context.get_custom_map().cloned());
         let core_data = CoreData {
@@ -113,22 +113,22 @@ impl CoreData {
     }
 }
 
-pub enum MessageType {
+pub enum MessageKind {
     ErrorMessage,
     PerformanceMessage,
     UsageMessage,
 }
 
-impl ToString for MessageType {
+impl ToString for MessageKind {
     fn to_string(&self) -> String {
         match *self {
-            MessageType::ErrorMessage => {
+            MessageKind::ErrorMessage => {
                 "com.twitter.toolinsights.messages.ErrorMessage".to_string()
             }
-            MessageType::PerformanceMessage => {
+            MessageKind::PerformanceMessage => {
                 "com.twitter.toolinsights.messages.PerformanceMessage".to_string()
             }
-            MessageType::UsageMessage => {
+            MessageKind::UsageMessage => {
                 "com.twitter.toolinsights.messages.UsageMessage".to_string()
             }
         }

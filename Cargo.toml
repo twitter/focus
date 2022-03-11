@@ -2,5 +2,5 @@
 members = [
         "focus/commands",
         "focus/internals",
-        "ti_library",
+        "tool_insights_client",
 ]
