@@ -4,7 +4,7 @@ use std::{borrow::Borrow, fmt::Debug};
 use crate::util::sandbox::Sandbox;
 use anyhow::{Context, Result};
 use std::time::SystemTime;
-use ti_library::tool_insights_client::ToolInsightsClient;
+use tool_insights_client::Client;
 
 #[must_use = "The exit code for the application should be returned and bubbled up to `main` so that it can be passed to `std::process::exit`."]
 #[derive(Debug, PartialEq, Eq)]
@@ -13,7 +13,7 @@ pub struct ExitCode(pub i32);
 #[derive(Clone)]
 pub struct App {
     sandbox: Arc<Sandbox>,
-    tool_insights_client: ToolInsightsClient,
+    tool_insights_client: Client,
 }
 
 impl Debug for App {
@@ -26,7 +26,7 @@ impl App {
     pub fn new(preserve_sandbox_contents: bool) -> Result<Self> {
         let sandbox =
             Arc::from(Sandbox::new(preserve_sandbox_contents).context("Failed to create sandbox")?);
-        let tool_insights_client = ToolInsightsClient::new(
+        let tool_insights_client = Client::new(
             // TODO: get this from toml file
             "focus".to_string(),
             // TODO: get this from toml file
@@ -45,7 +45,7 @@ impl App {
     }
 
     /// Get a reference to the app's tool-insights client.
-    pub fn tool_insights_client(&self) -> &ToolInsightsClient {
+    pub fn tool_insights_client(&self) -> &Client {
         self.tool_insights_client.borrow()
     }
 }

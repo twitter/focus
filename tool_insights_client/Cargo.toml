@@ -1,5 +1,5 @@
 [package]
-name = "ti_library"
+name = "tool-insights-client"
 description = """
 Library to instrument tools via the tool insights service.
 The library, currently, is only useful on MacOS since it relies on the
@@ -12,13 +12,13 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.45"
-env_logger = "0.9.0"
-log = "0.4.14"
-maplit = "1.0.2"
-rand = "0.8.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 shellexpand = "2.1.0"
 tempfile = "3.3.0"
-uuid = {version = "1.0.0-alpha.1", features = ["v4"] }
+uuid = { version = "0.8.2", features = ["v4"] }
 whoami = "1.2.1"
+tracing = "0.1.31"
+
+[dev-dependencies]
+maplit = "1.0.2"

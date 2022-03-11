@@ -7,9 +7,9 @@
 //! ```
 //! use std::collections::HashMap;
 //! use std::time::SystemTime;
-//! use ti_library::tool_insights_client::ToolInsightsClient;
+//! use tool_insights_client::client::Client;
 //!
-//! let ti_client = ToolInsightsClient::new(
+//! let ti_client = Client::new(
 //!     "tool_name".to_string(),
 //!     "tool_version".to_string(),
 //!     SystemTime::now(),
@@ -29,7 +29,7 @@
 //! );
 //! ```
 //!
-//! TODO: Troubleshoot why `Drop` for ToolInsightsClient does not run reliably.
+//! TODO: Troubleshoot why `Drop` for Client does not run reliably.
 //! [Tool Insights]: https://docbird.twitter.biz/tool_insights/instrumenting.html
 
 use std::borrow::{Borrow, BorrowMut};
@@ -39,39 +39,36 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use env_logger::{self, Env};
+use tracing::error;
 
-use crate::tool_insights_json_writer::{ToolInsightsJsonWriter, ToolInsightsMessageWriter};
-use crate::tool_insights_message::{MessageType, ToolInsightsMessage};
+use crate::json_writer::JsonWriter;
+use crate::message::{Message, MessageKind};
+use crate::writer::Writer;
 
 #[derive(Clone)]
 /// Contains metadata about the tool as well as methods to create and write Tool insights logs.
-pub struct ToolInsightsClient {
+pub struct Client {
     // `inner` here is to abstract away the `.lock().unwrap()` from the user.
-    inner: Arc<Mutex<ToolInsightsClientInner>>,
+    inner: Arc<Mutex<Underlying>>,
 }
 
-impl ToolInsightsClient {
-    pub fn new(
-        tool_name: String,
-        tool_version: String,
-        start_time: SystemTime,
-    ) -> ToolInsightsClient {
-        let inner = Arc::from(Mutex::new(ToolInsightsClientInner::new(
+impl Client {
+    pub fn new(tool_name: String, tool_version: String, start_time: SystemTime) -> Client {
+        let inner = Arc::from(Mutex::new(Underlying::new(
             tool_name,
             tool_version,
             start_time,
         )));
-        ToolInsightsClient { inner }
+        Client { inner }
     }
 
-    pub fn get_inner(&self) -> MutexGuard<'_, ToolInsightsClientInner> {
+    pub fn get_inner(&self) -> MutexGuard<'_, Underlying> {
         // TODO: Might make sense to have a get_inner() and get_inner_mut here if/when we are using a RwLock instead ofg a Mutex.
         self.inner.lock().unwrap()
     }
 
-    pub fn get_context(&self) -> ToolInsightsClientGuard {
-        ToolInsightsClientGuard {
+    pub fn get_context(&self) -> ClientGuard {
+        ClientGuard {
             guard: self.inner.lock().unwrap(),
         }
     }
@@ -82,55 +79,45 @@ impl ToolInsightsClient {
 /// With this guard, the user would access the `ToolInsightsContext` using
 /// `$ti_client.get_ti_context()`. Without the guard, the user would need to use
 /// `$ti_client.inner().get_ti_context()` or `$ti_client.inner().get_ti_context_mut()`
-pub struct ToolInsightsClientGuard<'a> {
-    guard: MutexGuard<'a, ToolInsightsClientInner>,
+pub struct ClientGuard<'a> {
+    guard: MutexGuard<'a, Underlying>,
 }
 
-impl Deref for ToolInsightsClientGuard<'_> {
-    type Target = ToolInsightsContext;
+impl Deref for ClientGuard<'_> {
+    type Target = Context;
 
     fn deref(&self) -> &Self::Target {
         self.guard.get_ti_context()
     }
 }
 
-impl DerefMut for ToolInsightsClientGuard<'_> {
+impl DerefMut for ClientGuard<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.guard.ti_context.borrow_mut()
     }
 }
 
-pub struct ToolInsightsClientInner {
-    messages: Vec<ToolInsightsMessage>,
-    ti_context: ToolInsightsContext,
-    writer: ToolInsightsJsonWriter,
+pub struct Underlying {
+    messages: Vec<Message>,
+    ti_context: Context,
+    writer: JsonWriter,
 }
 
-impl ToolInsightsClientInner {
-    pub fn new(
-        tool_name: String,
-        tool_version: String,
-        start_time: SystemTime,
-    ) -> ToolInsightsClientInner {
-        if env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-            .try_init()
-            .is_err()
-        {
-            // NOP
-        };
-        let ti_context = ToolInsightsContext::new(tool_name, tool_version, start_time);
-        ToolInsightsClientInner {
+impl Underlying {
+    pub fn new(tool_name: String, tool_version: String, start_time: SystemTime) -> Underlying {
+        let ti_context = Context::new(tool_name, tool_version, start_time);
+        Underlying {
             messages: vec![],
             ti_context,
-            writer: ToolInsightsJsonWriter::new(None),
+            writer: JsonWriter::new(None),
         }
     }
 
-    pub fn get_ti_context(&self) -> &ToolInsightsContext {
+    pub fn get_ti_context(&self) -> &Context {
         self.ti_context.borrow()
     }
 
-    pub fn get_ti_context_mut(&mut self) -> &mut ToolInsightsContext {
+    pub fn get_ti_context_mut(&mut self) -> &mut Context {
         self.ti_context.borrow_mut()
     }
 
@@ -153,8 +140,8 @@ impl ToolInsightsClientInner {
                 self.get_ti_context_mut().set_exit_code(val);
             }
         }
-        let message = ToolInsightsMessage::new(
-            MessageType::PerformanceMessage,
+        let message = Message::new(
+            MessageKind::PerformanceMessage,
             self.get_ti_context(),
             Some(end_time),
             custom_map,
@@ -169,11 +156,11 @@ impl ToolInsightsClientInner {
     ) {
         self.add_invocation_message(SystemTime::now(), exit_code, custom_map);
         if self.write_message().is_err() {
-            log::info!("Could not write TI message");
+            error!("Could not write TI message");
         }
     }
 
-    fn add_message(&mut self, message: ToolInsightsMessage) {
+    fn add_message(&mut self, message: Message) {
         self.messages.push(message);
     }
 }
@@ -190,7 +177,7 @@ impl ToolInsightsClientInner {
 //     }
 // }
 
-pub struct ToolInsightsContext {
+pub struct Context {
     tool_name: String,
     tool_version: String,
     tool_feature_name: Option<String>,
@@ -199,9 +186,9 @@ pub struct ToolInsightsContext {
     exit_code: Option<i32>,
 }
 
-impl ToolInsightsContext {
-    fn new(tool_name: String, tool_version: String, start_time: SystemTime) -> ToolInsightsContext {
-        ToolInsightsContext {
+impl Context {
+    fn new(tool_name: String, tool_version: String, start_time: SystemTime) -> Context {
+        Context {
             tool_name,
             tool_version,
             tool_feature_name: None,
