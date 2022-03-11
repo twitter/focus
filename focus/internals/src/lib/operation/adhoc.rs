@@ -1,25 +1,20 @@
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-    sync::Arc,
 };
 
 use anyhow::{bail, Context, Result};
 
-use crate::{
-    app::App,
-    model::layering::{Layer, LayerSet, LayerSets},
-};
-use tracing::warn;
+use crate::model::layering::{Layer, LayerSet, LayerSets};
+use tracing::{info, warn};
 
 struct Adhoc {
-    app: Arc<App>,
     repo_path: PathBuf,
 }
 
 impl Adhoc {
-    fn new(app: Arc<App>, repo_path: PathBuf) -> Result<Self> {
-        Ok(Self { app, repo_path })
+    fn new(repo_path: PathBuf) -> Result<Self> {
+        Ok(Self { repo_path })
     }
 
     pub fn with_mut_coordinates<F>(&self, visitor_fn: F) -> Result<bool>
@@ -49,17 +44,12 @@ impl Adhoc {
                 mutated_coordinates,
             );
             let updated_set = LayerSet::new(vec![layer]);
-            self.app
-                .ui()
-                .log("Ad-hoc Coordinate Stack", "Saving ad-hoc coordinate stack");
+            info!("Saving ad-hoc coordinate stack");
             sets.store_adhoc_layers(&updated_set)
                 .context("Failed storing the ad-hoc coordinate stack layer set")?;
             Ok(true)
         } else {
-            self.app.ui().log(
-                "Ad-hoc Coordinate Stack",
-                "Skipped saving unchanged ad-hoc coordinate stack",
-            );
+            info!("Skipped saving unchanged ad-hoc coordinate stack",);
             Ok(false)
         }
     }
@@ -75,8 +65,8 @@ fn extract_coordinates(set: &LayerSet) -> Vec<String> {
     results
 }
 
-pub fn list(app: Arc<App>, repo: PathBuf) -> Result<bool> {
-    Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
+pub fn list(repo: PathBuf) -> Result<bool> {
+    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
         if coordinates.is_empty() {
             eprintln!("The ad-hoc coordinate stack is empty!");
         } else {
@@ -89,8 +79,8 @@ pub fn list(app: Arc<App>, repo: PathBuf) -> Result<bool> {
     })
 }
 
-pub fn push(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<bool> {
-    Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
+pub fn push(repo: PathBuf, names: Vec<String>) -> Result<bool> {
+    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
         let mut set = HashSet::<String>::with_capacity(coordinates.len());
         set.extend(coordinates.clone());
 
@@ -109,8 +99,8 @@ pub fn push(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<bool> {
     })
 }
 
-pub fn pop(app: Arc<App>, repo: PathBuf, count: usize) -> Result<bool> {
-    Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
+pub fn pop(repo: PathBuf, count: usize) -> Result<bool> {
+    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
         for i in 0..count {
             if coordinates.pop().is_none() {
                 warn!("There were only {} coordinates to pop off the stack", i);
@@ -122,8 +112,8 @@ pub fn pop(app: Arc<App>, repo: PathBuf, count: usize) -> Result<bool> {
     })
 }
 
-pub fn remove(app: Arc<App>, repo: PathBuf, names: Vec<String>) -> Result<bool> {
-    Adhoc::new(app, repo)?.with_mut_coordinates(|coordinates| {
+pub fn remove(repo: PathBuf, names: Vec<String>) -> Result<bool> {
+    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
         let mut coordinate_index: HashMap<String, usize> = HashMap::new();
         for (index, coordinate) in coordinates.iter().enumerate() {
             coordinate_index.insert(coordinate.to_owned(), index);

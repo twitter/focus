@@ -10,5 +10,4 @@ pub mod operation;
 pub mod testing;
 pub mod tracing;
 pub mod tracker;
-pub mod ui;
 pub mod util;

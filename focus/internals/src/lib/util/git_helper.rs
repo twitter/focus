@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::path::Path;
 use std::process::Command;
+use tracing::error;
 
 use crate::{
     app::App,
@@ -221,12 +222,9 @@ impl BranchSwitch {
         let current_branch = {
             let hint = get_current_branch(app.clone(), repo)?.trim().to_owned();
             if hint.is_empty() {
-                app.ui().log(
-                    "Branch Switch",
-                    format!(
-                        "Couldn't determine the current branch in {}, using the default 'master'.",
-                        repo.display()
-                    ),
+                error!(
+                    "Couldn't determine the current branch in {}, using the default 'master'.",
+                    repo.display()
                 );
 
                 String::from("master")

@@ -385,7 +385,7 @@ sh_binary(
         }
         "###);
 
-        let app = Arc::new(App::new(false, false)?);
+        let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
         let coordinate_set = CoordinateSet::from(

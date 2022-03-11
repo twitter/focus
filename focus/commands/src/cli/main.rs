@@ -16,7 +16,7 @@ use focus_internals::{
     tracker::Tracker,
     util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
 };
-use tracing::debug;
+use tracing::{debug, info, info_span};
 
 use strum::VariantNames;
 
@@ -150,8 +150,6 @@ enum Subcommand {
         target_path: String,
     },
 
-    UserInterfaceTest {},
-
     #[clap(hide = true)]
     Maintenance {
         /// The git config key to look for paths of repos to run maintenance in. Defaults to
@@ -173,10 +171,7 @@ enum Subcommand {
     /// $ focus git-trace /tmp/gc.json /tmp/chrome-trace.json
     /// ````
     /// Then open chrome://tracing in your browser and load the /tmp/chrome-trace.json flie.
-    GitTrace {
-        input: PathBuf,
-        output: PathBuf,
-    },
+    GitTrace { input: PathBuf, output: PathBuf },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -209,7 +204,6 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             RefsSubcommand::ListCurrent { .. } => "refs-list-current",
         },
         Subcommand::Init { .. } => "init",
-        Subcommand::UserInterfaceTest { .. } => "ui-test",
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
             MaintenanceSubcommand::Run { .. } => "maintenance-run",
             MaintenanceSubcommand::Register { .. } => "maintenance-register",
@@ -433,12 +427,13 @@ fn ensure_directories_exist() -> Result<()> {
     Ok(())
 }
 
-fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Result<ExitCode> {
+fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
-    ti_client
-        .get_context()
-        .set_tool_feature_name(feature_name_for(&options.cmd));
+    let feature_name = feature_name_for(&options.cmd);
+    ti_client.get_context().set_tool_feature_name(&feature_name);
+    let span = info_span!("Running subcommand", ?feature_name);
+    let _guard = span.enter();
 
     match options.cmd {
         Subcommand::Clone {
@@ -449,8 +444,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             copy_branches,
             coordinates_and_layers,
         } => {
-            let ui = cloned_app.ui();
-
             let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
                 let current_dir =
@@ -460,12 +453,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                 current_dir.join(expanded)
             };
 
-            ui.status(format!(
-                "Cloning {:?} into {}",
-                dense_repo,
-                sparse_repo.display()
-            ));
-            ui.set_enabled(interactive);
+            info!("Cloning {:?} into {}", dense_repo, sparse_repo.display());
 
             let (coordinates, layers): (Vec<String>, Vec<String>) = coordinates_and_layers
                 .into_iter()
@@ -493,7 +481,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
         Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
-            app.ui().set_enabled(interactive);
             operation::sync::run(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
@@ -510,7 +497,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    app.ui().set_enabled(interactive);
                     operation::refs::expire_old_refs(
                         &repo,
                         cutoff,
@@ -579,14 +565,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             operation::detect_build_graph_changes::run(&repo, args, app)
         }
 
-        Subcommand::UserInterfaceTest {} => {
-            let ui = cloned_app.ui();
-            ui.status("UI Test");
-            ui.set_enabled(interactive);
-            operation::user_interface_test::run(app)?;
-            Ok(ExitCode(0))
-        }
-
         Subcommand::Layer { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
             ti_client.get_context().set_tool_feature_name("layer");
@@ -623,11 +601,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             };
 
             if mutated {
-                app.ui().log(
-                    "Layer Stack Update",
-                    "Syncing focused paths since the selected content has changed",
-                );
-                app.ui().set_enabled(interactive);
+                info!("Syncing focused paths since the selected content has changed");
                 operation::sync::run(repo.as_path(), app)
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
@@ -664,24 +638,14 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             };
 
             let mutated: bool = match subcommand {
-                AdhocSubcommand::List {} => operation::adhoc::list(app.clone(), repo.clone())?,
-                AdhocSubcommand::Push { names } => {
-                    operation::adhoc::push(app.clone(), repo.clone(), names)?
-                }
-                AdhocSubcommand::Pop { count } => {
-                    operation::adhoc::pop(app.clone(), repo.clone(), count)?
-                }
-                AdhocSubcommand::Remove { names } => {
-                    operation::adhoc::remove(app.clone(), repo.clone(), names)?
-                }
+                AdhocSubcommand::List {} => operation::adhoc::list(repo.clone())?,
+                AdhocSubcommand::Push { names } => operation::adhoc::push(repo.clone(), names)?,
+                AdhocSubcommand::Pop { count } => operation::adhoc::pop(repo.clone(), count)?,
+                AdhocSubcommand::Remove { names } => operation::adhoc::remove(repo.clone(), names)?,
             };
 
             if mutated {
-                app.ui().log(
-                    "Ad-hoc Coordinate Stack",
-                    "Syncing focused paths since the selected content has changed",
-                );
-                app.ui().set_enabled(interactive);
+                info!("Syncing focused paths since the selected content has changed");
                 operation::sync::run(repo.as_path(), app)
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
@@ -708,9 +672,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             push_url,
             target_path,
         } => {
-            let ui = app.ui();
-            ui.status("Init repo");
-
             let expanded = paths::expand_tilde(target_path)
                 .context("expanding tilde on target_path argument")?;
 
@@ -730,12 +691,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts, interactive: bool) -> Resul
             add_if_true(follow_tags, operation::init::InitOpt::FollowTags);
             add_if_true(progress, operation::init::InitOpt::Progress);
 
-            ui.set_enabled(interactive);
-
-            ui.log(
-                "Init",
-                format!("setting up a copy of the repo in {:?}", target),
-            );
+            info!("Setting up a copy of the repo in {:?}", target);
 
             operation::init::run(
                 shallow_since,
@@ -851,10 +807,10 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     };
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
-    let app = Arc::from(App::new(options.preserve_sandbox, interactive)?);
+    let app = Arc::from(App::new(options.preserve_sandbox)?);
     let ti_context = app.tool_insights_client();
 
-    let exit_code = match run_subcommand(app.clone(), options, interactive) {
+    let exit_code = match run_subcommand(app.clone(), options) {
         Ok(exit_code) => {
             ti_context
                 .get_inner()

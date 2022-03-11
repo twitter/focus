@@ -21,7 +21,7 @@ use super::{
 
 use anyhow::{bail, Context, Result};
 use git2::{Oid, Repository};
-use tracing::debug;
+use tracing::{debug, info_span};
 use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
@@ -75,10 +75,8 @@ impl WorkingTree {
         patterns.write_to_file(&sparse_profile_path)?;
 
         // Update the working tree to match
-        app.ui().status(format!(
-            "Applying the sparse patterns to the tree in {}",
-            self.path.display()
-        ));
+        let span = info_span!("Applying the sparse patterns", path = ?self.path);
+        let _guard = span.enter();
 
         if first_run {
             let mut args = vec!["sparse-checkout", "init"];
@@ -114,6 +112,8 @@ impl WorkingTree {
         {
             let file = File::open(&sparse_profile_path)
                 .context("Failed to open the sparse pattern file")?;
+            let span = info_span!("Setting sparse patterns", path = ?sparse_profile_path);
+            let _guard = span.enter();
             let args = vec!["sparse-checkout", "set", "--stdin"];
             let description = format!("Running git {:?} in {}", args, self.path.display());
             let (mut cmd, scmd) = git_helper::git_command(description.clone(), app.clone())?;
@@ -131,10 +131,9 @@ impl WorkingTree {
         // Run checkout
         // TODO: Detect whether we need to do this or parameterize whether it happens.
         if first_run {
-            app.ui().status(format!(
-                "Checking out a working tree to {}",
-                self.path.display()
-            ));
+            let span = info_span!("Checking out initial tree", path = ?self.path);
+            let _guard = span.enter();
+
             let description = format!("Running git checkout in {}", self.path.display());
             let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
             scmd.ensure_success_or_log(
@@ -158,11 +157,9 @@ impl WorkingTree {
     ) -> Result<()> {
         // Update the working tree to match
         let commit_id_str = commit_id.to_string();
-        app.ui().status(format!(
-            "Switching to detached commit {} in {}",
-            &commit_id_str,
-            self.path.display()
-        ));
+        let span = info_span!("Switching to detached commit", commit_id = %commit_id_str, path = ?self.path);
+        let _guard = span.enter();
+
         let mut args = vec!["switch", "--ignore-other-worktrees"];
         if detach {
             args.push("--detach");
