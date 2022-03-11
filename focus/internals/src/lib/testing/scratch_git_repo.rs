@@ -34,7 +34,7 @@ impl ScratchGitRepo {
     // Create a new copied fixture
     pub fn new_copied_fixture(fixture_name: &Path, destination_path: &Path) -> Result<Self> {
         if destination_path.exists() {
-            bail!("Destination path {} exists");
+            bail!("Destination path {} exists", destination_path.display());
         }
 
         let fixture_path = fixture_dir()?.join("repos").join(fixture_name);
