@@ -1,10 +1,18 @@
 use std::fmt::Display;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use anyhow::Context;
+use lazy_static::lazy_static;
+use regex::Regex;
 use sha1::digest::DynDigest;
 use sha1::Digest;
 use sha1::Sha1;
+use tracing::warn;
+
+use crate::coordinate::Label;
+use crate::util::paths::is_relevant_to_build_graph;
 
 use super::DependencyKey;
 
@@ -112,6 +120,130 @@ impl ContentHashable for DependencyKey {
         };
 
         hasher.update(b")");
+        Ok(())
+    }
+}
+
+fn find_build_files(ctx: &HashContext, package_path: &Path) -> anyhow::Result<()> {
+    let tree_entry = ctx.head_tree.get_path(package_path)?;
+    let object = tree_entry
+        .to_object(ctx.repo)
+        .context("converting tree entry to object")?;
+    let tree = match object.as_tree() {
+        Some(tree) => tree,
+        None => todo!(),
+    };
+
+    let mut result = Vec::new();
+    for entry in tree {
+        let file_name = match entry.name() {
+            Some(file_name) => file_name,
+            None => {
+                warn!(?package_path, name_bytes = ?entry.name_bytes(), "Skipped tree entry with non-UTF-8 name");
+                continue;
+            }
+        };
+
+        if !is_relevant_to_build_graph(file_name) {
+            continue;
+        }
+        let object = entry
+            .to_object(ctx.repo)
+            .context("converting tree entry to object")?;
+        let blob = match object.as_blob() {
+            Some(blob) => blob,
+            None => {
+                warn!(
+                    ?package_path,
+                    ?file_name,
+                    "Tree entry appeared to be relevant to the build graph, but was not a blob"
+                );
+                continue;
+            }
+        };
+
+        let content = match std::str::from_utf8(blob.content()) {
+            Ok(content) => content,
+            Err(e) => {
+                warn!(
+                    ?package_path,
+                    ?file_name,
+                    ?e,
+                    "Could not decode non-UTF-8 blob content"
+                );
+                continue;
+            }
+        };
+        result.extend(extract_load_statement_package_dependencies(content));
+    }
+    Ok(())
+}
+
+fn extract_load_statement_package_dependencies(content: &str) -> Vec<Label> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(
+            r#"(?x)
+# Literal "load".
+load
+\s*?
+
+# Open parenthesis.
+\(
+\s*?
+
+# String literal enclosed in quotes.
+(?:
+    "( [[:print:]--"]*? )"
+  | '( [[:print:]--']*? )'
+)
+
+# Either a closing parenthesis or a comma to start the argument list.
+\s*?
+(?:
+  ,
+| \)
+)
+"#
+        )
+        .unwrap();
+    }
+
+    let mut result = Vec::new();
+    for cap in RE.captures_iter(content) {
+        let value = cap.get(1).or_else(|| cap.get(2)).unwrap().as_str();
+        let label: Label = match value.parse() {
+            Ok(label) => label,
+            Err(e) => {
+                warn!(?e, "Failed to parse label in load statement");
+                continue;
+            }
+        };
+        result.push(label);
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_load_statements() -> anyhow::Result<()> {
+        let content = r#"
+load("//foo/bar:baz.bzl")
+load   (
+    '//foo/qux:qux.bzl'
+
+,    qux = 'grault')
+"#;
+        let labels = extract_load_statement_package_dependencies(content);
+        insta::assert_debug_snapshot!(labels, @r###"
+        [
+            Label("//foo/bar:baz.bzl"),
+            Label("//foo/qux:qux.bzl"),
+        ]
+        "###);
+
         Ok(())
     }
 }
