@@ -7,7 +7,7 @@
 //! ```
 //! use std::collections::HashMap;
 //! use std::time::SystemTime;
-//! use tool_insights_client::client::Client;
+//! use tool_insights_client::Client;
 //!
 //! let ti_client = Client::new(
 //!     "tool_name".to_string(),
