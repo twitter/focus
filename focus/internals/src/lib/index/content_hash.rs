@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
@@ -12,6 +13,7 @@ use sha1::Sha1;
 use tracing::warn;
 
 use crate::coordinate::Label;
+use crate::coordinate::TargetName;
 use crate::util::paths::is_relevant_to_build_graph;
 
 use super::DependencyKey;
@@ -97,6 +99,13 @@ impl ContentHashable for DependencyKey {
             } => {
                 hasher.update(b"::BazelPackage(");
                 path.write(hasher, ctx)?;
+
+                let loaded_deps = find_load_dependencies(ctx, path)?;
+                for label in loaded_deps {
+                    let dep_key = DependencyKey::BazelBuildFile(label);
+                    hasher.update(b", ");
+                    dep_key.write(hasher, ctx)?;
+                }
             }
 
             DependencyKey::Path(path) => {
@@ -111,11 +120,54 @@ impl ContentHashable for DependencyKey {
                 todo!("establish dependency for path in external package")
             }
 
-            DependencyKey::BazelBuildFile(_) => {
+            DependencyKey::BazelBuildFile(label) => {
                 // TODO: hash `BUILD` file contents
                 // TODO: parse `load` dependencies out of the `BUILD` file and mix
                 // into hash.
-                todo!("hash bazel file dep")
+                hasher.update(b"::BazelBuildFile(");
+                match label {
+                    Label {
+                        external_repository: None,
+                        path_components,
+                        target_name: TargetName::Name(target_name),
+                    } => {
+                        let mut path: PathBuf = path_components.iter().collect();
+                        path.push(target_name);
+                        path.write(hasher, ctx)?;
+
+                        // TODO: what if the `.bzl` file has been deleted?
+                        let loaded_deps = match ctx.head_tree.get_path(&path) {
+                            Ok(tree_entry) => {
+                                extract_load_statements_from_tree_entry(ctx, &tree_entry)?
+                            }
+                            Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
+                            Err(e) => return Err(e.into()),
+                        };
+                        for label in loaded_deps {
+                            let dep_key = DependencyKey::BazelBuildFile(label);
+                            hasher.update(b", ");
+                            dep_key.write(hasher, ctx)?;
+                        }
+                    }
+
+                    Label {
+                        external_repository: None,
+                        path_components,
+                        target_name: TargetName::Ellipsis,
+                    } => {
+                        warn!(?label, "Got label referring to a ellipsis, but it should be a BUILD or .bzl file");
+                        let path: PathBuf = path_components.iter().collect();
+                        path.write(hasher, ctx)?;
+                    }
+
+                    Label {
+                        external_repository: Some(_),
+                        path_components: _,
+                        target_name: _,
+                    } => {
+                        todo!("Implement hashing an external repository BUILD file");
+                    }
+                }
             }
         };
 
@@ -124,7 +176,10 @@ impl ContentHashable for DependencyKey {
     }
 }
 
-fn find_build_files(ctx: &HashContext, package_path: &Path) -> anyhow::Result<()> {
+fn find_load_dependencies(
+    ctx: &HashContext,
+    package_path: &Path,
+) -> anyhow::Result<BTreeSet<Label>> {
     let tree_entry = ctx.head_tree.get_path(package_path)?;
     let object = tree_entry
         .to_object(ctx.repo)
@@ -134,52 +189,54 @@ fn find_build_files(ctx: &HashContext, package_path: &Path) -> anyhow::Result<()
         None => todo!(),
     };
 
-    let mut result = Vec::new();
-    for entry in tree {
-        let file_name = match entry.name() {
-            Some(file_name) => file_name,
-            None => {
-                warn!(?package_path, name_bytes = ?entry.name_bytes(), "Skipped tree entry with non-UTF-8 name");
-                continue;
-            }
-        };
-
-        if !is_relevant_to_build_graph(file_name) {
-            continue;
-        }
-        let object = entry
-            .to_object(ctx.repo)
-            .context("converting tree entry to object")?;
-        let blob = match object.as_blob() {
-            Some(blob) => blob,
-            None => {
-                warn!(
-                    ?package_path,
-                    ?file_name,
-                    "Tree entry appeared to be relevant to the build graph, but was not a blob"
-                );
-                continue;
-            }
-        };
-
-        let content = match std::str::from_utf8(blob.content()) {
-            Ok(content) => content,
-            Err(e) => {
-                warn!(
-                    ?package_path,
-                    ?file_name,
-                    ?e,
-                    "Could not decode non-UTF-8 blob content"
-                );
-                continue;
-            }
-        };
-        result.extend(extract_load_statement_package_dependencies(content));
+    let mut result = BTreeSet::new();
+    for tree_entry in tree {
+        let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
+        result.extend(deps);
     }
-    Ok(())
+    Ok(result)
 }
 
-fn extract_load_statement_package_dependencies(content: &str) -> Vec<Label> {
+fn extract_load_statements_from_tree_entry(
+    ctx: &HashContext,
+    tree_entry: &git2::TreeEntry,
+) -> anyhow::Result<BTreeSet<Label>> {
+    let file_name = match tree_entry.name() {
+        Some(file_name) => Path::new(file_name),
+        None => {
+            warn!(name_bytes = ?tree_entry.name_bytes(), "Skipped tree entry with non-UTF-8 name");
+            return Ok(Default::default());
+        }
+    };
+
+    if !is_relevant_to_build_graph(file_name) {
+        return Ok(Default::default());
+    }
+
+    let object = tree_entry
+        .to_object(ctx.repo)
+        .context("converting tree entry to object")?;
+    let blob = match object.as_blob() {
+        Some(blob) => blob,
+        None => {
+            warn!(?file_name, "Tree entry was not a blob");
+            return Ok(Default::default());
+        }
+    };
+
+    let content = match std::str::from_utf8(blob.content()) {
+        Ok(content) => content,
+        Err(e) => {
+            warn!(?file_name, ?e, "Could not decode non-UTF-8 blob content");
+            return Ok(Default::default());
+        }
+    };
+
+    let deps = extract_load_statement_package_dependencies(content);
+    Ok(deps)
+}
+
+fn extract_load_statement_package_dependencies(content: &str) -> BTreeSet<Label> {
     lazy_static! {
         static ref RE: Regex = Regex::new(
             r#"(?x)
@@ -208,7 +265,7 @@ load
         .unwrap();
     }
 
-    let mut result = Vec::new();
+    let mut result = BTreeSet::new();
     for cap in RE.captures_iter(content) {
         let value = cap.get(1).or_else(|| cap.get(2)).unwrap().as_str();
         let label: Label = match value.parse() {
@@ -218,7 +275,7 @@ load
                 continue;
             }
         };
-        result.push(label);
+        result.insert(label);
     }
     result
 }
@@ -238,10 +295,10 @@ load   (
 "#;
         let labels = extract_load_statement_package_dependencies(content);
         insta::assert_debug_snapshot!(labels, @r###"
-        [
+        {
             Label("//foo/bar:baz.bzl"),
             Label("//foo/qux:qux.bzl"),
-        ]
+        }
         "###);
 
         Ok(())

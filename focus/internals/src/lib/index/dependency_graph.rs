@@ -462,4 +462,139 @@ sh_binary(
 
         Ok(())
     }
+
+    #[test]
+    fn test_bzl_file_dependency() -> anyhow::Result<()> {
+        init_logging();
+
+        let temp = tempfile::tempdir()?;
+        let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
+
+        write_files(
+            &fix,
+            r#"
+file: WORKSPACE
+
+file: macro/BUILD
+
+file: macro/macro.bzl
+load("//macro:macro_inner.bzl", "my_macro_inner")
+def my_macro(name):
+    my_macro_inner(name)
+
+file: macro/macro_inner.bzl
+def my_macro_inner(name):
+    native.genrule(
+        name = name,
+        srcs = ["//package2:contents"],
+        outs = ["out.txt"],
+        cmd = "cp $(SRCS) $@",
+    )
+
+file: package1/BUILD
+load("//macro:macro.bzl", "my_macro")
+my_macro("foo")
+
+file: package2/BUILD
+exports_files(["contents"])
+
+file: package2/contents
+Old contents
+
+file: package3/BUILD
+exports_files(["contents"])
+
+file: package3/contents
+New contents
+"#,
+        )?;
+        let head_oid = fix.commit_all("Wrote files")?;
+
+        let app = Arc::new(App::new(false)?);
+        let cache_dir = tempfile::tempdir()?;
+        let resolver = BazelResolver::new(cache_dir.path());
+        let coordinate_set = CoordinateSet::from(hashset! {"bazel://package1:foo".try_into()? });
+        let request = ResolutionRequest {
+            repo: fix.path().to_path_buf(),
+            coordinate_set,
+        };
+        let cache_options = CacheOptions::default();
+        let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
+
+        let odb = ObjectDatabase::new();
+        let repo = fix.repo()?;
+        let head_commit = repo.find_commit(head_oid)?;
+        let head_tree = head_commit.tree()?;
+        let hash_context = HashContext {
+            repo: &repo,
+            head_tree: &head_tree,
+        };
+        update_object_database_from_resolution(&hash_context, odb.clone(), &resolve_result)?;
+        let files_to_materialize =
+            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        Ok {
+            paths: {
+                "package1",
+                "package2",
+            },
+        }
+        "###);
+
+        // Make a change that should invalidate the macro loaded by
+        // `package1/BUILD`. If it was not correctly invalidated, then the call
+        // to [`get_files_to_materialize`] would return the same result as
+        // before.
+        let head_oid = fix.write_and_commit_file(
+            "macro/macro_inner.bzl",
+            r#"\
+def my_macro_inner(name):
+    native.genrule(
+        name = name,
+        srcs = ["//package3:contents"],
+        outs = ["out.txt"],
+        cmd = "cp $(SRCS) $@",
+    )
+"#,
+            "update macro.bzl",
+        )?;
+        let head_commit = repo.find_commit(head_oid)?;
+        let head_tree = head_commit.tree()?;
+        let hash_context = HashContext {
+            repo: &repo,
+            head_tree: &head_tree,
+        };
+        let files_to_materialize =
+            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        MissingKeys {
+            keys: {
+                (
+                    BazelPackage {
+                        external_repository: None,
+                        path: "package1",
+                    },
+                    ContentHash(
+                        ca3af5c2d8bf7d2838602ba94886b70d05c1c445,
+                    ),
+                ),
+            },
+        }
+        "###);
+
+        let resolve_result = resolver.resolve(&request, &cache_options, app)?;
+        update_object_database_from_resolution(&hash_context, odb.clone(), &resolve_result)?;
+        let files_to_materialize =
+            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        Ok {
+            paths: {
+                "package1",
+                "package3",
+            },
+        }
+        "###);
+
+        Ok(())
+    }
 }
