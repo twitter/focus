@@ -202,6 +202,17 @@ impl SandboxCommand {
         Ok(BufReader::new(File::open(path)?))
     }
 
+    fn pretty_print_command<'cmd>(command: &'cmd mut Command) -> String {
+        let convert_os_str = |s: &'cmd OsStr| -> &'cmd str { s.to_str().unwrap_or("<???>").trim_matches('"') };
+
+        let mut buf = convert_os_str(command.get_program()).to_owned();
+        for arg in command.get_args() {
+            buf.push_str(" ");
+            buf.push_str(convert_os_str(arg));
+        }
+        buf
+    }
+
     // Run the provided command and if it is not successful, log the process output
     pub fn ensure_success_or_log(
         &self,
@@ -214,19 +225,19 @@ impl SandboxCommand {
         let mut launch = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn command {}", description))?;
+        let command_description = Self::pretty_print_command(cmd);
 
-        let program_desc = format!("{}", cmd.get_program().to_string_lossy());
         let tailer =
-            Self::tail(&program_desc, &self.stderr_path).context("Could not create log tailer");
+            Self::tail(&command_description, &self.stderr_path).context("Could not create log tailer");
 
         let status = launch
             .wait()
             .with_context(|| format!("Failed to wait for command {}", description))?;
         tailer.iter().for_each(|t| t.stop());
-        debug!("Command {:?} exited with status {}", cmd, &status);
+        debug!(command = %command_description, %status, "Command exited");
         if !status.success() {
             self.log(output, description).context("logging output")?;
-            bail!("Command failed: {}", description);
+            bail!("Command failed: {}", command_description);
         }
 
         Ok(status)
@@ -302,7 +313,7 @@ mod tests {
     #[test]
     fn sandboxed_command_capture_all() -> Result<()> {
         init_logging();
-        
+
         let app = Arc::from(App::new(false)?);
         let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app.clone())?;
         cmd.arg("-n").arg("hey").arg("there").status()?;
