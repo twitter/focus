@@ -228,12 +228,13 @@ pub(in crate::operation) mod integration {
         pub fn new() -> Result<Self> {
             let dir = TempDir::new()?;
             let dense_repo_path = dir.path().join("dense");
+            let branch = String::from("main");
             let dense_repo = ScratchGitRepo::new_copied_fixture(
                 Path::new("bazel_java_example"),
                 &dense_repo_path,
+                &branch,
             )?;
             let sparse_repo_path = dir.path().join("sparse");
-            let branch = "master".to_owned();
             let coordinates: Vec<String> = vec![];
             let layers: Vec<String> = vec![];
             let app = Arc::new(App::new(false)?);

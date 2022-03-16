@@ -60,26 +60,24 @@ pub fn run(
         Origin::Local(dense_repo_path) => clone_local(
             &dense_repo_path,
             &sparse_repo_path,
-            branch,
+            &branch,
             copy_branches,
             days_of_history,
             app.clone(),
         ),
         Origin::Remote(url) => {
-            clone_remote(url, &sparse_repo_path, branch, days_of_history, app.clone())
+            clone_remote(url, &sparse_repo_path, &branch, days_of_history, app.clone())
         }
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, layers, coordinates, app)
+    set_up_sparse_repo(&sparse_repo_path, &branch, layers, coordinates, app)
 }
-
-// TODO: Push configuration?
 
 /// Clone from a local path on disk.
 fn clone_local(
     dense_repo_path: &Path,
     sparse_repo_path: &Path,
-    branch: String,
+    branch: &str,
     copy_branches: bool,
     days_of_history: u64,
     app: Arc<App>,
@@ -167,7 +165,7 @@ fn enable_filtering(dense_repo_path: &Path) -> Result<()> {
 fn clone_remote(
     dense_repo_url: Url,
     sparse_repo_path: &Path,
-    branch: String,
+    branch: &str,
     days_of_history: u64,
     app: Arc<App>,
 ) -> Result<()> {
@@ -195,6 +193,7 @@ fn clone_remote(
 
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
+    branch: &str,
     layers: Vec<String>,
     coordinates: Vec<String>,
     app: Arc<App>,
@@ -203,7 +202,7 @@ fn set_up_sparse_repo(
         let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
         // TODO: Parallelize these tree set up processes.
         info!("Setting up the outlining tree");
-        repo.create_outlining_tree()
+        repo.create_outlining_tree(branch)
             .context("Failed to create the outlining tree")?;
 
         info!("Setting up the working tree");
@@ -546,7 +545,7 @@ mod test {
     use crate::operation::testing::integration::RepoPairFixture;
     use crate::{app::App, model::repo::Repo, testing::init_logging};
 
-    static MAIN_BRANCH_NAME: &str = "master";
+    static MAIN_BRANCH_NAME: &str = "main";
 
     #[test]
     fn clone_contains_an_initial_layer_set() -> Result<()> {
