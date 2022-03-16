@@ -118,7 +118,7 @@ pub enum DependencyValue {
 /// dependencies to the [`ObjectDatabase`].
 pub fn update_object_database_from_resolution(
     ctx: &HashContext,
-    odb: ObjectDatabase,
+    odb: &dyn ObjectDatabase,
     resolution_result: &ResolutionResult,
 ) -> anyhow::Result<()> {
     debug!(
@@ -204,7 +204,7 @@ fn try_label_into_path(label: Label) -> anyhow::Result<PathBuf> {
 /// working copy.
 pub fn get_files_to_materialize(
     ctx: &HashContext,
-    odb: &ObjectDatabase,
+    odb: &dyn ObjectDatabase,
     packages: HashSet<Label>,
 ) -> anyhow::Result<PathsToMaterializeResult> {
     let mut dep_keys: HashSet<DependencyKey> = packages
@@ -312,6 +312,7 @@ mod tests {
     use crate::app::App;
     use crate::coordinate::CoordinateSet;
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
+    use crate::index::object_database::testing::HashMapOdb;
     use crate::testing::init_logging;
     use crate::testing::scratch_git_repo::ScratchGitRepo;
 
@@ -365,7 +366,7 @@ sh_binary(
         )?;
         let head_oid = fix.commit_all("Wrote files")?;
 
-        let odb = ObjectDatabase::new();
+        let odb = HashMapOdb::new();
         let repo = fix.repo()?;
         let head_commit = repo.find_commit(head_oid)?;
         let head_tree = head_commit.tree()?;
@@ -448,7 +449,7 @@ sh_binary(
             repo: &repo,
             head_tree: &head_tree,
         };
-        update_object_database_from_resolution(&ctx, odb.clone(), &resolve_result)?;
+        update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
         let files_to_materialize =
             get_files_to_materialize(&ctx, &odb, hashset! { "//package1:foo".parse()? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
@@ -521,7 +522,7 @@ New contents
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
 
-        let odb = ObjectDatabase::new();
+        let odb = HashMapOdb::new();
         let repo = fix.repo()?;
         let head_commit = repo.find_commit(head_oid)?;
         let head_tree = head_commit.tree()?;
@@ -529,7 +530,7 @@ New contents
             repo: &repo,
             head_tree: &head_tree,
         };
-        update_object_database_from_resolution(&hash_context, odb.clone(), &resolve_result)?;
+        update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
         let files_to_materialize =
             get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
@@ -583,7 +584,7 @@ def my_macro_inner(name):
         "###);
 
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
-        update_object_database_from_resolution(&hash_context, odb.clone(), &resolve_result)?;
+        update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
         let files_to_materialize =
             get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
