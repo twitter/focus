@@ -119,7 +119,7 @@ It isn't just one of your holiday games
         )?;
 
         // Fetch in the sparse repo from the dense repo
-        fixture.perform_pull(RepoDisposition::Sparse, "origin", "master")?;
+        fixture.perform_pull(RepoDisposition::Sparse, "origin", "main")?;
 
         // Make sure that the graph is seen as having changed
         assert_eq!(

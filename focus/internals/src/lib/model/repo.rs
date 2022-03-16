@@ -474,8 +474,12 @@ impl Repo {
         Ok(())
     }
 
-    pub fn create_outlining_tree(&self) -> Result<()> {
+    /// Creates an outlining tree for ther repository.
+    pub fn create_outlining_tree(&self, branch: &str) -> Result<()> {
         let path = Self::outlining_tree_path(&self.git_dir);
+        if path.is_dir() {
+            bail!("Refusing to create outlining tree since the directory already exists.")
+        }
 
         fs::create_dir_all(Self::focus_git_dir_path(&self.git_dir))
             .context("Failed to create the directory to house the outlining tree")?;
