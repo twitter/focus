@@ -1,18 +1,30 @@
-use super::{ContentHash, DependencyValue};
+use super::content_hash::HashContext;
+use super::{ContentHash, DependencyKey, DependencyValue};
 
 /// A persistent key-value cache mapping the hashes of [`super::DependencyKey`]s
 /// to [`DependencyValue`]s.
 pub trait ObjectDatabase {
     /// Look up the key-value pair with the provided key hash.
-    fn get(&self, hash: &ContentHash) -> anyhow::Result<Option<DependencyValue>>;
+    fn get(
+        &self,
+        ctx: &HashContext,
+        key: &DependencyKey,
+    ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)>;
 
     /// Insert a new key-value pair into persistent storage.
-    fn insert(&self, hash: ContentHash, value: DependencyValue) -> anyhow::Result<()>;
+    fn insert(
+        &self,
+        ctx: &HashContext,
+        key: &DependencyKey,
+        value: DependencyValue,
+    ) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
 pub mod testing {
     use tracing::{debug, error};
+
+    use crate::index::{ContentHash, ContentHashable};
 
     use super::*;
 
@@ -37,12 +49,24 @@ pub mod testing {
     }
 
     impl ObjectDatabase for HashMapOdb {
-        fn get(&self, hash: &ContentHash) -> anyhow::Result<Option<DependencyValue>> {
+        fn get(
+            &self,
+            ctx: &HashContext,
+            key: &DependencyKey,
+        ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
+            let hash = key.content_hash(ctx)?;
             let entries = self.entries.lock().expect("poisoned mutex");
-            Ok(entries.get(hash).cloned())
+            let dep_value = entries.get(&hash).cloned();
+            Ok((hash, dep_value))
         }
 
-        fn insert(&self, hash: ContentHash, value: DependencyValue) -> anyhow::Result<()> {
+        fn insert(
+            &self,
+            ctx: &HashContext,
+            key: &DependencyKey,
+            value: DependencyValue,
+        ) -> anyhow::Result<()> {
+            let hash = key.content_hash(ctx)?;
             debug!(?hash, ?value, "Inserting entry into object database");
 
             let mut entries = self.entries.lock().expect("poisoned mutex");

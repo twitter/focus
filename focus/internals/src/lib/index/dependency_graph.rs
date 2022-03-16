@@ -5,7 +5,6 @@ use tracing::{debug, warn};
 
 use crate::coordinate::{Label, TargetName};
 use crate::coordinate_resolver::ResolutionResult;
-use crate::index::content_hash::ContentHashable;
 
 use super::content_hash::HashContext;
 use super::{ContentHash, ObjectDatabase};
@@ -143,8 +142,7 @@ pub fn update_object_database_from_resolution(
             }
         }
 
-        let dep_hash = dep_key.content_hash(ctx)?;
-        odb.insert(dep_hash, dep_value.clone())?;
+        odb.insert(ctx, dep_key, dep_value.clone())?;
     }
     Ok(())
 }
@@ -226,8 +224,7 @@ pub fn get_files_to_materialize(
         for dep_key in dep_keys {
             seen_keys.insert(dep_key.clone());
 
-            let dep_hash = dep_key.content_hash(ctx)?;
-            let dep_value = odb.get(&dep_hash)?;
+            let (dep_hash, dep_value) = odb.get(ctx, &dep_key)?;
             debug!(
                 ?dep_hash,
                 ?dep_key,
