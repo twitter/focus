@@ -65,7 +65,10 @@ pub enum DependencyKey {
     /// need to read the contents of *that* `.bzl` file and mix them into the
     /// hash for this dependency.
     ///
-    /// TODO: not yet used.
+    /// NOTE: currently, the Bazel resolver does not produce any
+    /// `BazelBuildFile` dependencies. Instead, it produces the `BazelPackage`
+    /// which contains those `.bzl` files. So the only uses of this are where we
+    /// manually construct it as part of content hashing.
     BazelBuildFile(Label),
 
     /// Represents a path (probably a directory) which should be checked out as
