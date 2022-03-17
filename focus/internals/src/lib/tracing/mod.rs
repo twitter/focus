@@ -19,7 +19,8 @@ pub(in crate::tracing) mod testing {
 
     pub fn manifest_dir() -> Result<PathBuf> {
         Ok(PathBuf::from(
-            std::env::var_os("CARGO_MANIFEST_DIR").ok_or(anyhow!("CARGO_MANIFEST_DIR not set"))?,
+            std::env::var_os("CARGO_MANIFEST_DIR")
+                .ok_or_else(|| anyhow!("CARGO_MANIFEST_DIR not set"))?,
         ))
     }
 

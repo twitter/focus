@@ -32,7 +32,11 @@ impl ScratchGitRepo {
     }
 
     // Create a new copied fixture
-    pub fn new_copied_fixture(fixture_name: &Path, destination_path: &Path, branch: &str) -> Result<Self> {
+    pub fn new_copied_fixture(
+        fixture_name: &Path,
+        destination_path: &Path,
+        branch: &str,
+    ) -> Result<Self> {
         if destination_path.exists() {
             bail!("Destination path {} exists", destination_path.display());
         }
@@ -65,7 +69,7 @@ impl ScratchGitRepo {
             .status()
             .expect("checkout branch failed");
 
-            // Add everything and commit it
+        // Add everything and commit it
         Command::new("git")
             .arg("add")
             .arg("--")

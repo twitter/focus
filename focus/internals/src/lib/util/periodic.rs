@@ -125,7 +125,7 @@ mod tests {
         let (p, h) = Periodic::new(Duration::from_secs(300), t.clone());
         p.cancel();
         h.join().unwrap();
-        assert_eq!(p.stopped(), true);
+        assert!(p.stopped());
         assert_eq!(t.timed_calls.load(Ordering::SeqCst), 0);
         assert_eq!(t.direct_calls.load(Ordering::SeqCst), 0);
     }
@@ -138,7 +138,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(50));
         p.cancel();
         h.join().unwrap();
-        assert_eq!(p.stopped(), true);
+        assert!(p.stopped());
         assert_ne!(t.timed_calls.load(Ordering::SeqCst), 0);
         assert_eq!(t.direct_calls.load(Ordering::SeqCst), 0);
     }
@@ -151,7 +151,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(50));
         p.cancel();
         h.join().unwrap();
-        assert_eq!(p.stopped(), true);
+        assert!(p.stopped());
         assert_eq!(t.timed_calls.load(Ordering::SeqCst), 0);
         assert_eq!(t.direct_calls.load(Ordering::SeqCst), 1);
     }

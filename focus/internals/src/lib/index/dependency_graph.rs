@@ -322,7 +322,7 @@ mod tests {
         let files = files
             .trim()
             .split("file: ")
-            .filter_map(|file_contents| file_contents.split_once("\n"));
+            .filter_map(|file_contents| file_contents.split_once('\n'));
         for (file_name, file_contents) in files {
             fix.write_file(file_name, file_contents.trim())?;
             fix.add_file(file_name)?;
