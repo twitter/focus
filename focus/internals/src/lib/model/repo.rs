@@ -475,7 +475,7 @@ impl Repo {
     }
 
     /// Creates an outlining tree for ther repository.
-    pub fn create_outlining_tree(&self, branch: &str) -> Result<()> {
+    pub fn create_outlining_tree(&self) -> Result<()> {
         let path = Self::outlining_tree_path(&self.git_dir);
         if path.is_dir() {
             bail!("Refusing to create outlining tree since the directory already exists.")

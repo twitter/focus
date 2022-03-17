@@ -70,7 +70,7 @@ pub fn run(
         }
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, &branch, layers, coordinates, app)
+    set_up_sparse_repo(&sparse_repo_path, layers, coordinates, app)
 }
 
 /// Clone from a local path on disk.
@@ -193,7 +193,6 @@ fn clone_remote(
 
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
-    branch: &str,
     layers: Vec<String>,
     coordinates: Vec<String>,
     app: Arc<App>,
@@ -202,7 +201,7 @@ fn set_up_sparse_repo(
         let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
         // TODO: Parallelize these tree set up processes.
         info!("Setting up the outlining tree");
-        repo.create_outlining_tree(branch)
+        repo.create_outlining_tree()
             .context("Failed to create the outlining tree")?;
 
         info!("Setting up the working tree");
