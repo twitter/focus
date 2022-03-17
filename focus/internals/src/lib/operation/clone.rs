@@ -115,7 +115,7 @@ fn clone_local(
         clone_shallow(
             &url,
             sparse_repo_path,
-            &branch,
+            branch,
             copy_branches,
             days_of_history,
             app.clone(),
@@ -140,7 +140,7 @@ fn clone_local(
     if copy_branches {
         let span = info_span!("Copying branches");
         let _guard = span.enter();
-        copy_local_branches(&dense_repo, &sparse_repo, &branch, app)
+        copy_local_branches(&dense_repo, &sparse_repo, branch, app)
             .context("Failed to copy references")?;
     }
 
@@ -188,7 +188,7 @@ fn clone_remote(
     clone_shallow(
         &dense_repo_url,
         sparse_repo_path,
-        &branch,
+        branch,
         false,
         days_of_history,
         app,

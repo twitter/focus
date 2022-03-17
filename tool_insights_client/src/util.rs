@@ -75,7 +75,7 @@ mod tests {
 
         assert_eq!(
             HashMap::from([("one".to_string(), "1".to_string()),]),
-            merge_maps(map2.clone(), map1.clone()).unwrap()
+            merge_maps(map2, map1).unwrap()
         )
     }
 
@@ -83,6 +83,6 @@ mod tests {
     fn with_no_maps() {
         let map1 = None;
         let map2 = None;
-        assert_eq!(None, merge_maps(map1.clone(), map2.clone()));
+        assert_eq!(None, merge_maps(map1, map2));
     }
 }

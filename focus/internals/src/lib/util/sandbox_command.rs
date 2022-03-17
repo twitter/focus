@@ -203,11 +203,12 @@ impl SandboxCommand {
     }
 
     fn pretty_print_command<'cmd>(command: &'cmd mut Command) -> String {
-        let convert_os_str = |s: &'cmd OsStr| -> &'cmd str { s.to_str().unwrap_or("<???>").trim_matches('"') };
+        let convert_os_str =
+            |s: &'cmd OsStr| -> &'cmd str { s.to_str().unwrap_or("<???>").trim_matches('"') };
 
         let mut buf = convert_os_str(command.get_program()).to_owned();
         for arg in command.get_args() {
-            buf.push_str(" ");
+            buf.push(' ');
             buf.push_str(convert_os_str(arg));
         }
         buf
@@ -227,8 +228,8 @@ impl SandboxCommand {
             .with_context(|| format!("Failed to spawn command {}", description))?;
         let command_description = Self::pretty_print_command(cmd);
 
-        let tailer =
-            Self::tail(&command_description, &self.stderr_path).context("Could not create log tailer");
+        let tailer = Self::tail(&command_description, &self.stderr_path)
+            .context("Could not create log tailer");
 
         let status = launch
             .wait()
@@ -315,7 +316,9 @@ mod tests {
         init_logging();
 
         let app = Arc::from(App::new(false)?);
-        let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app.clone())?;
+        // Make sure to keep the `App` alive until the end of this scope.
+        let app = app.clone();
+        let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app)?;
         cmd.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
         scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
