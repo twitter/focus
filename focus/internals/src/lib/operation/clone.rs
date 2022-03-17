@@ -65,9 +65,13 @@ pub fn run(
             days_of_history,
             app.clone(),
         ),
-        Origin::Remote(url) => {
-            clone_remote(url, &sparse_repo_path, &branch, days_of_history, app.clone())
-        }
+        Origin::Remote(url) => clone_remote(
+            url,
+            &sparse_repo_path,
+            &branch,
+            days_of_history,
+            app.clone(),
+        ),
     }?;
 
     set_up_sparse_repo(&sparse_repo_path, layers, coordinates, app)
@@ -122,7 +126,8 @@ fn clone_local(
     let dense_repo = Repository::open(&dense_repo_path).context("Opening dense repo")?;
     let sparse_repo = Repository::open(&sparse_repo_path).context("Opening sparse repo")?;
 
-    set_up_remotes(&dense_repo, &sparse_repo).context("Failed to set up the remotes")?;
+    set_up_remotes(&dense_repo, &sparse_repo, app.clone())
+        .context("Failed to set up the remotes")?;
 
     // Set fetchspec for primary branch
     {
@@ -359,10 +364,14 @@ fn clone_shallow(
     .context("git clone failed")
 }
 
-fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository) -> Result<()> {
+fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<App>) -> Result<()> {
     let remotes = dense_repo
         .remotes()
         .context("Failed to read remotes from dense repo")?;
+
+    let sparse_workdir = sparse_repo
+        .workdir()
+        .expect("Could not determine sparse repo workdir");
 
     for remote_name in remotes.iter() {
         let remote_name = match remote_name {
@@ -408,11 +417,20 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository) -> Result<(
             bail!("Fetch URL for remote '{}' has no host", remote_name);
         }
 
-        // Delete any existing remote with the same name in the sparse repo.
-        sparse_repo.remote_delete(remote_name)?;
+        // Delete existing remote in the sparse repo if it exists. This is a workaround because `remote_delete` is not working correctly.
+        if sparse_repo.find_remote(remote_name).is_ok() {
+            let (mut cmd, scmd) = git_helper::git_command("Removing remote", app.clone())?;
+            let _ = scmd.ensure_success_or_log(
+                cmd.current_dir(sparse_workdir)
+                    .arg("remote")
+                    .arg("remove")
+                    .arg(remote_name),
+                SandboxCommandOutput::Stderr,
+                "Removing remote",
+            )?;
+        }
 
         // Add the remote to the sparse repo
-        // sparse_repo.remote(remote_name, ur)
         info!(
             "Setting up remote {} fetch:{} push:{}",
             remote_name,
