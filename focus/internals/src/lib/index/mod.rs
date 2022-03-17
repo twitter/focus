@@ -8,9 +8,9 @@ mod content_hash;
 mod dependency_graph;
 mod object_database;
 
-pub use content_hash::{ContentHash, ContentHashable};
+pub use content_hash::{ContentHash, ContentHashable, HashContext};
 pub use dependency_graph::{
     get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
     DependencyValue, PathsToMaterializeResult,
 };
-pub use object_database::ObjectDatabase;
+pub use object_database::{ObjectDatabase, SimpleGitOdb};

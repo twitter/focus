@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 use crate::coordinate::{Label, TargetName};
@@ -34,7 +35,7 @@ use super::{ContentHash, ObjectDatabase};
 /// Note that a [`DependencyKey`] by itself (without accompanying repository
 /// state) is not sufficient to compute a content hash. However, it suffices as
 /// a logical name for an entity in the repository.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum DependencyKey {
     /// Represents a dependency on a Bazel package in the Bazel Build Graph.
     ///
@@ -97,7 +98,7 @@ impl DependencyKey {
 
 /// The semantic content associated with a [`DependencyKey`], produced by
 /// expensive operations such as querying Bazel.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum DependencyValue {
     /// The provided [`DependencyKey`] represented a Bazel package.
     PackageInfo {
