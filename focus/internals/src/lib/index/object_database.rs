@@ -1,5 +1,8 @@
+use anyhow::Context;
+use tracing::warn;
+
 use super::content_hash::HashContext;
-use super::{ContentHash, DependencyKey, DependencyValue};
+use super::{ContentHash, ContentHashable, DependencyKey, DependencyValue};
 
 /// A persistent key-value cache mapping the hashes of [`super::DependencyKey`]s
 /// to [`DependencyValue`]s.
@@ -22,14 +25,12 @@ pub trait ObjectDatabase {
 
 #[cfg(test)]
 pub mod testing {
-    use tracing::{debug, error};
-
-    use crate::index::{ContentHash, ContentHashable};
-
     use super::*;
 
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
+
+    use tracing::{debug, error};
 
     /// Object database backed by an in-memory hashmap. This doesn't actually
     /// persist data between invocations of the program, so it's primarily
@@ -82,5 +83,142 @@ pub mod testing {
             }
             Ok(())
         }
+    }
+}
+
+/// Simple object database which stores key-value pairs in the same repository
+/// that's being worked in.
+#[derive(Clone, Debug, Default)]
+pub struct SimpleGitOdb;
+
+impl SimpleGitOdb {
+    const REF_NAME: &'static str = "refs/focus/simple_kv_tree";
+
+    /// Constructor.
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl ObjectDatabase for SimpleGitOdb {
+    fn get(
+        &self,
+        ctx: &HashContext,
+        key: &DependencyKey,
+    ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
+        let hash @ ContentHash(key_oid) = key.content_hash(ctx)?;
+
+        let kv_tree = match ctx.repo.find_reference(Self::REF_NAME) {
+            Ok(reference) => reference
+                .peel_to_tree()
+                .context("peeling kv tree reference")?,
+            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok((hash, None)),
+            Err(e) => return Err(e.into()),
+        };
+
+        let tree_entry = match kv_tree.get_name(&key_oid.to_string()) {
+            Some(tree_entry) => tree_entry,
+            None => return Ok((hash, None)),
+        };
+
+        let object = match tree_entry.to_object(ctx.repo) {
+            Ok(object) => object,
+            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok((hash, None)),
+            Err(e) => return Err(e.into()),
+        };
+        let blob = match object.as_blob() {
+            Some(blob) => blob,
+            None => {
+                warn!(?object, "Tree entry was not a blob");
+                return Ok((hash, None));
+            }
+        };
+
+        let content = blob.content();
+        let result: DependencyValue =
+            serde_json::from_slice(content).context("deserializing DependencyValue as JSON")?;
+        Ok((hash, Some(result)))
+    }
+
+    fn insert(
+        &self,
+        ctx: &HashContext,
+        key: &DependencyKey,
+        value: DependencyValue,
+    ) -> anyhow::Result<()> {
+        let ContentHash(key_oid) = key.content_hash(ctx)?;
+        let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
+        let value_oid = ctx
+            .repo
+            .blob(&payload)
+            .context("writing DependencyValue as blob")?;
+
+        let mut kv_tree = match ctx.repo.find_reference(Self::REF_NAME) {
+            Ok(reference) => {
+                let tree = reference
+                    .peel_to_tree()
+                    .context("peeling kv tree reference")?;
+                ctx.repo
+                    .treebuilder(Some(&tree))
+                    .context("initializing TreeBuilder from kv tree reference")?
+            }
+            Err(e) if e.code() == git2::ErrorCode::NotFound => ctx
+                .repo
+                .treebuilder(None)
+                .context("initializing new TreeBuilder")?,
+            Err(e) => return Err(e.into()),
+        };
+        kv_tree
+            .insert(key_oid.to_string(), value_oid, git2::FileMode::Blob.into())
+            .context("adding entry to tree")?;
+        let kv_tree_oid = kv_tree.write().context("writing new tree")?;
+        ctx.repo
+            .reference(
+                Self::REF_NAME,
+                kv_tree_oid,
+                true,
+                &format!("updating with key {:?}", key),
+            )
+            .context("updating reference")?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use maplit::btreeset;
+
+    use crate::testing::scratch_git_repo::ScratchGitRepo;
+
+    use super::*;
+
+    #[test]
+    fn test_simple_git_odb() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let fix = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
+        let repo = fix.repo()?;
+        let odb = SimpleGitOdb::new();
+
+        let head_tree_oid = repo.treebuilder(None)?.write()?;
+        let head_tree = repo.find_tree(head_tree_oid)?;
+        let ctx = HashContext {
+            repo: &repo,
+            head_tree: &head_tree,
+        };
+        let key = DependencyKey::BazelPackage {
+            external_repository: None,
+            path: "foo/bar".into(),
+        };
+        let value = DependencyValue::PackageInfo {
+            deps: btreeset! {
+                DependencyKey::BazelPackage { external_repository: None, path: "baz/qux".into() }
+            },
+        };
+        assert!(odb.get(&ctx, &key)?.1.is_none());
+
+        odb.insert(&ctx, &key, value.clone())?;
+        assert_eq!(odb.get(&ctx, &key)?.1, Some(value));
+
+        Ok(())
     }
 }

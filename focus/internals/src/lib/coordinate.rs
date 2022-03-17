@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde::{Serialize, Deserialize};
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::{collections::HashSet, convert::TryFrom, fmt::Display};
@@ -126,7 +127,7 @@ impl TryFrom<&str> for Coordinate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TargetName {
     Name(String),
     Ellipsis,
@@ -136,7 +137,7 @@ pub enum TargetName {
 ///
 /// See <https://docs.bazel.build/versions/main/build-ref.html#labels>. Note
 /// that a label does *not* refer to a package.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Label {
     /// For a label like `@foo//bar:baz`, this would be `@foo`. If there is no
     /// `@`-component, then this is `None`.

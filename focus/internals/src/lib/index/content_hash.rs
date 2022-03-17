@@ -22,7 +22,7 @@ type Hasher<'a> = &'a mut dyn DynDigest;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ContentHash(git2::Oid);
+pub struct ContentHash(pub(super) git2::Oid);
 
 impl Display for ContentHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -40,8 +40,12 @@ impl FromStr for ContentHash {
     }
 }
 
+/// Context used to compute a content hash.
 pub struct HashContext<'a> {
+    /// The Git repository.
     pub repo: &'a git2::Repository,
+
+    /// The tree corresponding to the current working copy.
     pub head_tree: &'a git2::Tree<'a>,
 }
 
@@ -180,7 +184,11 @@ fn find_load_dependencies(
     ctx: &HashContext,
     package_path: &Path,
 ) -> anyhow::Result<BTreeSet<Label>> {
-    let tree_entry = ctx.head_tree.get_path(package_path)?;
+    let tree_entry = match ctx.head_tree.get_path(package_path) {
+        Ok(tree_entry) => tree_entry,
+        Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(Default::default()),
+        Err(e) => return Err(e.into()),
+    };
     let object = tree_entry
         .to_object(ctx.repo)
         .context("converting tree entry to object")?;
