@@ -1,0 +1,16 @@
+---
+source: focus/internals/src/lib/operation/sync.rs
+assertion_line: 186
+expression: "std::fs::read_to_string(&profile_path)?"
+---
+/*
+!/*/
+/3rdparty/
+/focus/
+/pants-internal/
+/pants-support/
+/tools/
+/library_b/
+/mandatory_z/
+/project_b/src/main/java/com/example/cmdline/
+

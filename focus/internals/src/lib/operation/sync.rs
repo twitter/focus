@@ -76,6 +76,7 @@ mod test {
     use std::path::Path;
 
     use anyhow::Result;
+    use tracing::debug;
 
     use crate::{
         app,
@@ -163,28 +164,65 @@ It isn't just one of your holiday games
         let project_a_dir = path.join("project_a");
         let library_b_dir = path.join("library_b");
         let project_b_dir = path.join("project_b");
+        let profile_path = path.join(".git").join("info").join("sparse-checkout");
 
+        {
+            let selected_names = operation::layer::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert_eq!(selected_names.len(), 0);
+        }
+        insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
+        
         assert!(!library_b_dir.is_dir());
         assert!(!project_b_dir.is_dir());
         operation::layer::push(&path, vec![String::from("team_zissou/project_b")])?;
+        {
+            let selected_names = operation::layer::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert!(selected_names.contains("team_zissou/project_b"));
+            assert_eq!(selected_names.len(), 1);
+        }
         operation::sync::run(&path, fixture.app.clone())?;
+        insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_b_dir.is_dir());
         assert!(project_b_dir.is_dir());
 
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
         operation::layer::push(&path, vec![String::from("team_banzai/project_a")])?;
+        {
+            let selected_names = operation::layer::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert!(selected_names.contains("team_banzai/project_a"));
+            assert!(selected_names.contains("team_zissou/project_b"));
+            assert_eq!(selected_names.len(), 2);
+        }
         operation::sync::run(&path, fixture.app.clone())?;
+        insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
 
         operation::layer::pop(&path, 1)?;
+        {
+            let selected_names = operation::layer::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert!(selected_names.contains("team_zissou/project_b"));
+            assert_eq!(selected_names.len(), 1);
+        }
         operation::sync::run(&path, fixture.app.clone())?;
+        insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
 
         operation::layer::pop(&path, 1)?;
+        {
+            let selected_names = operation::layer::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert_eq!(selected_names.len(), 0);
+        }
         operation::sync::run(&path, fixture.app.clone())?;
+        insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
+
         assert!(!library_b_dir.is_dir());
         assert!(!project_b_dir.is_dir());
 
@@ -211,6 +249,34 @@ It isn't just one of your holiday games
         operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(!library_b_dir.is_dir());
+
+        Ok(())
+    }
+
+    #[test]
+    fn clone_contains_top_level() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let sparse_repo = fixture.sparse_repo()?;
+        let outlining_tree = sparse_repo.outlining_tree().unwrap();
+        let underlying = outlining_tree.underlying();
+        let outlining_tree_root = underlying.path();
+
+        let top_level_bazelisk_rc = outlining_tree_root.join(".bazeliskrc");
+
+        let outlining_tree_git_dir = sparse_repo
+            .git_dir()
+            .join("worktrees")
+            .join("outlining-tree");
+
+        let profile =
+            std::fs::read_to_string(outlining_tree_git_dir.join("info").join("sparse-checkout"))?;
+        insta::assert_snapshot!(&profile);
+
+        assert!(top_level_bazelisk_rc.is_file());
 
         Ok(())
     }
