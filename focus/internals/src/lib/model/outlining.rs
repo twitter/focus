@@ -158,15 +158,10 @@ pub trait PatternSetWriter {
     fn write_to_file(&self, path: &Path) -> Result<()>;
 }
 
-pub trait PatternSetFilter {
-    /// Filter out ignored patterns.
-    fn retain_relevant(&mut self);
-}
-
 impl PatternSetReader for PatternSet {
     fn merge_from_file(&mut self, path: &Path) -> Result<usize> {
         let mut inserted_count: usize = 0;
-        let file = File::open(path)
+        let file = File::create(path)
             .with_context(|| format!("failed opening '{}' for read", path.display()))?;
         let buffered_reader = BufReader::new(file).lines();
         for (line_number, line) in buffered_reader.enumerate() {
@@ -196,10 +191,6 @@ impl PatternSetWriter for PatternSet {
             .with_context(|| format!("failed opening '{}' for write", path.display()))?;
 
         for pattern in self.iter() {
-            if IGNORED_PATTERNS.contains(pattern) {
-                continue;
-            }
-
             let lines: Vec<OsString> = pattern.clone().into();
             for line in lines {
                 if line.as_bytes().eq(MAIN_SEPARATOR_BYTES) {
@@ -217,15 +208,15 @@ impl PatternSetWriter for PatternSet {
     }
 }
 
-impl PatternSetFilter for PatternSet {
-    fn retain_relevant(&mut self) {
-        self.retain(|p| !IGNORED_PATTERNS.contains(p))
-    }
-}
-
 lazy_static! {
-    pub static ref BUILD_FILE_PATTERNS: PatternSet = {
+    pub static ref GIT_BASELINE_PATTERNS: PatternSet = {
         let mut patterns = PatternSet::new();
+        patterns.insert(Pattern::Verbatim{precedence: 0, fragment: String::from("/*")});
+        patterns.insert(Pattern::Verbatim{precedence: 1, fragment: String::from("!/*/")});
+        patterns
+    };
+    pub static ref BUILD_FILE_PATTERNS: PatternSet = {
+        let mut patterns = GIT_BASELINE_PATTERNS.clone();
         patterns.insert(Pattern::Verbatim{precedence:usize::MAX, fragment:String::from("WORKSPACE*")});
         patterns.insert(Pattern::Verbatim{precedence:usize::MAX, fragment:String::from("BUILD*")});
         patterns.insert(Pattern::Verbatim{precedence:usize::MAX, fragment:String::from("*.bzl")});
@@ -233,18 +224,12 @@ lazy_static! {
     };
     // TODO(wilhelm): Move these into the mandatory layer where possible with `directory:` entries.
     pub static ref SOURCE_BASELINE_PATTERNS: PatternSet = {
-        let mut patterns = PatternSet::new();
+        let mut patterns = GIT_BASELINE_PATTERNS.clone();
         patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("focus")});
         patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("3rdparty")});
         patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("tools")});
         patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("pants-internal")});
         patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("pants-support")});
-        patterns
-    };
-    pub static ref IGNORED_PATTERNS: PatternSet = {
-        let mut patterns = PatternSet::new();
-        patterns.insert(Pattern::Verbatim{precedence: 0, fragment: String::from("/*")});
-        patterns.insert(Pattern::Verbatim{precedence: 1, fragment: String::from("!/*/")});
         patterns
     };
 }
@@ -314,24 +299,6 @@ mod testing {
         let count = pattern_set.len();
         pattern_set.retain(|pattern| !BUILD_FILE_PATTERNS.contains(pattern));
         assert_eq!(pattern_set.len(), count - BUILD_FILE_PATTERNS.len());
-    }
-
-    #[test]
-    fn retain_relevant() {
-        let mut pattern_set = PatternSet::new();
-        let top_level = Pattern::Verbatim {
-            precedence: 0,
-            fragment: String::from("/*"),
-        };
-        pattern_set.insert(top_level.clone());
-        let not_top_level_descendents = Pattern::Verbatim {
-            precedence: 1,
-            fragment: String::from("!/*/"),
-        };
-        pattern_set.insert(not_top_level_descendents.clone());
-        pattern_set.retain_relevant();
-        assert!(!pattern_set.contains(&top_level));
-        assert!(!pattern_set.contains(&not_top_level_descendents));
     }
 
     #[test]

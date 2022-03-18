@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 
 use crate::model::layering::LayerSets;
 
+use std::collections::HashSet;
+
 pub fn available(repo: &Path) -> Result<bool> {
     let layer_sets = LayerSets::new(repo);
     let set = &layer_sets.available_layers()?;
@@ -12,6 +14,21 @@ pub fn available(repo: &Path) -> Result<bool> {
     }
 
     Ok(false)
+}
+
+pub fn selected_layer_names(repo: &Path) -> Result<HashSet<String>> {
+
+    let mut results = HashSet::<String>::new();
+    let sets = LayerSets::new(repo);
+    if let Some(selected) = sets.selected_layers().context("loading selected layers")? {
+        results.extend(
+            selected
+                .layers()
+                .iter()
+                .map(|layer| layer.name().to_owned()),
+        );
+    }
+    Ok(results)
 }
 
 pub fn list(repo: &Path) -> Result<bool> {

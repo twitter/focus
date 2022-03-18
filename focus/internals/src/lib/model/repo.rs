@@ -10,7 +10,7 @@ use crate::{
     app::App,
     coordinate::CoordinateSet,
     coordinate_resolver::{CacheOptions, ResolutionRequest, Resolver, RoutingResolver},
-    model::outlining::{Pattern, PatternSetFilter},
+    model::outlining::Pattern,
     util::{git_helper, paths, sandbox_command::SandboxCommandOutput},
 };
 
@@ -21,7 +21,7 @@ use super::{
 
 use anyhow::{bail, Context, Result};
 use git2::{Oid, Repository};
-use tracing::{debug, info_span};
+use tracing::{debug, info, info_span};
 use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
@@ -40,83 +40,81 @@ impl WorkingTree {
         Self { path, git_dir }
     }
 
-    /// The location of the candidate sparse checkout file within the working tree.
-    fn sparse_checkout_file_path(&self) -> PathBuf {
-        self.git_dir.join("info").join("sparse-checkout.focus")
+    fn info_dir(&self) -> PathBuf {
+        self.git_dir.join("info")
     }
 
+    /// The location of the current sparse checkout file within the working tree.
+    fn sparse_checkout_path(&self) -> PathBuf {
+        self.info_dir().join("sparse-checkout")
+    }
+
+    /// The location of the candidate sparse checkout file within the working tree.
+    fn candidate_sparse_checkout_path(&self) -> PathBuf {
+        self.info_dir().join("sparse-checkout.focus")
+    }
     /// Writes the given `patterns` to the working tree. If `cone` is set, the
     pub fn apply_sparse_patterns(
         &self,
         patterns: &PatternSet,
-        cone: bool,
+        _cone: bool,
         app: Arc<App>,
     ) -> Result<()> {
         // Write the patterns
+        const SPARSE_ENABLED_CONFIG: &str = "core.sparseCheckout";
+        const SPARSE_CONE_ENABLED_CONFIG: &str = "core.sparseCheckoutCone";
 
-        let sparse_profile_path = self.sparse_checkout_file_path();
-        let parent_path = sparse_profile_path
-            .parent()
-            .with_context(|| format!("In working tree {}", self.path.display()))
-            .context("Could not determine parent of sparse checkout file")?;
-        std::fs::create_dir_all(parent_path)
+        let info_dir = self.info_dir();
+        std::fs::create_dir_all(&info_dir)
             .with_context(|| format!("In working tree {}", self.path.display()))
             .context("Failed to create leading directories for sparse profile")?;
 
-        let first_run = !sparse_profile_path.exists();
-
-        if !first_run {
-            let mut backup_path = sparse_profile_path.clone();
-            backup_path.set_extension("focus.previous");
-            std::fs::rename(&sparse_profile_path, &backup_path)
-                .with_context(|| format!("In working tree {}", self.path.display()))
-                .context("Failed to delete existing sparse profile")?;
+        let candidate_sparse_profile_path = self.candidate_sparse_checkout_path();
+        if candidate_sparse_profile_path.is_file() {
+            std::fs::remove_file(&candidate_sparse_profile_path)
+                .context("Could not remove candidate sparse profile")?;
         }
-        patterns.write_to_file(&sparse_profile_path)?;
+        patterns.write_to_file(&candidate_sparse_profile_path)?;
+
+        // Make sure Git doesn't try to do something cute with the sparse profile like merge existing contents.
+        let sparse_profile_path = self.sparse_checkout_path();
+        if sparse_profile_path.is_file() {
+            std::fs::remove_file(&sparse_profile_path)
+                .context("Could not remove existing sparse profile")?;
+        }
 
         // Update the working tree to match
-        let span = info_span!("Applying the sparse patterns", path = ?self.path);
-        let _guard = span.enter();
+        info!(?patterns, "Applying patterns");
+        let _ = git_helper::run_consuming_stdout(
+            "Configure Git to enable sparse checkout",
+            &self.path(),
+            vec!["config", SPARSE_ENABLED_CONFIG, "true"],
+            app.clone(),
+        )
+        .context("Configure Git to enable sparse checkout")?;
 
-        if first_run {
-            let mut args = vec!["sparse-checkout", "init"];
-            if cone {
-                // TODO: Reconsider cone patterns
-                args.push("--cone");
-            }
-
-            let description = format!("Running git {:?} in {}", args, self.path.display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app.clone())?;
-            scmd.ensure_success_or_log(
-                cmd.current_dir(&self.path).args(args),
-                SandboxCommandOutput::Stderr,
-                &description,
+        {
+            // TODO: Debug and re-enable cone patterns
+            let cone = false;
+            let _ = git_helper::run_consuming_stdout(
+                "Configure Git to enable sparse checkout",
+                &self.path(),
+                if cone {
+                    vec!["config", SPARSE_CONE_ENABLED_CONFIG, "true"]
+                } else {
+                    vec!["config", "--unset", SPARSE_CONE_ENABLED_CONFIG]
+                },
+                app.clone(),
             )
-            .with_context(|| format!("In working tree {}", self.path.display()))
-            .context("git sparse-checkout init failed")?;
-        } else {
-            let repo = self
-                .git_repo()
-                .context("Opening the repo in the working tree")
-                .with_context(|| format!("In working tree {}", self.path.display()))?;
-            let mut config = repo
-                .config()
-                .context("Loading config")
-                .with_context(|| format!("In working tree {}", self.path.display()))?;
-            config
-                .set_bool("core.spareCheckoutCone", cone)
-                .context("Setting config")
-                .with_context(|| format!("In working tree {}", self.path.display()))?;
+            .context("Configure Git to enable sparse checkout")?;
         }
 
         {
-            let file = File::open(&sparse_profile_path)
+            let file = File::open(&candidate_sparse_profile_path)
                 .context("Failed to open the sparse pattern file")?;
-            let span = info_span!("Setting sparse patterns", path = ?sparse_profile_path);
-            let _guard = span.enter();
             let args = vec!["sparse-checkout", "set", "--stdin"];
             let description = format!("Running git {:?} in {}", args, self.path.display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app.clone())?;
+            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
             scmd.ensure_success_or_log(
                 cmd.current_dir(&self.path)
                     .args(args)
@@ -126,22 +124,6 @@ impl WorkingTree {
             )
             .with_context(|| format!("In working tree {}", self.path.display()))
             .context("git sparse-checkout set failed")?;
-        }
-
-        // Run checkout
-        // TODO: Detect whether we need to do this or parameterize whether it happens.
-        if first_run {
-            let span = info_span!("Checking out initial tree", path = ?self.path);
-            let _guard = span.enter();
-
-            let description = format!("Running git checkout in {}", self.path.display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
-            scmd.ensure_success_or_log(
-                cmd.current_dir(&self.path).arg("checkout"),
-                SandboxCommandOutput::Stderr,
-                &description,
-            )
-            .context("git checkout failed")?;
         }
 
         Ok(())
@@ -408,16 +390,16 @@ impl Repo {
             bail!("Bare repos are not supported");
         }
         let git_dir = repo.path().to_owned();
-
         let working_tree = repo
             .workdir()
             .map(|work_tree_path| WorkingTree::new(work_tree_path.to_owned(), git_dir.clone()));
 
         let outlining_tree_path = Self::outlining_tree_path(&git_dir);
+        let outlining_tree_git_dir = git_dir.join("worktrees").join(OUTLINING_TREE_NAME);
         let outlining_tree = if outlining_tree_path.is_dir() {
             Some(OutliningTree::new(Arc::new(WorkingTree::new(
                 outlining_tree_path,
-                git_dir.clone(),
+                outlining_tree_git_dir,
             ))))
         } else {
             None
@@ -456,11 +438,8 @@ impl Repo {
                 let mut outline_patterns: PatternSet = outlining_tree
                     .outline(head_commit.id(), coordinates, app.clone())
                     .context("Failed to outline")?;
-                debug!("Initial patterns: {:?}", &outline_patterns);
+                debug!(?outline_patterns);
                 outline_patterns.extend(SOURCE_BASELINE_PATTERNS.clone());
-                debug!("Patterns + Source Baseline: {:?}", &outline_patterns);
-                outline_patterns.retain_relevant();
-                debug!("Filtered Patterns: {:?}", &outline_patterns);
 
                 working_tree
                     .apply_sparse_patterns(&outline_patterns, true, app)
@@ -500,10 +479,14 @@ impl Repo {
                 .map(|_| ())?;
         }
 
-        let work_tree_gitdir = self.git_dir.join("worktrees").join(OUTLINING_TREE_NAME);
+        let work_tree_gitdir = self.working_tree_git_dir();
         // Apply the correct sparse patterns
         let outlining_tree = OutliningTree::new(Arc::new(WorkingTree::new(path, work_tree_gitdir)));
         outlining_tree.apply_build_file_patterns(self.app.clone())
+    }
+
+    fn working_tree_git_dir(&self) -> PathBuf {
+        self.git_dir.join("worktrees").join(OUTLINING_TREE_NAME)
     }
 
     pub fn create_working_tree(&self) -> Result<()> {
