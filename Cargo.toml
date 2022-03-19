@@ -3,4 +3,5 @@ members = [
         "focus/commands",
         "focus/internals",
         "tool_insights_client",
+	"metahook",
 ]
