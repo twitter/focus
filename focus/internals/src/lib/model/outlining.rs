@@ -1,6 +1,8 @@
 use anyhow::{bail, Context, Result};
+use tracing::debug;
 
 use std::{
+    cell::RefCell,
     cmp::Ordering,
     collections::BTreeSet,
     ffi::OsString,
@@ -21,14 +23,14 @@ pub enum Pattern {
         precedence: usize,
         fragment: String,
     },
-    RecursiveDirectory {
+    Directory {
         precedence: usize,
         path: std::path::PathBuf,
     },
 }
 
 impl PartialOrd for Pattern {
-    /// Verbatim patterns always precede RecursiveDirectory patterns. Either are kept in order.
+    /// Verbatim patterns always precede Directory patterns. Either are kept in order.
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             (
@@ -45,16 +47,14 @@ impl PartialOrd for Pattern {
                 Some(nonequal_ordering) => Some(nonequal_ordering),
                 None => None,
             },
-            (Pattern::Verbatim { .. }, Pattern::RecursiveDirectory { .. }) => Some(Ordering::Less),
-            (Pattern::RecursiveDirectory { .. }, Pattern::Verbatim { .. }) => {
-                Some(Ordering::Greater)
-            }
+            (Pattern::Verbatim { .. }, Pattern::Directory { .. }) => Some(Ordering::Less),
+            (Pattern::Directory { .. }, Pattern::Verbatim { .. }) => Some(Ordering::Greater),
             (
-                Pattern::RecursiveDirectory {
+                Pattern::Directory {
                     precedence: i0,
                     path: p0,
                 },
-                Pattern::RecursiveDirectory {
+                Pattern::Directory {
                     precedence: i1,
                     path: p1,
                 },
@@ -87,14 +87,14 @@ impl PartialEq for Pattern {
                     fragment: p2,
                 },
             ) => p1.eq(p2),
-            (Pattern::Verbatim { .. }, Pattern::RecursiveDirectory { .. }) => false,
-            (Pattern::RecursiveDirectory { .. }, Pattern::Verbatim { .. }) => false,
+            (Pattern::Verbatim { .. }, Pattern::Directory { .. }) => false,
+            (Pattern::Directory { .. }, Pattern::Verbatim { .. }) => false,
             (
-                Pattern::RecursiveDirectory {
+                Pattern::Directory {
                     precedence: _i0,
                     path: p1,
                 },
-                Pattern::RecursiveDirectory {
+                Pattern::Directory {
                     precedence: _i1,
                     path: p2,
                 },
@@ -107,7 +107,7 @@ impl From<(usize, String)> for Pattern {
     fn from(pair: (usize, String)) -> Self {
         let (index, s) = pair;
         if s.starts_with(MAIN_SEPARATOR) && s.ends_with(MAIN_SEPARATOR) {
-            Pattern::RecursiveDirectory {
+            Pattern::Directory {
                 precedence: index,
                 path: PathBuf::from(s),
             }
@@ -120,6 +120,13 @@ impl From<(usize, String)> for Pattern {
     }
 }
 
+lazy_static! {
+    static ref NOT_TOKEN: Vec<u8> = b"!".to_vec();
+    static ref STAR_SLASH_TOKEN: Vec<u8> = b"*/".to_vec();
+    static ref STAR_TOKEN: Vec<u8> = b"*".to_vec();
+    static ref ROOT_PATH: PathBuf = PathBuf::from(String::from(MAIN_SEPARATOR));
+}
+
 impl From<Pattern> for Vec<OsString> {
     fn from(other: Pattern) -> Vec<OsString> {
         match other {
@@ -127,19 +134,34 @@ impl From<Pattern> for Vec<OsString> {
                 precedence: _i,
                 fragment,
             } => vec![OsString::from(fragment)],
-            Pattern::RecursiveDirectory {
+            Pattern::Directory {
                 precedence: _i,
                 path,
             } => {
-                let mut forward = path.as_os_str().as_bytes().to_vec();
-                if !forward.starts_with(MAIN_SEPARATOR_BYTES) {
-                    forward.insert(0, MAIN_SEPARATOR_BYTE);
+                let mut actual = path.as_os_str().as_bytes().to_vec();
+                if !actual.starts_with(MAIN_SEPARATOR_BYTES) {
+                    actual.insert(0, MAIN_SEPARATOR_BYTE);
                 }
-                if !forward.ends_with(MAIN_SEPARATOR_BYTES) {
-                    forward.push(MAIN_SEPARATOR_BYTE);
+                if !actual.ends_with(MAIN_SEPARATOR_BYTES) {
+                    actual.push(MAIN_SEPARATOR_BYTE);
                 }
 
-                vec![OsString::from_vec(forward)]
+                let wildcard = {
+                    let mut t = actual.clone();
+                    t.extend(STAR_TOKEN.clone());
+                    t
+                };
+                let no_descendents = {
+                    let mut t = NOT_TOKEN.clone();
+                    t.extend(actual.clone());
+                    t.extend(STAR_SLASH_TOKEN.clone());
+                    t
+                };
+
+                vec![
+                    OsString::from_vec(wildcard),
+                    OsString::from_vec(no_descendents),
+                ]
             }
         }
     }
@@ -156,6 +178,10 @@ pub trait PatternSetReader {
 pub trait PatternSetWriter {
     /// Write the Patterns from a PatternSet to a file indicated by the given path.
     fn write_to_file(&self, path: &Path) -> Result<()>;
+}
+
+pub trait LeadingPatternInserter {
+    fn insert_leading(&mut self, pattern: Pattern);
 }
 
 impl PatternSetReader for PatternSet {
@@ -208,28 +234,96 @@ impl PatternSetWriter for PatternSet {
     }
 }
 
+impl LeadingPatternInserter for PatternSet {
+    fn insert_leading(&mut self, pattern: Pattern) {
+        {
+            match pattern {
+                verbatim @ Pattern::Verbatim { .. } => {
+                    self.insert(verbatim);
+                }
+                Pattern::Directory { precedence, path } => {
+                    debug!(path = %path.display(), "Adding leading patterns");
+                    self.insert(Pattern::Directory {
+                        precedence,
+                        path: path.clone(),
+                    });
+                    let current = RefCell::new(path.as_path());
+                    loop {
+                        let inner = current.clone().into_inner();
+                        if let Some(parent) = inner.parent() {
+                            // Skip the root path.
+                            if parent == ROOT_PATH.as_path() {
+                                break;
+                            }
+                            debug!(path = %parent.display(), "Current");
+
+                            current.replace(parent);
+                            self.insert(Pattern::Directory {
+                                precedence,
+                                path: parent.to_owned(),
+                            });
+                        } else {
+                            break;
+                        }
+                    }
+                    debug!("Finished");
+                }
+            }
+        }
+    }
+}
+
 lazy_static! {
     pub static ref GIT_BASELINE_PATTERNS: PatternSet = {
         let mut patterns = PatternSet::new();
-        patterns.insert(Pattern::Verbatim{precedence: 0, fragment: String::from("/*")});
-        patterns.insert(Pattern::Verbatim{precedence: 1, fragment: String::from("!/*/")});
+        patterns.insert(Pattern::Verbatim {
+            precedence: 0,
+            fragment: String::from("/*"),
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: 1,
+            fragment: String::from("!/*/"),
+        });
+        patterns
+    };
+    pub static ref SOURCE_BASELINE_PATTERNS: PatternSet = {
+        let mut patterns = PatternSet::new();
+        patterns.insert(Pattern::Verbatim {
+            precedence: 2,
+            fragment: String::from("/3rdparty/*"),
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: 3,
+            fragment: String::from("/focus/*"),
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: 4,
+            fragment: String::from("/tools/*"),
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: 5,
+            fragment: String::from("/pants-internal/*"),
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: 6,
+            fragment: String::from("/pants-support/*"),
+        });
         patterns
     };
     pub static ref BUILD_FILE_PATTERNS: PatternSet = {
         let mut patterns = GIT_BASELINE_PATTERNS.clone();
-        patterns.insert(Pattern::Verbatim{precedence:usize::MAX, fragment:String::from("WORKSPACE*")});
-        patterns.insert(Pattern::Verbatim{precedence:usize::MAX, fragment:String::from("BUILD*")});
-        patterns.insert(Pattern::Verbatim{precedence:usize::MAX, fragment:String::from("*.bzl")});
-        patterns
-    };
-    // TODO(wilhelm): Move these into the mandatory layer where possible with `directory:` entries.
-    pub static ref SOURCE_BASELINE_PATTERNS: PatternSet = {
-        let mut patterns = GIT_BASELINE_PATTERNS.clone();
-        patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("focus")});
-        patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("3rdparty")});
-        patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("tools")});
-        patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("pants-internal")});
-        patterns.insert(Pattern::RecursiveDirectory{precedence: 0, path: PathBuf::from("pants-support")});
+        patterns.insert(Pattern::Verbatim {
+            precedence: usize::MAX,
+            fragment: String::from("WORKSPACE*"),
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: usize::MAX,
+            fragment: String::from("BUILD*"),
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: usize::MAX,
+            fragment: String::from("*.bzl"),
+        });
         patterns
     };
 }
@@ -250,7 +344,7 @@ mod testing {
             Pattern::from((0, String::from("/boo!")))
         );
         assert_eq!(
-            Pattern::RecursiveDirectory {
+            Pattern::Directory {
                 precedence: 0,
                 path: PathBuf::from("/a/b/c/")
             },
@@ -270,29 +364,35 @@ mod testing {
 
     #[test]
     fn recursive_directory_pattern() {
-        let actual: Vec<OsString> = Pattern::RecursiveDirectory {
+        let actual: Vec<OsString> = Pattern::Directory {
             precedence: 0,
             path: PathBuf::from("bar/baz/qux"),
         }
         .into();
-        assert_eq!(actual, vec![OsString::from("/bar/baz/qux/")]);
+        assert_eq!(
+            actual,
+            vec![
+                OsString::from("/bar/baz/qux/*"),
+                OsString::from("!/bar/baz/qux/*/")
+            ]
+        );
     }
 
     #[test]
     fn recursive_directory_pattern_root_pattern() {
-        let actual: Vec<OsString> = Pattern::RecursiveDirectory {
+        let actual: Vec<OsString> = Pattern::Directory {
             precedence: 0,
             path: PathBuf::from("/"),
         }
         .into();
-        assert_eq!(actual, vec![OsString::from("/")]);
+        assert_eq!(actual, vec![OsString::from("/*"), OsString::from("!/*/")]);
     }
 
     #[test]
     fn pattern_set_ops() {
         let mut pattern_set = PatternSet::new();
         pattern_set.extend(BUILD_FILE_PATTERNS.clone());
-        pattern_set.insert(Pattern::RecursiveDirectory {
+        pattern_set.insert(Pattern::Directory {
             precedence: pattern_set.len(),
             path: PathBuf::from("project_a"),
         });
@@ -303,11 +403,11 @@ mod testing {
 
     #[test]
     fn pattern_partial_ord() {
-        let recursive_directory_pattern_1 = Pattern::RecursiveDirectory {
+        let recursive_directory_pattern_1 = Pattern::Directory {
             precedence: 0,
             path: PathBuf::from("/b/"),
         };
-        let recursive_directory_pattern_2 = Pattern::RecursiveDirectory {
+        let recursive_directory_pattern_2 = Pattern::Directory {
             precedence: 0,
             path: PathBuf::from("/a/"),
         };
@@ -336,5 +436,45 @@ mod testing {
         assert_eq!(iter.next().unwrap(), &recursive_directory_pattern_1);
 
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_insert_leading() {
+        let mut pattern_set = PatternSet::new();
+        let nested_pattern = Pattern::Directory {
+            precedence: 0,
+            path: PathBuf::from("/a/b/c/d/e/"),
+        };
+        pattern_set.insert_leading(nested_pattern.clone());
+        let mut iter = pattern_set.iter();
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 0,
+                path: PathBuf::from("/a/")
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 0,
+                path: PathBuf::from("/a/b/")
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 0,
+                path: PathBuf::from("/a/b/c/")
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 0,
+                path: PathBuf::from("/a/b/c/d/")
+            }
+        );
+        assert_eq!(iter.next().unwrap(), &nested_pattern);
     }
 }

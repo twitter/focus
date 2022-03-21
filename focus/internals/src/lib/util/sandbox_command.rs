@@ -97,15 +97,7 @@ impl SandboxCommand {
                 .create_file(Some("sandboxed_command"), Some("script"), None)
                 .context("Failed creating description file")?;
             writeln!(description_file, "# {}", description)?;
-            write!(
-                description_file,
-                "{}",
-                command.get_program().to_string_lossy()
-            )?;
-            for arg in command.get_args() {
-                write!(description_file, "{}", arg.to_string_lossy())?;
-            }
-            writeln!(description_file)?;
+            writeln!(description_file, "{}", Self::pretty_print_command(command))?;
             serial
         };
 
@@ -223,13 +215,18 @@ impl SandboxCommand {
     ) -> Result<ExitStatus> {
         let span = info_span!("Running command", %description);
         let _guard = span.enter();
+        let command_description = Self::pretty_print_command(cmd);
+        debug!(command = %command_description, "Command starting");
+
         let mut launch = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn command {}", description))?;
-        let command_description = Self::pretty_print_command(cmd);
 
-        let tailer = Self::tail(&command_description, &self.stderr_path)
-            .context("Could not create log tailer");
+        let tailer = Self::tail(
+            &cmd.get_program().to_string_lossy().to_owned(),
+            &self.stderr_path,
+        )
+        .context("Could not create log tailer");
 
         let status = launch
             .wait()

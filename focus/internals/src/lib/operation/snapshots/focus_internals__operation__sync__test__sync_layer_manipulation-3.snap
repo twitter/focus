@@ -1,18 +1,46 @@
 ---
 source: focus/internals/src/lib/operation/sync.rs
-assertion_line: 201
 expression: "std::fs::read_to_string(&profile_path)?"
 ---
+/3rdparty/*
+/focus/*
+/tools/*
+/pants-internal/*
+/pants-support/*
 /*
 !/*/
-/3rdparty/
-/focus/
-/pants-internal/
-/pants-support/
-/tools/
-/library_a/
-/library_b/
-/mandatory_z/
-/project_a/src/main/java/com/example/cmdline/
-/project_b/src/main/java/com/example/cmdline/
+/library_a/*
+!/library_a/*/
+/library_b/*
+!/library_b/*/
+/mandatory_z/*
+!/mandatory_z/*/
+/project_a/*
+!/project_a/*/
+/project_a/src/*
+!/project_a/src/*/
+/project_a/src/main/*
+!/project_a/src/main/*/
+/project_a/src/main/java/*
+!/project_a/src/main/java/*/
+/project_a/src/main/java/com/*
+!/project_a/src/main/java/com/*/
+/project_a/src/main/java/com/example/*
+!/project_a/src/main/java/com/example/*/
+/project_a/src/main/java/com/example/cmdline/*
+!/project_a/src/main/java/com/example/cmdline/*/
+/project_b/*
+!/project_b/*/
+/project_b/src/*
+!/project_b/src/*/
+/project_b/src/main/*
+!/project_b/src/main/*/
+/project_b/src/main/java/*
+!/project_b/src/main/java/*/
+/project_b/src/main/java/com/*
+!/project_b/src/main/java/com/*/
+/project_b/src/main/java/com/example/*
+!/project_b/src/main/java/com/example/*/
+/project_b/src/main/java/com/example/cmdline/*
+!/project_b/src/main/java/com/example/cmdline/*/
 

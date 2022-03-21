@@ -1,14 +1,14 @@
 ---
 source: focus/internals/src/lib/operation/sync.rs
-assertion_line: 224
 expression: "std::fs::read_to_string(&profile_path)?"
 ---
+/3rdparty/*
+/focus/*
+/tools/*
+/pants-internal/*
+/pants-support/*
 /*
 !/*/
-/3rdparty/
-/focus/
-/pants-internal/
-/pants-support/
-/tools/
-/mandatory_z/
+/mandatory_z/*
+!/mandatory_z/*/
 

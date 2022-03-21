@@ -17,7 +17,6 @@ pub fn available(repo: &Path) -> Result<bool> {
 }
 
 pub fn selected_layer_names(repo: &Path) -> Result<HashSet<String>> {
-
     let mut results = HashSet::<String>::new();
     let sets = LayerSets::new(repo);
     if let Some(selected) = sets.selected_layers().context("loading selected layers")? {
