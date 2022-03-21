@@ -403,10 +403,6 @@ struct FocusOpts {
     #[clap(long, global = true)]
     preserve_sandbox: bool,
 
-    /// Disable textual user interface; happens by default on non-interactive terminals.
-    #[clap(long, global = true)]
-    ugly: bool,
-
     /// Number of threads to use when performing parallel resolution (where possible).
     #[clap(long, default_value = "0", global = true)]
     resolution_threads: usize,
@@ -798,13 +794,8 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     setup_thread_pool(options.resolution_threads)?;
 
     let is_tty = termion::is_tty(&std::io::stdout());
-    let interactive = if options.ugly { false } else { is_tty };
 
-    let _guard = if interactive {
-        focus_tracing::Guard::default()
-    } else {
-        init_logging(is_tty)?
-    };
+    let _guard = init_logging(is_tty)?;
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
     let app = Arc::from(App::new(options.preserve_sandbox)?);
