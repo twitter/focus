@@ -172,7 +172,7 @@ It isn't just one of your holiday games
             assert_eq!(selected_names.len(), 0);
         }
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
-        
+
         assert!(!library_b_dir.is_dir());
         assert!(!project_b_dir.is_dir());
         operation::layer::push(&path, vec![String::from("team_zissou/project_b")])?;
@@ -183,6 +183,7 @@ It isn't just one of your holiday games
             assert_eq!(selected_names.len(), 1);
         }
         operation::sync::run(&path, fixture.app.clone())?;
+
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_b_dir.is_dir());
         assert!(project_b_dir.is_dir());

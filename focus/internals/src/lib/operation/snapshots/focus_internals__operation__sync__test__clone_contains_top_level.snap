@@ -1,16 +1,15 @@
 ---
 source: focus/internals/src/lib/operation/sync.rs
-assertion_line: 239
 expression: "&profile"
 ---
 /*
 !/*/
+/3rdparty/*
+/focus/*
+/tools/*
+/pants-internal/*
+/pants-support/*
 *.bzl
 BUILD*
 WORKSPACE*
-/3rdparty/
-/focus/
-/pants-internal/
-/pants-support/
-/tools/
 
