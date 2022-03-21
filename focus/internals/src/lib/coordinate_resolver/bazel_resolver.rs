@@ -136,8 +136,11 @@ impl BazelResolver {
         request: &ResolutionRequest,
         packages: BTreeSet<Label>,
     ) -> Result<BTreeMap<DependencyKey, DependencyValue>> {
+        const REQUIRED_TAG: &str = "bazel-compatible";
+
         let query = format!(
-            "deps(set({}))",
+            "deps(attr('tags', '{}', set({})))",
+            REQUIRED_TAG,
             packages
                 .into_iter()
                 .map(|package| format!(
@@ -148,7 +151,7 @@ impl BazelResolver {
                     }
                 ))
                 .collect::<Vec<_>>()
-                .join(" ")
+                .join(" "),
         );
         let description = format!("bazel query '{}'", query);
 
