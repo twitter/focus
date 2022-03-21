@@ -62,12 +62,16 @@ pub struct Rule {
 #[allow(dead_code)]
 pub enum RuleElement {
     Boolean {
-        name: String,
-        value: String,
+        name: Option<String>,
+        value: Option<String>,
+    },
+    Int {
+        name: Option<String>,
+        value: Option<isize>,
     },
     String {
-        name: String,
-        value: String,
+        name: Option<String>,
+        value: Option<String>,
     },
     List {
         name: String,
@@ -87,12 +91,19 @@ pub enum RuleElement {
     RuleOutput {
         name: String,
     },
+    Output {
+        name: String,
+    },
+    Tristate {
+        name: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct Label {
-    pub value: String,
+    pub name: Option<String>,
+    pub value: Option<String>,
 }
 
 #[cfg(test)]
@@ -127,7 +138,11 @@ mod tests {
         <string name="generator_function" value="target"/>
         <string name="generator_location" value="3rdparty/jvm/com/fasterxml/jackson/BUILD:16:7"/>
         <label name="actual" value="//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala"/>
+        <label value="//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala"/>
         <rule-input name="//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala"/>
+        <output name="dummy-output" value="//foo/bar:baz"/>
+        <int name="dummy-int" value="10"/>
+        <tristate name="dummy-tristate" value="-1"/>
     </rule>
     <source-file location="/private/var/tmp/user/edb2428c3d1a64c0af66dd62c2299134/external/zlib/trees.c:1:1" name="@zlib//:trees.c">
         <visibility-label name="//visibility:public"/>
@@ -150,24 +165,40 @@ mod tests {
                         name: "//:scala-collection-compat",
                         elements: [
                             String {
-                                name: "name",
-                                value: "scala-collection-compat",
+                                name: Some(
+                                    "name",
+                                ),
+                                value: Some(
+                                    "scala-collection-compat",
+                                ),
                             },
                             List {
                                 name: "visibility",
                                 values: [],
                             },
                             String {
-                                name: "generator_name",
-                                value: "scala-collection-compat",
+                                name: Some(
+                                    "generator_name",
+                                ),
+                                value: Some(
+                                    "scala-collection-compat",
+                                ),
                             },
                             String {
-                                name: "generator_function",
-                                value: "jar_library",
+                                name: Some(
+                                    "generator_function",
+                                ),
+                                value: Some(
+                                    "jar_library",
+                                ),
                             },
                             String {
-                                name: "generator_location",
-                                value: "/home/project/BUILD:108:12",
+                                name: Some(
+                                    "generator_location",
+                                ),
+                                value: Some(
+                                    "/home/project/BUILD:108:12",
+                                ),
                             },
                             List {
                                 name: "deps",
@@ -184,8 +215,12 @@ mod tests {
                         name: "//3rdparty/jvm/com/fasterxml/jackson:jackson-module-scala",
                         elements: [
                             String {
-                                name: "name",
-                                value: "jackson-module-scala",
+                                name: Some(
+                                    "name",
+                                ),
+                                value: Some(
+                                    "jackson-module-scala",
+                                ),
                             },
                             List {
                                 name: "visibility",
@@ -195,24 +230,63 @@ mod tests {
                                 name: "dummy-testing-dict",
                             },
                             String {
-                                name: "generator_name",
-                                value: "jackson-module-scala",
+                                name: Some(
+                                    "generator_name",
+                                ),
+                                value: Some(
+                                    "jackson-module-scala",
+                                ),
                             },
                             String {
-                                name: "generator_function",
-                                value: "target",
+                                name: Some(
+                                    "generator_function",
+                                ),
+                                value: Some(
+                                    "target",
+                                ),
                             },
                             String {
-                                name: "generator_location",
-                                value: "3rdparty/jvm/com/fasterxml/jackson/BUILD:16:7",
+                                name: Some(
+                                    "generator_location",
+                                ),
+                                value: Some(
+                                    "3rdparty/jvm/com/fasterxml/jackson/BUILD:16:7",
+                                ),
                             },
                             Label(
                                 Label {
-                                    value: "//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala",
+                                    name: Some(
+                                        "actual",
+                                    ),
+                                    value: Some(
+                                        "//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala",
+                                    ),
+                                },
+                            ),
+                            Label(
+                                Label {
+                                    name: None,
+                                    value: Some(
+                                        "//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala",
+                                    ),
                                 },
                             ),
                             RuleInput {
                                 name: "//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala",
+                            },
+                            Output {
+                                name: "dummy-output",
+                            },
+                            Int {
+                                name: Some(
+                                    "dummy-int",
+                                ),
+                                value: Some(
+                                    10,
+                                ),
+                            },
+                            Tristate {
+                                name: "dummy-tristate",
                             },
                         ],
                     },
