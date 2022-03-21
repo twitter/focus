@@ -190,12 +190,15 @@ impl BazelResolver {
                             }
 
                             RuleElement::Boolean { .. }
+                            | RuleElement::Int { .. }
                             | RuleElement::String { .. }
                             | RuleElement::List { .. }
                             | RuleElement::Dict { .. }
                             | RuleElement::Label(_)
                             | RuleElement::VisibilityLabel { .. }
-                            | RuleElement::RuleOutput { .. } => {
+                            | RuleElement::RuleOutput { .. }
+                            | RuleElement::Output { .. }
+                            | RuleElement::Tristate { .. } => {
                                 // Do nothing.
                             }
                         }
