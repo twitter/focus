@@ -404,6 +404,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "which",
+ "whoami",
 ]
 
 [[package]]

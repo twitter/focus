@@ -52,6 +52,7 @@ url = "2.2.2"
 uuid = { version = "0.8.2", features = ["v4"] }
 walkdir = "2.3.2"
 which = "4.2.4"
+whoami = "1.2.1"
 
 [dev-dependencies]
 insta = "1.13.0"
