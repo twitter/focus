@@ -1,7 +1,8 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use tracing::warn;
+use tracing::{error, warn};
 
 pub struct LockFile {
     path: PathBuf,
@@ -14,11 +15,17 @@ impl LockFile {
         use std::os::unix::prelude::*;
 
         if std::fs::metadata(path).is_ok() {
-            bail!("File {} already exists", path.display());
+            error!("Another process is holding a lock on {}", path.display());
+            error!(
+                "The lock is held by {}",
+                std::fs::read_to_string(path).context("Failed reading lockfile")?
+            );
+            bail!("Another process holds a lock");
         }
 
         match File::create(path) {
             Ok(file) => {
+                Self::write_process_description(&file)?;
                 let fd = file.into_raw_fd();
 
                 if let Err(e) = Self::acqrel_lock(fd, true) {
@@ -37,6 +44,21 @@ impl LockFile {
                 bail!("Creating lock file {} failed: {}", path.display(), e);
             }
         }
+    }
+
+    fn write_process_description(file: &File) -> Result<()> {
+        let mut buffered_writer = BufWriter::new(file);
+        writeln!(
+            buffered_writer,
+            "PID {} started by {} on host {}",
+            std::process::id(),
+            whoami::username(),
+            whoami::hostname(),
+        )?;
+        buffered_writer.flush()?;
+        file.sync_all()?;
+
+        Ok(())
     }
 
     fn acqrel_lock(fd: i32, lock: bool) -> Result<()> {

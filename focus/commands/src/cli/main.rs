@@ -1,6 +1,11 @@
 #![allow(clippy::too_many_arguments)]
 
-use std::{convert::TryFrom, path::PathBuf, sync::Arc, time::Instant};
+use std::{
+    convert::TryFrom,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
+};
 
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
@@ -14,7 +19,7 @@ use focus_internals::{
     operation::{self, maintenance},
     tracing as focus_tracing,
     tracker::Tracker,
-    util::{backed_up_file::BackedUpFile, git_helper, paths, time::FocusTime},
+    util::{backed_up_file::BackedUpFile, git_helper, lock_file::LockFile, paths, time::FocusTime},
 };
 use tracing::{debug, info, info_span};
 
@@ -423,6 +428,11 @@ fn ensure_directories_exist() -> Result<()> {
     Ok(())
 }
 
+fn hold_lock_file(repo: &Path) -> Result<LockFile> {
+    let path = repo.join(".focus").join("focus.lock");
+    LockFile::new(&path)
+}
+
 fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
@@ -477,6 +487,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
+            let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::sync::run(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
@@ -563,6 +574,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Layer { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
+            let _lock_file = hold_lock_file(&repo)?;
             ti_client.get_context().set_tool_feature_name("layer");
 
             let should_check_tree_cleanliness = match subcommand {
@@ -612,6 +624,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Adhoc { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
+            let _lock_file = hold_lock_file(&repo)?;
 
             let should_check_tree_cleanliness = match subcommand {
                 AdhocSubcommand::List {} => false,
