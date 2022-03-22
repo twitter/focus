@@ -48,8 +48,11 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
 
         Ok(coordinates)
     })?;
-    // Add coordinates count to TI custom map.
-    app.tool_insights_client().get_context().add_to_custom_map(
+
+    // Add coordinate/layer to TI data.
+    let app_for_ti_client = app.clone();
+    let ti_client = app_for_ti_client.tool_insights_client();
+    ti_client.get_context().add_to_custom_map(
         "coordinates_and_layers_count",
         coordinates.len().to_string(),
     );
@@ -57,9 +60,13 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     let coordinate_set =
         CoordinateSet::try_from(coordinates.as_ref()).context("constructing coordinate set")?;
 
-    perform("Computing the new sparse profile", || {
-        repo.sync(&coordinate_set, app).context("Sync failed")
+    let pattern_count = perform("Computing the new sparse profile", || {
+        repo.sync(&coordinate_set, app.clone())
+            .context("Sync failed")
     })?;
+    ti_client
+        .get_context()
+        .add_to_custom_map("pattern_count", pattern_count.to_string());
 
     perform("Updating the sync point", || {
         repo.working_tree().unwrap().write_sync_point_ref()
