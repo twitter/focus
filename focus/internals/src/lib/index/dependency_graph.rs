@@ -351,6 +351,7 @@ sh_binary(
     name = "foo",
     srcs = ["foo.sh"],
     deps = ["//package2:bar"],
+    tags = ["bazel-compatible"],
 )
 
 file: package2/bar.sh
@@ -361,6 +362,7 @@ file: package2/BUILD
 sh_binary(
     name = "bar",
     srcs = ["bar.sh"],
+    tags = ["bazel-compatible"],
 )
 "#,
         )?;
@@ -386,7 +388,7 @@ sh_binary(
                         path: "package1",
                     },
                     ContentHash(
-                        bf2d1c53ba89122100ff058ca5881d089e54f0cd,
+                        46f942d72d8487354675fd44cd2d254b4285db47,
                     ),
                 ),
             },
@@ -488,6 +490,7 @@ def my_macro_inner(name):
     native.genrule(
         name = name,
         srcs = ["//package2:contents"],
+        tags = ["bazel-compatible"],
         outs = ["out.txt"],
         cmd = "cp $(SRCS) $@",
     )
@@ -553,6 +556,7 @@ def my_macro_inner(name):
     native.genrule(
         name = name,
         srcs = ["//package3:contents"],
+        tags = ["bazel-compatible"],
         outs = ["out.txt"],
         cmd = "cp $(SRCS) $@",
     )
@@ -576,7 +580,7 @@ def my_macro_inner(name):
                         path: "package1",
                     },
                     ContentHash(
-                        ca3af5c2d8bf7d2838602ba94886b70d05c1c445,
+                        aeb556ed619aecb69bfc6fbe337a0212cd8a7436,
                     ),
                 ),
             },
