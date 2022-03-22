@@ -426,7 +426,8 @@ impl Repo {
         Self::focus_git_dir_path(git_dir).join(OUTLINING_TREE_NAME)
     }
 
-    pub fn sync(&self, coordinates: &CoordinateSet, app: Arc<App>) -> Result<()> {
+    /// Run a sync, returning the number of patterns that were applied.
+    pub fn sync(&self, coordinates: &CoordinateSet, app: Arc<App>) -> Result<usize> {
         match (&self.working_tree, &self.outlining_tree) {
             (Some(working_tree), Some(outlining_tree)) => {
                 // Get the HEAD commit ID for the repo so that we can outline using the same commit.
@@ -442,17 +443,15 @@ impl Repo {
                     .context("Failed to outline")?;
                 debug!(?outline_patterns);
                 outline_patterns.extend(working_tree.default_working_tree_patterns()?);
-
                 working_tree
                     .apply_sparse_patterns(&outline_patterns, true, app)
                     .context("Failed to apply outlined patterns to working tree")?;
+                Ok(outline_patterns.len())
             }
             _ => {
-                bail!("Synchronization is only possible in a repo with both working and outlining trees");
+                bail!("Synchronization is only possible in a repo with both working and outlining trees")
             }
         }
-
-        Ok(())
     }
 
     /// Creates an outlining tree for ther repository.
