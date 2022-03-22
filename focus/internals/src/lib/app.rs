@@ -27,10 +27,8 @@ impl App {
         let sandbox =
             Arc::from(Sandbox::new(preserve_sandbox_contents).context("Failed to create sandbox")?);
         let tool_insights_client = Client::new(
-            // TODO: get this from toml file
-            "focus".to_string(),
-            // TODO: get this from toml file
-            "0.3".to_string(),
+            env!("CARGO_PKG_NAME").to_owned(),
+            env!("CARGO_PKG_VERSION").to_owned(),
             SystemTime::now(),
         );
         Ok(Self {
