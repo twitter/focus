@@ -71,7 +71,7 @@ impl WorkingTree {
         patterns.write_to_file(&sparse_profile_path)?;
 
         // Update the working tree to match
-        info!(?patterns, "Applying patterns");
+        info!(count = %patterns.len(), "Applying patterns");
         {
             let cone = false; // Cone patterns are disabled.
             let args = vec![

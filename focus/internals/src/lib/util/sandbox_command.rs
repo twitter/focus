@@ -12,7 +12,7 @@ use std::{
     },
     time::Duration,
 };
-use tracing::{debug, error, info, info_span, warn};
+use tracing::{debug, error, info, info_span, warn, debug_span};
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
     use std::io;
@@ -213,10 +213,9 @@ impl SandboxCommand {
         output: SandboxCommandOutput,
         description: &str,
     ) -> Result<ExitStatus> {
-        let span = info_span!("Running command", %description);
+        let span = debug_span!("Running command", %description);
         let _guard = span.enter();
         let command_description = Self::pretty_print_command(cmd);
-        debug!(command = %command_description, "Command starting");
 
         let mut launch = cmd
             .spawn()
@@ -234,7 +233,7 @@ impl SandboxCommand {
         tailer.iter().for_each(|t| t.stop());
         debug!(command = %command_description, %status, "Command exited");
         if !status.success() {
-            self.log(output, description).context("logging output")?;
+            self.log(output, &description).context("logging output")?;
             bail!("Command failed: {}", command_description);
         }
 
