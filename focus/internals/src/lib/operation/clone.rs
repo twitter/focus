@@ -234,6 +234,10 @@ fn set_up_sparse_repo(
 
     repo.working_tree().unwrap().write_sync_point_ref()?;
 
+    info!("Writing focus version to git-config");
+    repo.write_version_to_git_config()
+        .context("Could not set focus.version in sparse repo")?;
+
     set_up_bazel_preflight_script(sparse_repo_path)?;
 
     Tracker::default()
@@ -474,7 +478,7 @@ fn copy_local_branches(
             Some(name) => name,
             None => {
                 warn!(
-                    "Skipping branch {:?} because it is not representible as UTF-8",
+                    "Skipping branch {:?} because it is not representable as UTF-8",
                     b.name_bytes()
                 );
                 continue;
@@ -624,7 +628,7 @@ mod test {
         init_logging();
         let fixture = RepoPairFixture::new()?;
 
-        // Set up a remote that mimicks source so that we can check that the setting of fetch and push URLs.
+        // Set up a remote that mimics source so that we can check that the setting of fetch and push URLs.
         Command::new("git")
             .arg("remote")
             .arg("add")
@@ -649,6 +653,12 @@ mod test {
 
         let git_repo = Repository::open(&fixture.sparse_repo_path)?;
         assert!(!git_repo.is_bare());
+
+        // Check `focus.version` gets set
+        assert_eq!(
+            git_repo.config()?.snapshot()?.get_str("focus.version")?,
+            env!("CARGO_PKG_VERSION")
+        );
 
         // Check the remote URLs
         let origin_remote = git_repo.find_remote("origin")?;
