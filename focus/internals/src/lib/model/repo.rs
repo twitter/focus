@@ -26,6 +26,7 @@ use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
+const VERSION_CONFIG_KEY: &str = "focus.version";
 
 /// Models a Git working tree.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -454,7 +455,7 @@ impl Repo {
         }
     }
 
-    /// Creates an outlining tree for ther repository.
+    /// Creates an outlining tree for the repository.
     pub fn create_outlining_tree(&self) -> Result<()> {
         let path = Self::outlining_tree_path(&self.git_dir);
         if path.is_dir() {
@@ -522,5 +523,13 @@ impl Repo {
     /// Get a reference to the repo's git dir.
     pub fn git_dir(&self) -> &PathBuf {
         &self.git_dir
+    }
+
+    /// Write `focus.version` to git config.
+    pub fn write_version_to_git_config(&self) -> Result<()> {
+        self.repo
+            .config()?
+            .set_str(VERSION_CONFIG_KEY, env!("CARGO_PKG_VERSION"))?;
+        Ok(())
     }
 }
