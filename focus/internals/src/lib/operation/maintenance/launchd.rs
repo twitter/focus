@@ -1,5 +1,6 @@
 use super::*;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+use nix::NixPath;
 use plist::{dictionary::Dictionary, Value};
 use std::{io::Write, path::PathBuf};
 use strum::IntoEnumIterator;
@@ -16,6 +17,8 @@ pub struct PlistOpts {
     pub config_key: String,
     pub config_path: Option<String>,
     pub schedule_defaults: Option<CalendarInterval>,
+    /// run maintenance on all tracked repos
+    pub tracked: bool,
 }
 
 impl PlistOpts {
@@ -33,6 +36,7 @@ impl Default for PlistOpts {
             config_key: DEFAULT_CONFIG_KEY.into(),
             config_path: None,
             schedule_defaults: None,
+            tracked: false,
         }
     }
 }
@@ -54,8 +58,14 @@ impl From<ProgramArguments> for Value {
             time_period,
             config_key,
             config_path,
+            tracked,
             schedule_defaults: _,
         }) = args;
+
+        assert!(
+            !git_binary_path.is_empty(),
+            "git_binary_path was empty string"
+        );
 
         let config_key = format!("--config-key={}", config_key);
         let git_binary_path = format!("--git-binary-path={}", git_binary_path.to_str().unwrap());
@@ -72,6 +82,10 @@ impl From<ProgramArguments> for Value {
 
         if let Some(config_path) = config_path.as_deref() {
             args.push(format!("--config-path={}", config_path));
+        }
+
+        if tracked {
+            args.push("--tracked".into());
         }
 
         Value::Array(args.into_iter().map(|a| a.into()).collect())
@@ -315,17 +329,20 @@ impl Launchctl {
 
         debug!("running launchctl {:?}", args);
 
+        let fail_msg = format!("failed to run launchctl {} {}", cmd, target);
+
         let res = Command::new(&self.launchctl_bin)
             .arg(cmd)
             .arg(target)
             .args(rest)
-            .spawn()?
+            .spawn()
+            .context(fail_msg.to_owned())?
             .wait()?;
 
         if !res.success() {
-            let msg = format!("failed to run launchctl {} {}: {}", cmd, target, res);
-            error!("launchctl error: {}", msg);
-            bail!(msg)
+            let fail_msg = format!("launchctl error: {}: result {}", fail_msg, res);
+            error!("{}", fail_msg);
+            bail!(fail_msg)
         }
 
         Ok(())
@@ -366,6 +383,12 @@ impl Launchctl {
 
         Ok(output_path)
     }
+
+    pub fn delete_plist(&self, opts: &PlistOpts) -> Result<()> {
+        let path = self.plist_path(&opts.label());
+        std::fs::remove_file(&path).with_context(|| format!("failed to remove path {:?}", path))?;
+        Ok(())
+    }
 }
 
 impl Default for Launchctl {
@@ -384,16 +407,19 @@ pub struct ScheduleOpts {
     pub time_period: Option<TimePeriod>,
     pub git_path: PathBuf,
     pub focus_path: PathBuf,
-    pub skip_if_running: bool,
+    pub skip_if_already_scheduled: bool,
+    pub tracked: bool,
 }
 
 impl Default for ScheduleOpts {
     fn default() -> Self {
         Self {
             time_period: Default::default(),
-            git_path: Default::default(),
-            focus_path: Default::default(),
-            skip_if_running: true,
+            git_path: DEFAULT_GIT_BINARY_PATH_FOR_PLISTS.into(),
+            focus_path: std::env::current_exe()
+                .expect("could not determine current executable path"),
+            skip_if_already_scheduled: true,
+            tracked: true,
         }
     }
 }
@@ -406,8 +432,20 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
         time_period,
         git_path,
         focus_path,
-        skip_if_running,
+        skip_if_already_scheduled,
+        tracked,
     } = opts;
+
+    assert!(
+        git_path.is_absolute(),
+        "git_path must be absolute: {:?}",
+        git_path
+    );
+    assert!(
+        focus_path.is_absolute(),
+        "focus_path must be absolute: {:?}",
+        focus_path
+    );
 
     let launchctl = Launchctl::default();
 
@@ -419,6 +457,7 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
     let plist_opts = PlistOpts {
         focus_path,
         git_binary_path: git_path,
+        tracked,
         ..Default::default()
     };
 
@@ -433,7 +472,7 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
 
         if launchctl.is_service_loaded(&label)? {
             // the service is already registered and scheduled
-            if skip_if_running {
+            if skip_if_already_scheduled {
                 continue; // and a forced reload hasn't been requested, so check the next one
             } else {
                 launchctl.bootout(&label)?; // otherwise stop the service and unload it
@@ -448,13 +487,14 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
 }
 
 #[tracing::instrument]
-pub fn schedule_disable() -> Result<()> {
+pub fn schedule_disable(delete: bool) -> Result<()> {
     let launchctl = Launchctl::default();
     let time_periods: Vec<TimePeriod> = TimePeriod::iter().collect();
 
     for tp in time_periods {
         let plist_opts = PlistOpts {
             time_period: tp,
+            git_binary_path: DEFAULT_GIT_BINARY_PATH_FOR_PLISTS.into(),
             ..Default::default()
         };
 
@@ -462,6 +502,10 @@ pub fn schedule_disable() -> Result<()> {
 
         if launchctl.is_service_loaded(&label)? {
             launchctl.bootout(&label)?; // otherwise stop the service and unload it
+        }
+
+        if delete {
+            launchctl.delete_plist(&plist_opts)?;
         }
     }
 
@@ -486,6 +530,7 @@ mod tests {
                 minute: Some(12),
                 ..Default::default()
             }),
+            tracked: true,
         }
     }
 

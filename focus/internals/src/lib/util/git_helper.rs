@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use git2;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::path::Path;
@@ -53,6 +54,10 @@ pub fn git_exec_path(git_binary_path: &Path) -> Result<PathBuf> {
 
     let out = OsString::from_vec(output.stdout);
     Ok(PathBuf::from(out).canonicalize()?)
+}
+
+pub fn git_dir(path: &Path) -> Result<PathBuf> {
+    Ok(git2::Repository::open(path)?.path().to_path_buf())
 }
 
 pub fn git_command<S: AsRef<str>>(
@@ -369,6 +374,62 @@ impl FromStr for GitVersion {
                 s
             )),
         }
+    }
+}
+
+pub(crate) trait ConfigExt {
+    fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>>;
+
+    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool>;
+    fn set_str_if_not_set<S: AsRef<str>>(&mut self, key: S, value: S) -> Result<()>;
+
+    fn dump_config(&self, glob: Option<&str>) -> Result<Vec<(String, String)>>;
+}
+
+impl ConfigExt for git2::Config {
+    #[allow(dead_code)]
+    fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>> {
+        let configs = match regexp {
+            Some(s) => self.multivar(name.as_ref(), Some(s.as_ref())),
+            None => self.multivar(name.as_ref(), None),
+        }?;
+
+        let mut values: Vec<String> = Vec::new();
+
+        for config_entry_r in configs.into_iter() {
+            values.push(config_entry_r?.value().unwrap().to_owned());
+        }
+
+        Ok(values)
+    }
+
+    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool> {
+        match self.snapshot()?.get_bytes(key.as_ref()) {
+            Err(e) if e.code() == git2::ErrorCode::NotFound => Ok(false),
+            Err(e) => Err(e.into()),
+            Ok(_) => Ok(true),
+        }
+    }
+
+    fn set_str_if_not_set<S: AsRef<str>>(&mut self, key: S, value: S) -> Result<()> {
+        if !self.is_config_key_set(&key)? {
+            self.set_str(key.as_ref(), value.as_ref())?;
+        }
+        Ok(())
+    }
+
+    fn dump_config(&self, glob: Option<&str>) -> Result<Vec<(String, String)>> {
+        let entries = self.entries(glob)?;
+        let mut result: Vec<(String, String)> = Vec::new();
+
+        for entry in entries.into_iter() {
+            let entry = entry?;
+            match (entry.name(), entry.value()) {
+                (Some(name), Some(value)) => result.push((name.to_owned(), value.to_owned())),
+                _ => continue,
+            }
+        }
+        Ok(result)
     }
 }
 

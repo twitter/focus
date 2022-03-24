@@ -32,9 +32,11 @@ fn exhibit_file(file: &Path, title: &str) -> Result<()> {
 }
 
 // SandboxCommandRunner is a command that captures stdout and stderr into sandbox logs unless other destinations are specified.
+#[derive(Debug, Clone)]
 pub struct SandboxCommand {
     stdout_path: PathBuf,
     stderr_path: PathBuf,
+    git_trace2_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -43,6 +45,7 @@ pub enum SandboxCommandOutput {
     Stdout,
     Stderr,
     Ignore,
+    GitTrace2,
 }
 
 impl SandboxCommand {
@@ -118,11 +121,18 @@ impl SandboxCommand {
             None => output_file("stderr").context("Failed preparing stderr")?,
         };
 
-        command.stdin(stdin).stdout(stdout).stderr(stderr);
+        let (_git_trace2_file, git_trace2_path) = output_file("git_trace2")?;
+
+        command
+            .stdin(stdin)
+            .stdout(stdout)
+            .stderr(stderr)
+            .env("GIT_TRACE2", &git_trace2_path);
 
         Ok(Self {
             stdout_path,
             stderr_path,
+            git_trace2_path,
         })
     }
 
@@ -153,6 +163,12 @@ impl SandboxCommand {
                     self.stderr_path.as_path(),
                 )]
             }
+            SandboxCommandOutput::GitTrace2 => {
+                vec![(
+                    title(SandboxCommandOutput::GitTrace2),
+                    self.git_trace2_path.as_path(),
+                )]
+            }
 
             SandboxCommandOutput::Ignore => {
                 vec![]
@@ -176,6 +192,7 @@ impl SandboxCommand {
         let path = match output {
             SandboxCommandOutput::Stdout => &self.stdout_path,
             SandboxCommandOutput::Stderr => &self.stderr_path,
+            SandboxCommandOutput::GitTrace2 => &self.git_trace2_path,
             _ => bail!("cannot read all outputs into one string"),
         };
 
@@ -188,6 +205,7 @@ impl SandboxCommand {
         let path = match output {
             SandboxCommandOutput::Stdout => &self.stdout_path,
             SandboxCommandOutput::Stderr => &self.stderr_path,
+            SandboxCommandOutput::GitTrace2 => &self.git_trace2_path,
             _ => bail!("cannot read all outputs using one reader"),
         };
 
@@ -233,7 +251,7 @@ impl SandboxCommand {
         tailer.iter().for_each(|t| t.stop());
         debug!(command = %command_description, %status, "Command exited");
         if !status.success() {
-            self.log(output, &description).context("logging output")?;
+            self.log(output, description).context("logging output")?;
             bail!("Command failed: {}", command_description);
         }
 

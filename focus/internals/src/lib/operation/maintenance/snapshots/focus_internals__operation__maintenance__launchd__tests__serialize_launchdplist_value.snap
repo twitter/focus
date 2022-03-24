@@ -1,6 +1,6 @@
 ---
 source: focus/internals/src/lib/operation/maintenance/launchd.rs
-assertion_line: 500
+assertion_line: 523
 expression: v
 ---
 Disabled: false
@@ -13,6 +13,7 @@ ProgramArguments:
   - "--git-binary-path=/usr/local/bin/git"
   - "--time-period=hourly"
   - "--config-path=/path/to/config"
+  - "--tracked"
 StartCalendarInterval:
   - Hour: 0
     Minute: 12
