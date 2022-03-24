@@ -13,7 +13,7 @@ pub fn init_logging() {
     START.call_once(|| {
         // TODO: De-dup this egregious rip-off of `focus_commands::init_logging`.
         let is_tty = termion::is_tty(&std::io::stdout());
-        let nocolor_requested = std::env::var_os("NOCOLOR").is_some(); // see https://no-color.org/
+        let nocolor_requested = std::env::var_os("NO_COLOR").is_some(); // see https://no-color.org/
         let use_color = is_tty && !nocolor_requested;
         tracing_subscriber::registry()
             .with(ErrorLayer::default())

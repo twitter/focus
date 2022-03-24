@@ -2,7 +2,7 @@ pub mod chrome;
 pub mod focus;
 pub mod git_trace2;
 
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 pub use chrome::Trace;
 pub use focus::{init_tracing, Guard, TracingOpts};
@@ -33,14 +33,16 @@ pub(in crate::tracing) mod testing {
     }
 }
 
-/// returns the default system specific log location
-#[cfg(target_os = "macos")]
-pub fn log_dir() -> Result<PathBuf> {
-    match dirs::home_dir().map(|pb| pb.join("Library/Logs/focus")) {
+
+fn home_relative_path<P: AsRef<Path>>(p: P) -> Result<PathBuf> {
+    match dirs::home_dir().map(|pb| pb.join(p.as_ref())) {
         Some(path) => Ok(path),
         None => Err(anyhow::anyhow!("HOME not defined")),
     }
 }
+
+#[cfg(target_os = "macos")]
+const DEFAULT_LOG_DIR: &str = "Library/Logs/focus";
 
 #[cfg(not(any(
     target_os = "windows",
@@ -48,8 +50,9 @@ pub fn log_dir() -> Result<PathBuf> {
     target_os = "ios",
     target_arch = "wasm32"
 )))]
+const DEFAULT_LOG_DIR: &str = ".local/focus/log";
+
+/// returns the default system specific log location
 pub fn log_dir() -> Result<PathBuf> {
-    dirs::home_dir()
-        .ok_or(anyhow::anyhow!("HOME not defined"))
-        .map(|pb| pb.join(".local/focus/log"))
+    home_relative_path(DEFAULT_LOG_DIR)
 }

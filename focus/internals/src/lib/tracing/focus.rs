@@ -1,8 +1,10 @@
 // module to collect tracing setup and config for the focus app itself
 
-use std::io;
+use std::fs::OpenOptions;
+use std::io::{self, BufWriter};
+use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tracing::dispatcher::DefaultGuard;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_error::ErrorLayer;
@@ -21,27 +23,43 @@ pub struct Guard {
     _inner: Vec<GuardWrapper>,
 }
 
-impl From<WorkerGuard> for Guard {
-    fn from(wg: WorkerGuard) -> Self {
-        Guard {
-            _inner: vec![GuardWrapper::WorkerGuard(wg)],
-        }
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct TracingOpts {
     pub is_tty: bool,
-    pub nocolor_requested: bool,
+    pub no_color: bool,
+    pub log_dir: Option<PathBuf>,
 }
+
+const LOG_FILE_NAME: &str = "focus.log";
 
 pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
     let TracingOpts {
         is_tty,
-        nocolor_requested,
+        no_color,
+        log_dir,
     } = opts;
-    let use_color = is_tty && !nocolor_requested;
-    let (non_blocking, guard) = tracing_appender::non_blocking(io::stderr());
+
+    let use_color = is_tty && !no_color;
+
+    let log_dir = match log_dir {
+        Some(dir) => dir,
+        None => super::log_dir().context("could not determine default log dir")?,
+    };
+
+    std::fs::create_dir_all(&log_dir)?;
+
+    let log_path = log_dir.join(LOG_FILE_NAME);
+
+    // TODO: figure out log file rotation
+    let (log_file_writer, log_file_guard) = tracing_appender::non_blocking(BufWriter::new(
+        OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&log_path)
+            .context("failed to open log file")?,
+    ));
+
+    let (stderr_writer, stderr_guard) = tracing_appender::non_blocking(io::stderr());
 
     tracing_subscriber::registry()
         .with(ErrorLayer::default())
@@ -52,10 +70,22 @@ pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
             tracing_subscriber::fmt::layer()
                 .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
                 .with_target(false)
-                .with_writer(non_blocking)
+                .with_writer(stderr_writer)
                 .with_ansi(use_color),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_target(false)
+                .with_writer(log_file_writer),
         )
         .try_init()?;
 
-    Ok(Guard::from(guard))
+    Ok(Guard {
+        _inner: vec![
+            GuardWrapper::WorkerGuard(stderr_guard),
+            GuardWrapper::WorkerGuard(log_file_guard),
+        ],
+    })
 }

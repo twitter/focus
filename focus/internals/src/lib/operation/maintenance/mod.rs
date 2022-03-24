@@ -2,14 +2,23 @@ pub mod launchd;
 
 use std::{
     ffi::OsString,
+    fmt::Debug,
     io::{BufRead, Cursor},
     ops::Deref,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
+    sync::Arc,
 };
 
-use crate::util::git_helper;
-use anyhow::{Context, Result};
+use crate::{
+    app::App,
+    tracker::Tracker,
+    util::{
+        git_helper::{self, ConfigExt},
+        lock_file::LockFile,
+    },
+};
+use anyhow::{bail, Context, Result};
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
@@ -48,7 +57,7 @@ const CONFIG_DEFAULTS: &[(&str, &str)] = &[
     ("maintenance.auto", "false"),
     ("maintenance.strategy", "incremental"),
     ("maintenance.gc.enabled", "false"),
-    ("maintenance.commit-graph.enabled", "true"),
+    ("maintenance.commit-graph.enabled", "false"),
     ("maintenance.prefetch.enabled", "true"),
     ("maintenance.loose-objects.enabled", "true"),
     ("maintenance.incremental-repack.enabled", "true"),
@@ -56,7 +65,6 @@ const CONFIG_DEFAULTS: &[(&str, &str)] = &[
 ];
 
 /// Configures the repo at `path` to have git-maintenance run the standard jobs
-#[allow(dead_code)]
 fn set_default_repo_config(config: &mut git2::Config) -> Result<()> {
     let mut config = config.open_level(git2::ConfigLevel::Local)?;
 
@@ -67,6 +75,14 @@ fn set_default_repo_config(config: &mut git2::Config) -> Result<()> {
     Ok(())
 }
 
+// entry point from main
+#[tracing::instrument]
+pub fn set_default_git_maintenance_config(path: &Path) -> Result<()> {
+    let repo = git2::Repository::open(path)?;
+    let mut config = repo.config()?;
+    set_default_repo_config(&mut config)
+}
+
 #[derive(Debug, Clone)]
 pub struct RegisterOpts {
     /// The repo path to register for maintenance. Default config values will be set
@@ -75,7 +91,7 @@ pub struct RegisterOpts {
     /// the global config key.
     pub repo_path: Option<PathBuf>,
     /// The config key to add `repo_path` to in the global config.
-    pub config_key: String,
+    pub git_config_key: String,
     /// the path to use for the global git config. If None then use libgit2's
     /// Config::
     pub global_config_path: Option<PathBuf>,
@@ -85,7 +101,7 @@ impl Default for RegisterOpts {
     fn default() -> Self {
         Self {
             repo_path: None,
-            config_key: DEFAULT_CONFIG_KEY.to_owned(),
+            git_config_key: DEFAULT_CONFIG_KEY.to_owned(),
             global_config_path: None,
         }
     }
@@ -96,7 +112,7 @@ pub fn register(opts: RegisterOpts) -> Result<()> {
     debug!(?opts, "maintenance.register");
     let RegisterOpts {
         repo_path,
-        config_key,
+        git_config_key: config_key,
         global_config_path,
     } = opts;
 
@@ -151,20 +167,39 @@ fn does_repo_exist(path: &Path) -> Result<bool> {
     }
 }
 
+#[derive(Debug)]
+enum MaintResult {
+    Success(Output),
+    LockFailed,
+}
+
 pub struct Runner {
     pub git_binary_path: PathBuf,
     /// the config key in the global git config that contains the list of paths to check.
     /// By default this is "maintenance.repo", a multi value key.
     pub config_key: String,
     pub config: git2::Config,
+    /// if true, use the focus Tracker to discover repos
+    pub tracked_repos: bool,
+    pub app: Arc<App>,
+}
+
+impl Debug for Runner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Runner")
+            .field("git_binary_path", &self.git_binary_path)
+            .field("config_key", &self.config_key)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Runner {
-    pub fn new(opts: RunOptions) -> Result<Runner> {
+    pub fn new(opts: RunOptions, app: Arc<App>) -> Result<Runner> {
         let RunOptions {
             git_binary_path,
-            config_key,
-            config_path,
+            git_config_key: config_key,
+            git_config_path: config_path,
+            tracked,
         } = opts;
 
         let git_binary_path = if git_binary_path == Path::new(DEFAULT_GIT_BINARY_PATH) {
@@ -177,42 +212,72 @@ impl Runner {
             git_binary_path,
             config_key,
             config: use_config_path_or_default_global(config_path.as_deref())?,
+            tracked_repos: tracked,
+            app,
         })
     }
 
-    fn run_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<Output> {
+    fn hold_lock_for(path: &Path) -> Result<LockFile> {
+        let git_dir = git_helper::git_dir(path)?;
+        let focus_dir = git_dir.join(".focus");
+        std::fs::create_dir_all(&focus_dir)?;
+        let lock_path = focus_dir.join("maint.lock");
+        LockFile::new(&lock_path)
+    }
+
+    #[tracing::instrument]
+    fn run_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
+        let _lock = match Self::hold_lock_for(repo_path) {
+            Ok(lock) => lock,
+            Err(e) => {
+                error!(?e, "failed to acquire lock");
+                return Ok(MaintResult::LockFailed);
+            }
+        };
+
         let exec_path: PathBuf = git_helper::git_exec_path(&self.git_binary_path)?;
 
         // TODO: this needs to log and capture output for debugging if necessary
-        Command::new(&self.git_binary_path)
-            .arg({
-                let mut s = OsString::new();
-                s.push("--exec-path=");
-                s.push(exec_path);
-                s
-            })
-            .arg("maintenance")
-            .arg("run")
-            .arg(format!("--schedule={}", time_period.name()))
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .current_dir(repo_path)
-            .output()
-            .with_context(|| {
-                format!(
-                    "running maintenance failed for {}",
-                    repo_path.to_string_lossy()
-                )
-            })
+        Ok(MaintResult::Success(
+            Command::new(&self.git_binary_path)
+                .arg({
+                    let mut s = OsString::new();
+                    s.push("--exec-path=");
+                    s.push(exec_path);
+                    s
+                })
+                .arg("maintenance")
+                .arg("run")
+                .arg(format!("--schedule={}", time_period.name()))
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .current_dir(repo_path)
+                .output()
+                .with_context(|| {
+                    format!(
+                        "running maintenance failed for {}",
+                        repo_path.to_string_lossy()
+                    )
+                })?,
+        ))
     }
 
-    fn handle_missing_config_entry<S: AsRef<str>>(&mut self, bad_entry: S) -> Result<()> {
+    #[tracing::instrument]
+    fn handle_missing_config_entry(&mut self, bad_entry: &str) -> Result<()> {
         self.config
             .remove_multivar(&self.config_key, &regex_escape(bad_entry))?;
         Ok(())
     }
 
-    fn get_repo_paths(&self) -> Result<Vec<String>> {
+    fn run_tracked_repo_repair(&self) -> Result<()> {
+        if !self.tracked_repos {
+            return Ok(());
+        }
+        let tracker = Tracker::default();
+        tracker.repair(self.app.clone())
+    }
+
+    fn get_repo_paths_from_config(&self) -> Result<Vec<PathBuf>> {
         let entries = self.config.multivar(&self.config_key, None)?;
         let vec_entries: Vec<git2::ConfigEntry> = entries
             .into_iter()
@@ -221,15 +286,38 @@ impl Runner {
         let paths = vec_entries
             .into_iter()
             .filter_map(|v| v.value().map(|x| x.to_owned()))
+            .map(PathBuf::from)
             .collect();
 
         Ok(paths)
     }
 
+    fn get_repo_paths_from_tracker(&self) -> Result<Vec<PathBuf>> {
+        let tracker = Tracker::default();
+        let snapshot = tracker.scan().context("scanning repositories")?;
+
+        let repos: Vec<PathBuf> = snapshot
+            .repos()
+            .iter()
+            .map(|repo| repo.location().to_path_buf())
+            .collect();
+
+        Ok(repos)
+    }
+
+    fn get_repo_paths(&self) -> Result<Vec<PathBuf>> {
+        if self.tracked_repos {
+            self.get_repo_paths_from_tracker()
+        } else {
+            self.get_repo_paths_from_config()
+        }
+    }
+
     fn run_in_path(&self, time_period: TimePeriod, path: &Path) -> Result<()> {
         info!(?time_period, ?path, "running tasks");
+        set_default_git_maintenance_config(path)?;
         match self.run_maint(time_period, path) {
-            Ok(output) => {
+            Ok(MaintResult::Success(output)) => {
                 let status = &output.status;
                 if status.success() {
                     debug!(?time_period, ?path, "completed maintenance",)
@@ -249,6 +337,7 @@ impl Runner {
                     }
                 }
             }
+            Ok(MaintResult::LockFailed) => warn!(?path, "failed to acquire lock"),
             Err(e) => {
                 warn!(?path, ?e, "failed runing git-maintenance");
             }
@@ -256,16 +345,26 @@ impl Runner {
         Ok(())
     }
 
+    #[tracing::instrument]
     pub fn run(&mut self, time_period: TimePeriod) -> Result<()> {
+        if self.tracked_repos {
+            self.run_tracked_repo_repair()?;
+        }
         let repo_paths = self.get_repo_paths()?;
 
         for path in repo_paths {
-            let pb: &Path = path.as_ref();
-            match does_repo_exist(pb) {
-                Ok(true) => self.run_in_path(time_period, pb)?,
-                Ok(false) => self.handle_missing_config_entry(&path)?,
+            let p: &Path = &path;
+            match does_repo_exist(p) {
+                Ok(true) => self.run_in_path(time_period, p)?,
+                Ok(false) if self.tracked_repos => {
+                    info!(path=?p, "repo at returned path did not exist, continuing");
+                }
+                Ok(false) => self.handle_missing_config_entry(match path.to_str() {
+                    Some(s) => s,
+                    None => bail!("path contains invalid UTF-8: {:?}", path.to_string_lossy()),
+                })?,
                 Err(e) => {
-                    error!(path = ?pb, ?e, "error in determining if path is a repo");
+                    error!(?path, ?e, "error in determining if path is a repo");
                 }
             }
         }
@@ -278,8 +377,9 @@ impl Runner {
 #[derive(Debug, Clone)]
 pub struct RunOptions {
     pub git_binary_path: PathBuf,
-    pub config_key: String,
-    pub config_path: Option<PathBuf>,
+    pub git_config_key: String,
+    pub git_config_path: Option<PathBuf>,
+    pub tracked: bool,
 }
 
 pub const DEFAULT_GIT_BINARY_PATH: &str = "git";
@@ -288,56 +388,10 @@ impl Default for RunOptions {
     fn default() -> Self {
         Self {
             git_binary_path: DEFAULT_GIT_BINARY_PATH.into(),
-            config_key: DEFAULT_CONFIG_KEY.to_owned(),
-            config_path: None,
+            git_config_key: DEFAULT_CONFIG_KEY.to_owned(),
+            git_config_path: None,
+            tracked: false,
         }
-    }
-}
-
-impl TryFrom<RunOptions> for Runner {
-    type Error = anyhow::Error;
-    fn try_from(opts: RunOptions) -> Result<Self> {
-        Runner::new(opts)
-    }
-}
-
-trait ConfigExt {
-    fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>>;
-
-    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool>;
-    fn set_str_if_not_set<S: AsRef<str>>(&mut self, key: S, value: S) -> Result<()>;
-}
-
-impl ConfigExt for git2::Config {
-    #[allow(dead_code)]
-    fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>> {
-        let configs = match regexp {
-            Some(s) => self.multivar(name.as_ref(), Some(s.as_ref())),
-            None => self.multivar(name.as_ref(), None),
-        }?;
-
-        let mut values: Vec<String> = Vec::new();
-
-        for config_entry_r in configs.into_iter() {
-            values.push(config_entry_r?.value().unwrap().to_owned());
-        }
-
-        Ok(values)
-    }
-
-    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool> {
-        match self.snapshot()?.get_bytes(key.as_ref()) {
-            Err(e) if e.code() == git2::ErrorCode::NotFound => Ok(false),
-            Err(e) => Err(e.into()),
-            Ok(_) => Ok(true),
-        }
-    }
-
-    fn set_str_if_not_set<S: AsRef<str>>(&mut self, key: S, value: S) -> Result<()> {
-        if !self.is_config_key_set(&key)? {
-            self.set_str(key.as_ref(), value.as_ref())?;
-        }
-        Ok(())
     }
 }
 
@@ -345,19 +399,10 @@ pub(crate) fn regex_escape<S: AsRef<str>>(s: S) -> String {
     format!("^{}$", regex::escape(s.as_ref()))
 }
 
-pub fn run(cli: RunOptions, time_period: TimePeriod) -> Result<()> {
-    Runner::try_from(cli)?.run(time_period)?;
+#[tracing::instrument]
+pub fn run(cli: RunOptions, time_period: TimePeriod, app: Arc<App>) -> Result<()> {
+    Runner::new(cli, app)?.run(time_period)?;
     Ok(())
-}
-
-pub fn write_plist(
-    opts: PlistOpts,
-    _time_period: TimePeriod,
-    _launch_agents_dir: &Path,
-) -> Result<()> {
-    let mut buf: Vec<u8> = Vec::new();
-    launchd::write_plist(&mut buf, opts)?;
-    todo!("implement writing out to LaunchAgents directory")
 }
 
 #[cfg(test)]
@@ -370,6 +415,7 @@ mod tests {
     struct ConfigFixture {
         pub tempdir: TempDir,
         pub config_path: PathBuf,
+        pub app: Arc<App>,
     }
 
     impl ConfigFixture {
@@ -382,6 +428,7 @@ mod tests {
             Ok(ConfigFixture {
                 tempdir,
                 config_path: path,
+                app: Arc::new(App::new(true)?),
             })
         }
 
@@ -402,10 +449,13 @@ mod tests {
             config.set_multivar(DEFAULT_CONFIG_KEY, "^/path/to/foo$", "/path/to/foo")?;
             config.set_multivar(DEFAULT_CONFIG_KEY, "^/path/to/bar$", "/path/to/bar")?;
 
-            let mut maint = Runner::new(RunOptions {
-                config_path: Some(fix.config_path.to_owned()),
-                ..Default::default()
-            })?;
+            let mut maint = Runner::new(
+                RunOptions {
+                    git_config_path: Some(fix.config_path.to_owned()),
+                    ..Default::default()
+                },
+                fix.app.clone(),
+            )?;
 
             maint.handle_missing_config_entry("/path/to/foo")?;
         }
@@ -430,13 +480,19 @@ mod tests {
         }
 
         {
-            let maint = Runner::new(RunOptions {
-                config_path: Some(fix.config_path),
-                ..Default::default()
-            })?;
+            let maint = Runner::new(
+                RunOptions {
+                    git_config_path: Some(fix.config_path),
+                    ..Default::default()
+                },
+                fix.app,
+            )?;
 
             let paths = maint.get_repo_paths()?;
-            assert_eq!(paths, vec!["/path/to/foo", "/path/to/bar"])
+            assert_eq!(
+                paths,
+                vec![PathBuf::from("/path/to/foo"), PathBuf::from("/path/to/bar")]
+            )
         }
 
         Ok(())
@@ -480,11 +536,12 @@ mod tests {
 
         let opts = RunOptions {
             git_binary_path: git_binary_path.into(),
-            config_key: config_key.into(),
-            config_path: Some(config_path),
+            git_config_key: config_key.into(),
+            git_config_path: Some(config_path.into()),
+            tracked: false,
         };
 
-        let runner = Runner::new(opts)?;
+        let runner = Runner::new(opts, fix.app)?;
 
         assert_eq!(runner.git_binary_path, PathBuf::from(git_binary_path));
         assert_eq!(runner.config_key, config_key.to_string());

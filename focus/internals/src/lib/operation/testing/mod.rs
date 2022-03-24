@@ -221,6 +221,7 @@ pub(in crate::operation) mod integration {
         pub coordinates: Vec<String>,
         pub layers: Vec<String>,
         pub app: Arc<App>,
+        pub preserve: bool,
     }
 
     impl RepoPairFixture {
@@ -248,7 +249,21 @@ pub(in crate::operation) mod integration {
                 coordinates,
                 layers,
                 app,
+                preserve: false,
             })
+        }
+
+        fn preserve_dirs(&mut self) -> Result<()> {
+            let path = self.dir.path();
+            let parent = path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("failed to get parent path"))?;
+            let preserved = parent.join(format!("focus-test-{}", chrono::Utc::now().to_rfc3339()));
+            match std::fs::rename(path, &preserved) {
+                Ok(_) => info!("preserved test dirs to {:?}", &preserved),
+                Err(_) => warn!("failed to preserve test directories"),
+            }
+            Ok(())
         }
 
         #[allow(dead_code)]
@@ -364,6 +379,12 @@ pub(in crate::operation) mod integration {
     impl Drop for RepoPairFixture {
         fn drop(&mut self) {
             self.stop_bazel();
+            if self.preserve {
+                match self.preserve_dirs() {
+                    Ok(_) => (),
+                    Err(_) => (),
+                }
+            }
         }
     }
 }

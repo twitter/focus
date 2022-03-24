@@ -505,7 +505,7 @@ fn copy_local_branches(
                 }
             },
             Err(_) => {
-                error!("Could not create branch {} in the sparse repo because the associated commit ({}) does not exist!", 
+                error!("Could not create branch {} in the sparse repo because the associated commit ({}) does not exist!",
                     name, dense_commit.id());
             }
         }

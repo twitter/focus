@@ -7,18 +7,14 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.45"
 chrono = "0.4"
-clap = { version = "3.1.0", features = ["derive"] }
+clap = { version = "3.1.0", features = ["derive", "env", "wrap_help"] }
 dirs = "4.0.0"
-env_logger = "0.9.0"
 focus-internals = { path = "../internals" }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
     "vendored-libgit2",
 ] }
 lazy_static = "1.4.0"
 nix = "0.23.0"
-pretty-hex = "0.2.1"
-prost = "0.9.0"
-protobuf = "2.25.2"
 rand = "0.8.4"
 rayon = "1.5.1"
 regex = "1.5.4"

@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use tracing::{error, warn};
 
@@ -10,81 +11,92 @@ pub struct LockFile {
 }
 
 impl LockFile {
-    // Try to obtain an exclusively locked file at the given path. It must not exist.
+    // Try to obtain an exclusively locked file at the given path
     pub fn new(path: &Path) -> Result<Self> {
         use std::os::unix::prelude::*;
 
-        if std::fs::metadata(path).is_ok() {
-            error!("Another process is holding a lock on {}", path.display());
-            error!(
-                "The lock is held by {}",
-                std::fs::read_to_string(path).context("Failed reading lockfile")?
-            );
-            bail!("Another process holds a lock");
-        }
+        let res = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path);
 
-        match File::create(path) {
-            Ok(file) => {
-                Self::write_process_description(&file)?;
-                let fd = file.into_raw_fd();
-
-                if let Err(e) = Self::acqrel_lock(fd, true) {
+        match res {
+            Ok(mut file) => {
+                // acquire the exclusive lock
+                if let Err(e) = Self::acqrel_lock(file.as_raw_fd(), true) {
+                    error!("Another process is holding a lock on {}", path.display());
+                    error!(
+                        "The lock is held by {}",
+                        std::fs::read_to_string(path).context("Failed reading lockfile")?
+                    );
                     bail!(
                         "Acquiring exclusive advisory lock on {} failed: {}",
                         path.display(),
                         e
                     );
                 }
+
+                // if we acquired the lock, write our process info to the lock
+                Self::write_process_description(&mut file)?;
+
                 Ok(Self {
                     path: path.to_owned(),
-                    fd,
+                    fd: file.into_raw_fd(),
                 })
             }
             Err(e) => {
-                bail!("Creating lock file {} failed: {}", path.display(), e);
+                bail!("Creating lock file {} failed: {:?}", path.display(), e);
             }
         }
     }
 
-    fn write_process_description(file: &File) -> Result<()> {
-        let mut buffered_writer = BufWriter::new(file);
-        writeln!(
-            buffered_writer,
-            "PID {} started by {} on host {}",
-            std::process::id(),
-            whoami::username(),
-            whoami::hostname(),
-        )?;
-        buffered_writer.flush()?;
+    // we must own the exclusive lock before writing the file!
+    fn write_process_description(file: &mut File) -> Result<()> {
+        // truncate the file
+        file.seek(SeekFrom::Start(0))?;
+        file.set_len(0)?;
+        {
+            let fp: File = file.try_clone()?;
+            let mut buffered_writer = BufWriter::new(fp);
+            writeln!(
+                buffered_writer,
+                "PID {} started by {} on host {}",
+                std::process::id(),
+                whoami::username(),
+                whoami::hostname(),
+            )?;
+            buffered_writer.flush()?;
+        }
+
         file.sync_all()?;
 
         Ok(())
     }
 
-    fn acqrel_lock(fd: i32, lock: bool) -> Result<()> {
+    fn acqrel_lock(fd: RawFd, lock: bool) -> Result<()> {
         use nix::*;
 
-        let mut fls: libc::flock = unsafe { core::mem::zeroed() };
-        if lock {
-            fls.l_type = libc::F_WRLCK as libc::c_short;
+        let op = if lock {
+            libc::LOCK_EX | libc::LOCK_NB
         } else {
-            fls.l_type = libc::F_UNLCK as libc::c_short;
-        }
-        fls.l_whence = libc::SEEK_SET as libc::c_short;
-        fls.l_start = 0;
-        fls.l_len = 0;
-        fls.l_pid = unistd::getpid().as_raw();
+            libc::LOCK_UN
+        };
 
-        if let Err(e) = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETLKW(&fls)) {
-            bail!("fnctl error: {}", e);
+        let ret = unsafe { libc::flock(fd, op) };
+        if ret < 0 {
+            bail!(std::io::Error::last_os_error())
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 }
 
 impl Drop for LockFile {
     fn drop(&mut self) {
+        if let Err(e) = std::fs::remove_file(self.path.as_path()) {
+            warn!(?self.path, ?e, "Removing lock file failed");
+        }
         if let Err(e) = Self::acqrel_lock(self.fd, false) {
             warn!(
                 ?self.path,
@@ -92,14 +104,13 @@ impl Drop for LockFile {
                 "Releasing advisory lock on file failed",
             );
         }
-        if let Err(e) = std::fs::remove_file(self.path.as_path()) {
-            warn!("Removing lock file {} failed: {}", self.path.display(), e);
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::testing;
+
     use super::*;
     use anyhow::Result;
     use std::cell::Cell;
@@ -107,6 +118,7 @@ mod tests {
 
     #[test]
     fn creating_a_lock() -> Result<()> {
+        testing::init_logging();
         let dir = tempdir()?;
         let path = dir.path().join("lockfile");
 
@@ -117,6 +129,7 @@ mod tests {
 
     #[test]
     fn failing_to_create_a_duplicate_lock() -> Result<()> {
+        testing::init_logging();
         let dir = tempdir()?;
         let path = dir.path().join("lockfile");
 
@@ -127,7 +140,46 @@ mod tests {
     }
 
     #[test]
+    fn lock_should_be_cleaned_up_after_drop() -> Result<()> {
+        testing::init_logging();
+        let dir = tempdir()?;
+        let path = dir.path().join("lockfile");
+
+        {
+            let _a = LockFile::new(&path).expect("should have acquired lock");
+        }
+
+        assert!(!path.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn lock_should_contain_process_info() -> Result<()> {
+        testing::init_logging();
+        let dir = tempdir()?;
+        let path = dir.path().join("lockfile");
+
+        let _a = LockFile::new(&path).expect("should have acquired lock");
+
+        let content = std::fs::read_to_string(&path).context("Failed reading lockfile")?;
+
+        let content = content.trim();
+
+        let expect = format!(
+            "PID {} started by {} on host {}",
+            std::process::id(),
+            whoami::username(),
+            whoami::hostname(),
+        );
+
+        assert_eq!(expect.as_str(), content);
+
+        Ok(())
+    }
+
+    #[test]
     fn failing_to_create_a_lock_in_an_inextant_directory() -> Result<()> {
+        testing::init_logging();
         let path: Cell<Option<PathBuf>> = Cell::new(None);
         {
             let dir = tempdir()?;
