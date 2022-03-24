@@ -27,6 +27,7 @@ use uuid::Uuid;
 const SYNC_REF_NAME: &str = "refs/focus/sync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
 const VERSION_CONFIG_KEY: &str = "focus.version";
+const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
 
 /// Models a Git working tree.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -525,11 +526,14 @@ impl Repo {
         &self.git_dir
     }
 
-    /// Write `focus.version` to git config.
-    pub fn write_version_to_git_config(&self) -> Result<()> {
+    /// Write git config to support gitstats instrumentation.
+    /// This sets `focus.version` and `twitter.statsenabled`
+    pub fn write_git_config_to_support_instrumentation(&self) -> Result<()> {
         self.repo
             .config()?
             .set_str(VERSION_CONFIG_KEY, env!("CARGO_PKG_VERSION"))?;
+
+        self.repo.config()?.set_bool(GITSTATS_CONFIG_KEY, true)?;
         Ok(())
     }
 }
