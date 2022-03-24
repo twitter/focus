@@ -234,9 +234,9 @@ fn set_up_sparse_repo(
 
     repo.working_tree().unwrap().write_sync_point_ref()?;
 
-    info!("Writing focus version to git-config");
-    repo.write_version_to_git_config()
-        .context("Could not set focus.version in sparse repo")?;
+    info!("Writing git config to support instrumentation");
+    repo.write_git_config_to_support_instrumentation()
+        .context("Could not write git config to support instrumentation")?;
 
     set_up_bazel_preflight_script(sparse_repo_path)?;
 
@@ -659,6 +659,12 @@ mod test {
             git_repo.config()?.snapshot()?.get_str("focus.version")?,
             env!("CARGO_PKG_VERSION")
         );
+
+        // Check `twitter.statsenabled` gets set
+        assert!(git_repo
+            .config()?
+            .snapshot()?
+            .get_bool("twitter.statsenabled")?);
 
         // Check the remote URLs
         let origin_remote = git_repo.find_remote("origin")?;
