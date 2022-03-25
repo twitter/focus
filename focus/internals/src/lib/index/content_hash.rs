@@ -108,10 +108,12 @@ pub fn content_hash_dependency_key(
         }
 
         DependencyKey::BazelPackage {
-            external_repository: Some(_external_package),
+            external_repository: Some(_),
             path: _,
         } => {
-            todo!("establish dependency for path in external package")
+            // Nothing to do. The package in question will already have
+            // established a dependency on the `WORKSPACE` file, which uniquely
+            // identifies any external packages.
         }
 
         DependencyKey::BazelBuildFile(label) => {
@@ -162,7 +164,9 @@ pub fn content_hash_dependency_key(
                     path_components: _,
                     target_name: _,
                 } => {
-                    todo!("Implement hashing an external repository BUILD file");
+                    // Nothing to do. The package in question will already have
+                    // established a dependency on the `WORKSPACE` file, which
+                    // uniquely identifies any external packages.
                 }
             }
         }
