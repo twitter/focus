@@ -370,15 +370,17 @@ sh_binary(
         let head_oid = fix.commit_all("Wrote files")?;
 
         let odb = HashMapOdb::new();
-        let repo = fix.repo()?;
-        let head_commit = repo.find_commit(head_oid)?;
-        let head_tree = head_commit.tree()?;
-        let ctx = HashContext {
-            repo: &repo,
-            head_tree: &head_tree,
+        let files_to_materialize = {
+            let repo = fix.repo()?;
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let ctx = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            get_files_to_materialize(&ctx, &odb, hashset! { "//package1:foo".parse()? })?
         };
-        let files_to_materialize =
-            get_files_to_materialize(&ctx, &odb, hashset! { "//package1:foo".parse()? })?;
         // Confirm that the object for package1 is not yet in the database.
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
@@ -451,6 +453,7 @@ sh_binary(
         let ctx = HashContext {
             repo: &repo,
             head_tree: &head_tree,
+            caches: Default::default(),
         };
         update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
         let files_to_materialize =
@@ -514,6 +517,7 @@ New contents
 "#,
         )?;
         let head_oid = fix.commit_all("Wrote files")?;
+        let repo = fix.repo()?;
 
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
@@ -526,17 +530,23 @@ New contents
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
 
-        let odb = HashMapOdb::new();
-        let repo = fix.repo()?;
-        let head_commit = repo.find_commit(head_oid)?;
-        let head_tree = head_commit.tree()?;
-        let hash_context = HashContext {
-            repo: &repo,
-            head_tree: &head_tree,
+        let (odb, files_to_materialize) = {
+            let odb = HashMapOdb::new();
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let hash_context = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
+            let files_to_materialize = get_files_to_materialize(
+                &hash_context,
+                &odb,
+                hashset! { "//package1:foo".parse()? },
+            )?;
+            (odb, files_to_materialize)
         };
-        update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
-        let files_to_materialize =
-            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
             paths: {
@@ -564,14 +574,16 @@ def my_macro_inner(name):
 "#,
             "update macro.bzl",
         )?;
-        let head_commit = repo.find_commit(head_oid)?;
-        let head_tree = head_commit.tree()?;
-        let hash_context = HashContext {
-            repo: &repo,
-            head_tree: &head_tree,
+        let files_to_materialize = {
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let hash_context = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?
         };
-        let files_to_materialize =
-            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
             keys: {
@@ -589,9 +601,17 @@ def my_macro_inner(name):
         "###);
 
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
-        update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
-        let files_to_materialize =
-            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?;
+        let files_to_materialize = {
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let hash_context = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
+            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?
+        };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
             paths: {

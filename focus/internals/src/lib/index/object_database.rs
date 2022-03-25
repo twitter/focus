@@ -206,6 +206,7 @@ mod tests {
         let ctx = HashContext {
             repo: &repo,
             head_tree: &head_tree,
+            caches: Default::default(),
         };
         let key = DependencyKey::BazelPackage {
             external_repository: None,
