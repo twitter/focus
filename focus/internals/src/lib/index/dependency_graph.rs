@@ -391,7 +391,7 @@ sh_binary(
                         path: "package1",
                     },
                     ContentHash(
-                        88d4567faed770b53d5c0753ca29c9a40fbd07d1,
+                        11d7b2748d158c66aef9f0c51be3a34e70cfa2c8,
                     ),
                 ),
             },
@@ -593,7 +593,7 @@ def my_macro_inner(name):
                         path: "package1",
                     },
                     ContentHash(
-                        332bd4323816e934bde60d6fd861c7a1e76a03a3,
+                        cf2dfad9daf205271ad02bfb1924133e581328e4,
                     ),
                 ),
             },
@@ -617,6 +617,108 @@ def my_macro_inner(name):
             paths: {
                 "package1",
                 "package3",
+            },
+        }
+        "###);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_dependency() -> anyhow::Result<()> {
+        init_logging();
+
+        let temp = tempfile::tempdir()?;
+        let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
+
+        write_files(
+            &fix,
+            r#"
+file: WORKSPACE
+load("//macro:macro.bzl", "some_macro")
+some_macro()
+
+file: package1/foo.sh
+
+file: package1/BUILD
+sh_binary(
+    name = "foo",
+    srcs = ["foo.sh"],
+    tags = ["bazel-compatible"],
+)
+
+file: macro/BUILD
+
+file: macro/macro.bzl
+def some_macro():
+    pass
+"#,
+        )?;
+        let head_oid = fix.commit_all("Wrote files")?;
+        let repo = fix.repo()?;
+
+        let app = Arc::new(App::new(false)?);
+        let cache_dir = tempfile::tempdir()?;
+        let resolver = BazelResolver::new(cache_dir.path());
+        let coordinate_set = CoordinateSet::from(hashset! {"bazel://package1:foo".try_into()?});
+        let request = ResolutionRequest {
+            repo: fix.path().to_path_buf(),
+            coordinate_set,
+        };
+        let cache_options = CacheOptions::default();
+        let resolve_result = resolver.resolve(&request, &cache_options, app)?;
+
+        let odb = HashMapOdb::new();
+        let files_to_materialize = {
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let ctx = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
+            get_files_to_materialize(&ctx, &odb, hashset! {"//package1:foo".parse()?})?
+        };
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        Ok {
+            paths: {
+                "package1",
+            },
+        }
+        "###);
+
+        let files_to_materialize = {
+            let head_oid = fix.write_and_commit_file(
+                "macro/macro.bzl",
+                r#"
+def some_macro():
+    # touch this file
+    pass
+"#,
+                "update macro.bzl",
+            )?;
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let hash_context = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?
+        };
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        MissingKeys {
+            keys: {
+                (
+                    BazelPackage {
+                        external_repository: None,
+                        path: "package1",
+                    },
+                    ContentHash(
+                        871239f642ec8245e2cfc0a0feb40f00802540d5,
+                    ),
+                ),
             },
         }
         "###);
