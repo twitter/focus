@@ -2,7 +2,7 @@ use anyhow::Context;
 use tracing::warn;
 
 use super::content_hash::HashContext;
-use super::{ContentHash, ContentHashable, DependencyKey, DependencyValue};
+use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 
 /// A persistent key-value cache mapping the hashes of [`super::DependencyKey`]s
 /// to [`DependencyValue`]s.
@@ -25,6 +25,8 @@ pub trait ObjectDatabase {
 
 #[cfg(test)]
 pub mod testing {
+    use crate::index::content_hash_dependency_key;
+
     use super::*;
 
     use std::collections::HashMap;
@@ -55,7 +57,7 @@ pub mod testing {
             ctx: &HashContext,
             key: &DependencyKey,
         ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
-            let hash = key.content_hash(ctx)?;
+            let hash = content_hash_dependency_key(ctx, key)?;
             let entries = self.entries.lock().expect("poisoned mutex");
             let dep_value = entries.get(&hash).cloned();
             Ok((hash, dep_value))
@@ -67,7 +69,7 @@ pub mod testing {
             key: &DependencyKey,
             value: DependencyValue,
         ) -> anyhow::Result<()> {
-            let hash = key.content_hash(ctx)?;
+            let hash = content_hash_dependency_key(ctx, key)?;
             debug!(?hash, ?value, "Inserting entry into object database");
 
             let mut entries = self.entries.lock().expect("poisoned mutex");
@@ -106,7 +108,7 @@ impl ObjectDatabase for SimpleGitOdb {
         ctx: &HashContext,
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
-        let hash @ ContentHash(key_oid) = key.content_hash(ctx)?;
+        let hash @ ContentHash(key_oid) = content_hash_dependency_key(ctx, key)?;
 
         let kv_tree = match ctx.repo.find_reference(Self::REF_NAME) {
             Ok(reference) => reference
@@ -146,7 +148,7 @@ impl ObjectDatabase for SimpleGitOdb {
         key: &DependencyKey,
         value: DependencyValue,
     ) -> anyhow::Result<()> {
-        let ContentHash(key_oid) = key.content_hash(ctx)?;
+        let ContentHash(key_oid) = content_hash_dependency_key(ctx, key)?;
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
         let value_oid = ctx
             .repo

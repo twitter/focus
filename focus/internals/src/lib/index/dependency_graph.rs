@@ -389,7 +389,7 @@ sh_binary(
                         path: "package1",
                     },
                     ContentHash(
-                        46f942d72d8487354675fd44cd2d254b4285db47,
+                        88d4567faed770b53d5c0753ca29c9a40fbd07d1,
                     ),
                 ),
             },
@@ -581,7 +581,7 @@ def my_macro_inner(name):
                         path: "package1",
                     },
                     ContentHash(
-                        aeb556ed619aecb69bfc6fbe337a0212cd8a7436,
+                        332bd4323816e934bde60d6fd861c7a1e76a03a3,
                     ),
                 ),
             },

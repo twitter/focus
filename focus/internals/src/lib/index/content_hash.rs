@@ -7,9 +7,6 @@ use std::str::FromStr;
 use anyhow::Context;
 use lazy_static::lazy_static;
 use regex::Regex;
-use sha1::digest::DynDigest;
-use sha1::Digest;
-use sha1::Sha1;
 use tracing::warn;
 
 use crate::coordinate::Label;
@@ -17,8 +14,6 @@ use crate::coordinate::TargetName;
 use focus_util::paths::is_relevant_to_build_graph;
 
 use super::DependencyKey;
-
-type Hasher<'a> = &'a mut dyn DynDigest;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -49,135 +44,123 @@ pub struct HashContext<'a> {
     pub head_tree: &'a git2::Tree<'a>,
 }
 
-/// Indicates that the implementing type can be content-hashed with respect to a
-/// state of the repository. Callers will want to use
-/// [`ContentHashable::content_hash`].
-pub trait ContentHashable {
-    /// Write values into the provided `hasher` according to this item's
-    /// content-addressable state.
-    ///
-    /// In order to hash the [`ContentHashable`] values which make up the
-    /// current item, the implementor can call [`ContentHashable::write`] on
-    /// those values recursively.
-    fn write(&self, hasher: Hasher, ctx: &HashContext) -> anyhow::Result<()>;
+/// Compute a content-addressable hash for the provided [`DependencyKey`] using
+/// the context in `ctx`.
+pub fn content_hash_dependency_key(
+    ctx: &HashContext,
+    key: &DependencyKey,
+) -> anyhow::Result<ContentHash> {
+    let mut buf = String::new();
+    buf.push_str("DependencyKey");
 
-    /// Construct a hasher, hash this value, finalize the hash, and return the
-    /// overall hash of this value.
-    fn content_hash(&self, ctx: &HashContext) -> anyhow::Result<ContentHash> {
-        let mut hasher = Sha1::new();
-        self.write(&mut hasher, ctx)?;
-        let result = hasher.finalize();
-        let oid = git2::Oid::from_bytes(&result)?;
-        Ok(ContentHash(oid))
-    }
-}
+    match key {
+        DependencyKey::BazelPackage {
+            external_repository: None,
+            path,
+        } => {
+            buf.push_str("::BazelPackage(");
+            buf.push_str(&content_hash_tree_path(ctx, path)?.to_string());
 
-impl ContentHashable for PathBuf {
-    fn write(&self, hasher: Hasher, ctx: &HashContext) -> anyhow::Result<()> {
-        hasher.update(b"PathBuf(");
-
-        match ctx.head_tree.get_path(self) {
-            Ok(entry) => {
-                hasher.update(entry.id().as_bytes());
+            let loaded_deps = find_load_dependencies(ctx, path)?;
+            for label in loaded_deps {
+                let key = DependencyKey::BazelBuildFile(label);
+                buf.push_str(", ");
+                buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
             }
-            Err(err) if err.code() == git2::ErrorCode::NotFound => {
-                // TODO: test this code path
-                hasher.update(git2::Oid::zero().as_bytes());
-            }
-            Err(err) => return Err(err.into()),
-        };
+        }
 
-        hasher.update(b")");
-        Ok(())
-    }
-}
+        DependencyKey::Path(path) => {
+            buf.push_str("::Path(");
+            buf.push_str(&content_hash_tree_path(ctx, path)?.to_string());
+        }
 
-impl ContentHashable for DependencyKey {
-    fn write(&self, hasher: Hasher, ctx: &HashContext) -> anyhow::Result<()> {
-        hasher.update(b"DependencyKey");
+        DependencyKey::BazelPackage {
+            external_repository: Some(_external_package),
+            path: _,
+        } => {
+            todo!("establish dependency for path in external package")
+        }
 
-        match self {
-            DependencyKey::BazelPackage {
-                external_repository: None,
-                path,
-            } => {
-                hasher.update(b"::BazelPackage(");
-                path.write(hasher, ctx)?;
-
-                let loaded_deps = find_load_dependencies(ctx, path)?;
-                for label in loaded_deps {
-                    let dep_key = DependencyKey::BazelBuildFile(label);
-                    hasher.update(b", ");
-                    dep_key.write(hasher, ctx)?;
-                }
-            }
-
-            DependencyKey::Path(path) => {
-                hasher.update(b"::Path(");
-                path.write(hasher, ctx)?;
-            }
-
-            DependencyKey::BazelPackage {
-                external_repository: Some(_external_package),
-                path: _,
-            } => {
-                todo!("establish dependency for path in external package")
-            }
-
-            DependencyKey::BazelBuildFile(label) => {
-                // TODO: hash `BUILD` file contents
-                // TODO: parse `load` dependencies out of the `BUILD` file and mix
-                // into hash.
-                hasher.update(b"::BazelBuildFile(");
-                match label {
-                    Label {
-                        external_repository: None,
-                        path_components,
-                        target_name: TargetName::Name(target_name),
-                    } => {
+        DependencyKey::BazelBuildFile(label) => {
+            // TODO: hash `BUILD` file contents
+            // TODO: parse `load` dependencies out of the `BUILD` file and mix
+            // into hash.
+            buf.push_str("::BazelBuildFile(");
+            match label {
+                Label {
+                    external_repository: None,
+                    path_components,
+                    target_name: TargetName::Name(target_name),
+                } => {
+                    let path: PathBuf = {
                         let mut path: PathBuf = path_components.iter().collect();
                         path.push(target_name);
-                        path.write(hasher, ctx)?;
+                        path
+                    };
+                    buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
 
-                        // TODO: what if the `.bzl` file has been deleted?
-                        let loaded_deps = match ctx.head_tree.get_path(&path) {
-                            Ok(tree_entry) => {
-                                extract_load_statements_from_tree_entry(ctx, &tree_entry)?
-                            }
-                            Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
-                            Err(e) => return Err(e.into()),
-                        };
-                        for label in loaded_deps {
-                            let dep_key = DependencyKey::BazelBuildFile(label);
-                            hasher.update(b", ");
-                            dep_key.write(hasher, ctx)?;
+                    // TODO: what if the `.bzl` file has been deleted?
+                    let loaded_deps = match ctx.head_tree.get_path(&path) {
+                        Ok(tree_entry) => {
+                            extract_load_statements_from_tree_entry(ctx, &tree_entry)?
                         }
-                    }
-
-                    Label {
-                        external_repository: None,
-                        path_components,
-                        target_name: TargetName::Ellipsis,
-                    } => {
-                        warn!(?label, "Got label referring to a ellipsis, but it should be a BUILD or .bzl file");
-                        let path: PathBuf = path_components.iter().collect();
-                        path.write(hasher, ctx)?;
-                    }
-
-                    Label {
-                        external_repository: Some(_),
-                        path_components: _,
-                        target_name: _,
-                    } => {
-                        todo!("Implement hashing an external repository BUILD file");
+                        Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
+                        Err(e) => return Err(e.into()),
+                    };
+                    for label in loaded_deps {
+                        let dep_key = DependencyKey::BazelBuildFile(label);
+                        buf.push_str(", ");
+                        buf.push_str(&content_hash_dependency_key(ctx, &dep_key)?.to_string());
                     }
                 }
-            }
-        };
 
-        hasher.update(b")");
-        Ok(())
-    }
+                Label {
+                    external_repository: None,
+                    path_components,
+                    target_name: TargetName::Ellipsis,
+                } => {
+                    warn!(
+                        ?label,
+                        "Got label referring to a ellipsis, but it should be a BUILD or .bzl file"
+                    );
+                    let path: PathBuf = path_components.iter().collect();
+                    buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
+                }
+
+                Label {
+                    external_repository: Some(_),
+                    path_components: _,
+                    target_name: _,
+                } => {
+                    todo!("Implement hashing an external repository BUILD file");
+                }
+            }
+        }
+    };
+
+    buf.push(')');
+    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
+    Ok(ContentHash(hash))
+}
+
+fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<ContentHash> {
+    let mut buf = String::new();
+    buf.push_str("PathBuf(");
+
+    match ctx.head_tree.get_path(path) {
+        Ok(entry) => {
+            buf.push_str(&entry.id().to_string());
+        }
+        Err(err) if err.code() == git2::ErrorCode::NotFound => {
+            // TODO: test this code path
+            buf.push_str(&git2::Oid::zero().to_string());
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    buf.push(')');
+    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
+    Ok(ContentHash(hash))
 }
 
 fn find_load_dependencies(
