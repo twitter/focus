@@ -91,6 +91,15 @@ pub fn content_hash_dependency_key(
                 buf.push_str(", ");
                 buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
             }
+
+            // Every package has an implicit dependency on the `WORKSPACE` file.
+            let key = DependencyKey::BazelBuildFile(Label {
+                external_repository: None,
+                path_components: Vec::new(),
+                target_name: TargetName::Name("WORKSPACE".to_string()),
+            });
+            buf.push_str(", ");
+            buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
         }
 
         DependencyKey::Path(path) => {
@@ -106,9 +115,6 @@ pub fn content_hash_dependency_key(
         }
 
         DependencyKey::BazelBuildFile(label) => {
-            // TODO: hash `BUILD` file contents
-            // TODO: parse `load` dependencies out of the `BUILD` file and mix
-            // into hash.
             buf.push_str("::BazelBuildFile(");
             match label {
                 Label {
