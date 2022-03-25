@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
@@ -35,6 +37,21 @@ impl FromStr for ContentHash {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct Caches {
+    /// Cache of hashed dependency keys. These are only valid for the provided `repo`/`head_tree`.
+    dependency_key_cache: HashMap<DependencyKey, ContentHash>,
+
+    /// Cache of hashed tree paths, which should be either:
+    ///
+    ///   - Bazel-relevant build files.
+    ///   - Directories.
+    ///   - Non-existent.
+    ///
+    /// These are only valid for the provided `repo`/`head_tree`.
+    tree_path_cache: HashMap<PathBuf, ContentHash>,
+}
+
 /// Context used to compute a content hash.
 pub struct HashContext<'a> {
     /// The Git repository.
@@ -42,6 +59,9 @@ pub struct HashContext<'a> {
 
     /// The tree corresponding to the current working copy.
     pub head_tree: &'a git2::Tree<'a>,
+
+    /// Associated caches.
+    pub caches: RefCell<Caches>,
 }
 
 /// Compute a content-addressable hash for the provided [`DependencyKey`] using
@@ -50,6 +70,10 @@ pub fn content_hash_dependency_key(
     ctx: &HashContext,
     key: &DependencyKey,
 ) -> anyhow::Result<ContentHash> {
+    if let Some(hash) = ctx.caches.borrow().dependency_key_cache.get(key) {
+        return Ok(hash.to_owned());
+    }
+
     let mut buf = String::new();
     buf.push_str("DependencyKey");
 
@@ -140,10 +164,19 @@ pub fn content_hash_dependency_key(
 
     buf.push(')');
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
-    Ok(ContentHash(hash))
+    let hash = ContentHash(hash);
+    ctx.caches
+        .borrow_mut()
+        .dependency_key_cache
+        .insert(key.to_owned(), hash.clone());
+    Ok(hash)
 }
 
 fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<ContentHash> {
+    if let Some(hash) = ctx.caches.borrow().tree_path_cache.get(path) {
+        return Ok(hash.to_owned());
+    }
+
     let mut buf = String::new();
     buf.push_str("PathBuf(");
 
@@ -160,7 +193,12 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<Cont
 
     buf.push(')');
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
-    Ok(ContentHash(hash))
+    let hash = ContentHash(hash);
+    ctx.caches
+        .borrow_mut()
+        .tree_path_cache
+        .insert(path.to_owned(), hash.clone());
+    Ok(hash)
 }
 
 fn find_load_dependencies(
