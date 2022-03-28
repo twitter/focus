@@ -890,15 +890,11 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let is_tty = termion::is_tty(&std::io::stdout());
 
-    let _guard = if is_tty {
-        focus_tracing::Guard::default()
-    } else {
-        focus_tracing::init_tracing(focus_tracing::TracingOpts {
-            is_tty,
-            no_color: *no_color,
-            log_dir: log_dir.to_owned(),
-        })?
-    };
+    let _guard = focus_tracing::init_tracing(focus_tracing::TracingOpts {
+        is_tty,
+        no_color: *no_color,
+        log_dir: log_dir.to_owned(),
+    })?;
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
     setup_maintenance_scheduler(&options).context("Failed to setup maintenance scheduler")?;
