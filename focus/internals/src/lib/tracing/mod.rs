@@ -2,7 +2,7 @@ pub mod chrome;
 pub mod focus;
 pub mod git_trace2;
 
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 pub use chrome::Trace;
 pub use focus::{init_tracing, Guard, TracingOpts};
@@ -32,7 +32,6 @@ pub(in crate::tracing) mod testing {
         manifest_relative_path(FIXTURE_RELPATH).map(|p| p.join(s.as_ref()))
     }
 }
-
 
 fn home_relative_path<P: AsRef<Path>>(p: P) -> Result<PathBuf> {
     match dirs::home_dir().map(|pb| pb.join(p.as_ref())) {

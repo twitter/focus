@@ -794,7 +794,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
 
             MaintenanceSubcommand::SetDefaultConfig { .. } => {
-                operation::maintenance::set_default_git_maintenance_config(&std::env::current_dir()?)?;
+                operation::maintenance::set_default_git_maintenance_config(
+                    &std::env::current_dir()?,
+                )?;
                 Ok(ExitCode(0))
             }
 
@@ -853,12 +855,14 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     }
 
     match opts.cmd {
-        Subcommand::Clone {..}
-        | Subcommand::Sync {..}
-        | Subcommand::Layer {..}
-        | Subcommand::Adhoc {..}
-        | Subcommand::Init {..} => operation::maintenance::schedule_enable(ScheduleOpts::default()),
-        _ => Ok(())
+        Subcommand::Clone { .. }
+        | Subcommand::Sync { .. }
+        | Subcommand::Layer { .. }
+        | Subcommand::Adhoc { .. }
+        | Subcommand::Init { .. } => {
+            operation::maintenance::schedule_enable(ScheduleOpts::default())
+        }
+        _ => Ok(()),
     }
 }
 
