@@ -12,7 +12,7 @@ use std::{
     },
     time::Duration,
 };
-use tracing::{debug, error, info, info_span, warn, debug_span};
+use tracing::{debug, debug_span, error, info, info_span, warn};
 
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
     use std::io;
