@@ -322,6 +322,7 @@ dependencies = [
  "dirs",
  "focus-internals",
  "focus-testing",
+ "focus-tracing",
  "focus-util",
  "git2",
  "lazy_static",
@@ -352,6 +353,7 @@ dependencies = [
  "clap",
  "dirs",
  "focus-testing",
+ "focus-tracing",
  "focus-util",
  "git2",
  "heck",
@@ -399,6 +401,41 @@ dependencies = [
  "tracing-error",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "focus-tracing"
+version = "0.3.3"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "focus-testing",
+ "focus-util",
+ "git2",
+ "heck",
+ "insta",
+ "lazy_static",
+ "nix",
+ "once_cell",
+ "rayon",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "tempfile",
+ "tool-insights-client",
+ "tracing",
+ "tracing-appender",
+ "tracing-error",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "walkdir",
+ "which",
+ "whoami",
 ]
 
 [[package]]

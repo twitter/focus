@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use crate::tracing::testing::*;
+use crate::testing::*;
 use anyhow::Result;
 
 fn assert_trace_snapshot<S: AsRef<str>>(input: S) -> Result<()> {
