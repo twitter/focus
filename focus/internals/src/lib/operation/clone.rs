@@ -45,6 +45,7 @@ impl TryFrom<&str> for Origin {
 }
 
 /// Entrypoint for clone operations.
+#[tracing::instrument]
 pub fn run(
     origin: Origin,
     sparse_repo_path: PathBuf,
@@ -441,13 +442,26 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
             push_url.as_str()
         );
         sparse_repo
-            .remote(remote_name, fetch_url.as_str())
+            .remote_with_fetch(
+                remote_name,
+                fetch_url.as_str(),
+                format!("refs/heads/master:refs/remotes/{}/master", remote_name).as_str(),
+            )
             .with_context(|| {
                 format!(
                     "Configuring fetch URL remote {} in the sparse repo failed",
                     &remote_name
                 )
             })?;
+
+        sparse_repo
+            .config()?
+            .set_str(
+                format!("remote.{}.tagOpt", remote_name).as_str(),
+                "--no-tags",
+            )
+            .with_context(|| format!("setting remote.{}.tagOpt = --no-tags", &remote_name))?;
+
         sparse_repo
             .remote_set_pushurl(remote_name, Some(push_url.as_str()))
             .with_context(|| {
