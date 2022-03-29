@@ -17,10 +17,8 @@ use tracing::error;
 
 use crate::{
     app::App,
-    util::{
-        sandbox_command::{SandboxCommand, SandboxCommandOutput},
-        time::GitIdentTime,
-    },
+    sandbox_command::{SandboxCommand, SandboxCommandOutput},
+    time::GitIdentTime,
 };
 
 use super::time::{FocusTime, GitTime};
@@ -377,7 +375,7 @@ impl FromStr for GitVersion {
     }
 }
 
-pub(crate) trait ConfigExt {
+pub trait ConfigExt {
     fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>>;
 
     fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool>;

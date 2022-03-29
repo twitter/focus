@@ -2,7 +2,8 @@ use std::{path::Path, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 
-use crate::{app::App, model::repo::Repo};
+use crate::model::repo::Repo;
+use focus_util::app::App;
 
 use super::util::perform;
 

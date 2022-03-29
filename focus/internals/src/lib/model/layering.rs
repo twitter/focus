@@ -548,7 +548,7 @@ pub fn write_adhoc_layer_set(sparse_repo: &Path, layer_set: &LayerSet) -> Result
 }
 #[cfg(test)]
 mod tests {
-    use crate::testing::init_logging;
+    use focus_testing::init_logging;
 
     use super::*;
     use anyhow::Result;

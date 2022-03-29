@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
-use crate::{app::App, tracker::Tracker};
+use crate::tracker::Tracker;
+use focus_util::app::App;
 
 pub fn list() -> Result<()> {
     let tracker = Tracker::default();

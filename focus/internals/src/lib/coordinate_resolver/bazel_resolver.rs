@@ -6,12 +6,10 @@ use std::{
 };
 
 use anyhow::{bail, Result};
+use focus_util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
 use tracing::{debug, info};
 
-use crate::{
-    coordinate::{Label, TargetName},
-    util::sandbox_command::{SandboxCommand, SandboxCommandOutput},
-};
+use crate::coordinate::{Label, TargetName};
 
 use super::*;
 

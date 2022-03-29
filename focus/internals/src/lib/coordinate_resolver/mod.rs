@@ -3,8 +3,9 @@ mod bazel_resolver;
 mod directory_resolver;
 mod pants_resolver;
 
+use focus_util::app::App;
+
 use crate::{
-    app::App,
     coordinate::{Coordinate, CoordinateSet},
     index::{DependencyKey, DependencyValue},
 };

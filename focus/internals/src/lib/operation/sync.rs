@@ -1,10 +1,10 @@
-use crate::app::App;
 use crate::coordinate::CoordinateSet;
 use crate::model::layering::Layer;
 use crate::model::layering::LayerSets;
 use crate::model::repo::Repo;
 use crate::operation::util::perform;
-use crate::util::backed_up_file::BackedUpFile;
+use focus_util::app::App;
+use focus_util::backed_up_file::BackedUpFile;
 
 use std::convert::TryFrom;
 
@@ -85,13 +85,12 @@ mod test {
     use anyhow::Result;
     use tracing::debug;
 
-    use crate::{
-        app,
-        operation::{
-            self,
-            testing::integration::{RepoDisposition, RepoPairFixture},
-        },
-        testing::init_logging,
+    use focus_testing::init_logging;
+    use focus_util::app;
+
+    use crate::operation::{
+        self,
+        testing::integration::{RepoDisposition, RepoPairFixture},
     };
 
     #[test]

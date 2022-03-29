@@ -25,7 +25,7 @@ pub fn focus_config_dir() -> PathBuf {
         .join("focus")
 }
 
-pub(crate) fn find_closest_directory_with_build_file<P0: AsRef<Path>, P1: AsRef<Path>>(
+pub fn find_closest_directory_with_build_file<P0: AsRef<Path>, P1: AsRef<Path>>(
     file: P0,
     ceiling: P1,
 ) -> Result<Option<PathBuf>> {
@@ -78,7 +78,7 @@ pub(crate) fn is_build_definition<P: AsRef<Path>>(path: P) -> bool {
 }
 
 /// Determine if the Path is a file relevant to the build graph.
-pub(crate) fn is_relevant_to_build_graph<P: AsRef<Path>>(path: P) -> bool {
+pub fn is_relevant_to_build_graph<P: AsRef<Path>>(path: P) -> bool {
     let path = path.as_ref();
     if let Some(stem) = path.file_stem() {
         if stem.eq(WORKSPACE_STEM.as_os_str()) || stem.eq(BUILD_STEM.as_os_str()) {

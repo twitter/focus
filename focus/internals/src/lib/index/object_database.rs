@@ -188,7 +188,7 @@ impl ObjectDatabase for SimpleGitOdb {
 mod tests {
     use maplit::btreeset;
 
-    use crate::testing::scratch_git_repo::ScratchGitRepo;
+    use focus_testing::scratch_git_repo::ScratchGitRepo;
 
     use super::*;
 

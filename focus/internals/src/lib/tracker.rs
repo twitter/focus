@@ -11,7 +11,9 @@ use anyhow::{bail, Context, Result};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::{app::App, model::repo::Repo, util::paths::focus_config_dir};
+use focus_util::{app::App, paths::focus_config_dir};
+
+use crate::model::repo::Repo;
 
 pub struct TrackedRepo {
     identifier: Uuid,

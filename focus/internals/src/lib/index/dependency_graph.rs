@@ -310,12 +310,12 @@ mod tests {
 
     use maplit::hashset;
 
-    use crate::app::App;
     use crate::coordinate::CoordinateSet;
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use crate::index::object_database::testing::HashMapOdb;
-    use crate::testing::init_logging;
-    use crate::testing::scratch_git_repo::ScratchGitRepo;
+    use focus_testing::init_logging;
+    use focus_testing::scratch_git_repo::ScratchGitRepo;
+    use focus_util::app::App;
 
     use super::*;
 

@@ -1,12 +1,10 @@
 use std::{collections::HashSet, fs::File, io::Write, process::Stdio, sync::Arc};
 
-use crate::{
+use focus_util::{
     app::App,
-    util::{
-        git_helper,
-        sandbox_command::{SandboxCommand, SandboxCommandOutput},
-        time::FocusTime,
-    },
+    git_helper,
+    sandbox_command::{SandboxCommand, SandboxCommandOutput},
+    time::FocusTime,
 };
 
 use anyhow::{Context, Result};
@@ -25,8 +23,8 @@ const SAFE_BRANCH_NAMES: &[&str] = &[
 mod partition {
     use std::collections::HashSet;
 
-    use crate::util::time::{FocusTime, GitTime};
     use anyhow::{Context, Result};
+    use focus_util::time::{FocusTime, GitTime};
     use git2::{Commit, Oid, Repository};
 
     use super::PartitionedRefNames;
@@ -237,8 +235,8 @@ pub fn expire_old_refs(
 mod tests {
     use std::fs;
 
-    use crate::util::{git_helper::Ident, time::FocusTime};
     use anyhow::Result;
+    use focus_util::{git_helper::Ident, time::FocusTime};
 
     use crate::operation::testing::refs::Fixture;
 

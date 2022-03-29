@@ -1,5 +1,5 @@
 use anyhow::Result;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::{collections::HashSet, convert::TryFrom, fmt::Display};

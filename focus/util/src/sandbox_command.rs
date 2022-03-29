@@ -318,7 +318,7 @@ impl Drop for Tailer {
 
 #[cfg(test)]
 mod tests {
-    use crate::testing::init_logging;
+    use focus_testing::init_logging;
 
     use super::*;
     use anyhow::Result;

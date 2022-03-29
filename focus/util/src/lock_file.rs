@@ -109,7 +109,7 @@ impl Drop for LockFile {
 
 #[cfg(test)]
 mod tests {
-    use crate::testing;
+    use focus_testing as testing;
 
     use super::*;
     use anyhow::Result;
