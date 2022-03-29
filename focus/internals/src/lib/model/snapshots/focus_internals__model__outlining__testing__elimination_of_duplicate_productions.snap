@@ -1,0 +1,7 @@
+---
+source: focus/internals/src/lib/model/outlining.rs
+expression: "std::fs::read_to_string(file.path()).unwrap()"
+---
+/*
+!/*/
+

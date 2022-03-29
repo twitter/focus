@@ -54,7 +54,7 @@ impl WorkingTree {
     pub fn apply_sparse_patterns(
         &self,
         patterns: &PatternSet,
-        _cone: bool,
+        cone: bool,
         app: Arc<App>,
     ) -> Result<()> {
         // Write the patterns
@@ -74,12 +74,26 @@ impl WorkingTree {
         // Update the working tree to match
         info!(count = %patterns.len(), "Applying patterns");
         {
-            let cone = false; // Cone patterns are disabled.
             let args = vec![
                 "sparse-checkout",
                 "init",
                 if cone { "--cone" } else { "--no-cone" },
             ];
+            let description = format!("Running git {:?} in {}", args, self.path.display());
+            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app.clone())?;
+            scmd.ensure_success_or_log(
+                cmd.current_dir(&self.path).args(args),
+                SandboxCommandOutput::Stderr,
+                &description,
+            )
+            .with_context(|| format!("In working tree {}", self.path.display()))
+            .context("git sparse-checkout init failed")?;
+        }
+
+        // Newer versions of Git don't actually check out files when `sparse-checkout init` runs, so run `git checkout`. It might be worth making this behavior version-dependent.
+        info!("Checking out");
+        {
+            let args = vec!["checkout"];
             let description = format!("Running git {:?} in {}", args, self.path.display());
             let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
             scmd.ensure_success_or_log(
@@ -88,7 +102,7 @@ impl WorkingTree {
                 &description,
             )
             .with_context(|| format!("In working tree {}", self.path.display()))
-            .context("git sparse-checkout set failed")?;
+            .context("git checkout failed")?;
         }
 
         Ok(())
@@ -170,6 +184,7 @@ impl WorkingTree {
                     results.insert(Pattern::Directory {
                         precedence: results.len(),
                         path,
+                        recursive: true,
                     });
                     TreeWalkResult::Ok
                 } else {
@@ -350,20 +365,14 @@ impl OutliningTree {
                         patterns.insert_leading(Pattern::Directory {
                             precedence: LAST,
                             path,
+                            recursive: true,
                         });
                     }
                 }
                 None => {
                     debug!("Adding directory verbatim: {}", qualified_path.display());
                     if let Some(path) = treat_path(&qualified_path)? {
-                        if let Some(fragment) = path.to_str() {
-                            patterns.insert(Pattern::Verbatim {
-                                precedence: LAST,
-                                fragment: fragment.to_owned(),
-                            });
-                        } else {
-                            bail!("Path {} not representable as UTF-8", path.display());
-                        }
+                        patterns.insert(Pattern::Directory { precedence: LAST, path, recursive: true });
                     }
                 }
             }
@@ -442,7 +451,6 @@ impl Repo {
                 let mut outline_patterns: PatternSet = outlining_tree
                     .outline(head_commit.id(), coordinates, app.clone())
                     .context("Failed to outline")?;
-                debug!(?outline_patterns);
                 outline_patterns.extend(working_tree.default_working_tree_patterns()?);
                 working_tree
                     .apply_sparse_patterns(&outline_patterns, true, app)
