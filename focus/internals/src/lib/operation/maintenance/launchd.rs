@@ -1,8 +1,8 @@
 use super::*;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use nix::NixPath;
 use plist::{dictionary::Dictionary, Value};
-use std::{io::Write, path::PathBuf};
+use std::{io::{Write, ErrorKind}, path::PathBuf};
 use strum::IntoEnumIterator;
 use tracing::{debug, error};
 
@@ -386,8 +386,17 @@ impl Launchctl {
 
     pub fn delete_plist(&self, opts: &PlistOpts) -> Result<()> {
         let path = self.plist_path(&opts.label());
-        std::fs::remove_file(&path).with_context(|| format!("failed to remove path {:?}", path))?;
-        Ok(())
+        let res = std::fs::remove_file(&path);
+
+        let checked = match res {
+            Err(e) => match e.kind() {
+                ErrorKind::NotFound => Ok(()),
+                _ => Err(anyhow!(e)),
+            }
+            _ => Ok(())
+        };
+
+        checked.with_context(|| format!("failed to remove path {:?}", path))
     }
 }
 

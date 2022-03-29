@@ -137,7 +137,8 @@ impl LayerSet {
     }
 
     fn load(path: &Path) -> Result<LayerSet> {
-        let slice = &std::fs::read(&path).context("opening file for read")?;
+        let slice =
+            &std::fs::read(&path).with_context(|| format!("opening file {:?} for read", &path))?;
 
         let mut layer_set: LayerSet = serde_json::from_slice(slice)
             .with_context(|| format!("loading layer set from {}", &path.display()))?;

@@ -3,10 +3,9 @@ pub mod launchd;
 use std::{
     ffi::OsString,
     fmt::Debug,
-    io::{BufRead, Cursor},
     ops::Deref,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, ExitStatus},
     sync::Arc,
 };
 
@@ -16,7 +15,7 @@ use anyhow::{bail, Context, Result};
 use focus_util::{
     app::App,
     git_helper::{self, ConfigExt},
-    lock_file::LockFile,
+    lock_file::LockFile, sandbox_command::{SandboxCommand, SandboxCommandOutput},
 };
 use strum_macros;
 use tracing::{debug, error, info, warn};
@@ -168,7 +167,7 @@ fn does_repo_exist(path: &Path) -> Result<bool> {
 
 #[derive(Debug)]
 enum MaintResult {
-    Success(Output),
+    Success(ExitStatus),
     LockFailed,
 }
 
@@ -236,22 +235,26 @@ impl Runner {
 
         let exec_path: PathBuf = git_helper::git_exec_path(&self.git_binary_path)?;
 
+        let (mut cmd, sb_cmd) =
+            SandboxCommand::new("git maintenance", &self.git_binary_path, self.app.clone())?;
+
         // TODO: this needs to log and capture output for debugging if necessary
         Ok(MaintResult::Success(
-            Command::new(&self.git_binary_path)
-                .arg({
-                    let mut s = OsString::new();
-                    s.push("--exec-path=");
-                    s.push(exec_path);
-                    s
-                })
-                .arg("maintenance")
-                .arg("run")
-                .arg(format!("--schedule={}", time_period.name()))
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .current_dir(repo_path)
-                .output()
+            sb_cmd
+                .ensure_success_or_log(
+                    cmd.arg({
+                        let mut s = OsString::new();
+                        s.push("--exec-path=");
+                        s.push(exec_path);
+                        s
+                    })
+                    .arg("maintenance")
+                    .arg("run")
+                    .arg(format!("--schedule={}", time_period.name()))
+                    .current_dir(repo_path),
+                    SandboxCommandOutput::Stderr,
+                    "git maintenance",
+                )
                 .with_context(|| {
                     format!(
                         "running maintenance failed for {}",
@@ -316,24 +319,11 @@ impl Runner {
         info!(?time_period, ?path, "running tasks");
         set_default_git_maintenance_config(path)?;
         match self.run_maint(time_period, path) {
-            Ok(MaintResult::Success(output)) => {
-                let status = &output.status;
+            Ok(MaintResult::Success(status)) => {
                 if status.success() {
                     debug!(?time_period, ?path, "completed maintenance",)
                 } else {
                     warn!(?path, exit_status = ?status, "maintenance failed");
-                    {
-                        let cursor = Cursor::new(output.stdout);
-                        for line in cursor.lines() {
-                            warn!(stdout = ?line, "stdout");
-                        }
-                    }
-                    {
-                        let cursor = Cursor::new(output.stderr);
-                        for line in cursor.lines() {
-                            warn!(?line, "stderr");
-                        }
-                    }
                 }
             }
             Ok(MaintResult::LockFailed) => warn!(?path, "failed to acquire lock"),
