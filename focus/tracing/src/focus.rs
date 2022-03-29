@@ -6,8 +6,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use tracing::dispatcher::DefaultGuard;
+use tracing::metadata::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_error::ErrorLayer;
+use tracing_subscriber::filter::Targets;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{self, util::SubscriberInitExt, EnvFilter};
 
@@ -67,9 +69,20 @@ pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
         ))
         .with(
+            Targets::new()
+                .with_targets(vec![
+                    ("serde_xml_rs", LevelFilter::INFO),
+                    (
+                        "focus_internals::coordinate_resolver::bazel_resolver",
+                        LevelFilter::INFO,
+                    ),
+                ])
+                .with_default(LevelFilter::TRACE),
+        )
+        .with(
             tracing_subscriber::fmt::layer()
                 .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-                .with_target(false)
+                .with_target(true)
                 .with_writer(stderr_writer)
                 .with_ansi(use_color),
         )
