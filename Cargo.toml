@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "focus/testing",
+  "focus/tracing",
   "focus/util",
   "focus/commands",
   "focus/internals",

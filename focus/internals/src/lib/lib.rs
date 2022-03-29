@@ -5,5 +5,4 @@ pub mod coordinate_resolver;
 pub mod index;
 pub mod model;
 pub mod operation;
-pub mod tracing;
 pub mod tracker;

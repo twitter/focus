@@ -21,6 +21,8 @@ use focus_util::{
     time::FocusTime,
 };
 
+use focus_tracing;
+
 use focus_internals::{
     coordinate::Coordinate,
     model::layering::LayerSets,
@@ -28,7 +30,6 @@ use focus_internals::{
         self,
         maintenance::{self, ScheduleOpts},
     },
-    tracing as focus_tracing,
     tracker::Tracker,
 };
 use strum::VariantNames;
@@ -838,7 +839,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         },
 
         Subcommand::GitTrace { input, output } => {
-            focus_internals::tracing::Trace::git_trace_from(input)?.write_trace_json_to(output)?;
+            focus_tracing::Trace::git_trace_from(input)?.write_trace_json_to(output)?;
             Ok(ExitCode(0))
         }
     }

@@ -342,9 +342,9 @@ pub mod event {
     // of these structs back to their associated Event variant.
     macro_rules! from_enum_impl {
         ($ident:ident) => {
-            impl From<$ident> for $crate::tracing::git_trace2::Event {
-                fn from(t: $ident) -> $crate::tracing::git_trace2::Event {
-                    $crate::tracing::git_trace2::Event::$ident(t)
+            impl From<$ident> for $crate::git_trace2::Event {
+                fn from(t: $ident) -> $crate::git_trace2::Event {
+                    $crate::git_trace2::Event::$ident(t)
                 }
             }
         };

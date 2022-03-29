@@ -1,4 +1,4 @@
-use crate::tracing::{
+use crate::{
     chrome::{Complete, Trace},
     git_trace2::{event as gevent, event::Sid, Event as GitEvent},
 };

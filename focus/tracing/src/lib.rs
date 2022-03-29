@@ -10,12 +10,12 @@ pub use focus::{init_tracing, Guard, TracingOpts};
 use anyhow::Result;
 
 #[cfg(test)]
-pub(in crate::tracing) mod testing {
+pub(crate) mod testing {
     use std::path::{Path, PathBuf};
 
     use anyhow::{anyhow, Result};
 
-    pub const FIXTURE_RELPATH: &str = "src/lib/tracing/fixtures";
+    pub const FIXTURE_RELPATH: &str = "src/fixtures";
 
     pub fn manifest_dir() -> Result<PathBuf> {
         Ok(PathBuf::from(

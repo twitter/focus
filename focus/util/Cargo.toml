@@ -29,8 +29,7 @@ which = "4.2.4"
 whoami = "1.2.1"
 
 [package.metadata.cargo-udeps.ignore]
-normal = ["focus-testing"]
-
+normal = ["focus-testing", "termion"]
 
 [dev-dependencies]
 insta = "1.13.0"
