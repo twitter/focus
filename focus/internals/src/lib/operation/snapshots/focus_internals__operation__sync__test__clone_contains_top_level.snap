@@ -4,12 +4,12 @@ expression: "&profile"
 ---
 /*
 !/*/
-/3rdparty/*
-/focus/*
-/tools/*
-/pants-internal/*
-/pants-support/*
 *.bzl
+/3rdparty/
+/focus/
+/pants-internal/
+/pants-support/
+/tools/
 BUILD*
 WORKSPACE*
 

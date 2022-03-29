@@ -2,29 +2,26 @@
 source: focus/internals/src/lib/operation/sync.rs
 expression: "std::fs::read_to_string(&profile_path)?"
 ---
-/3rdparty/*
-/focus/*
-/tools/*
-/pants-internal/*
-/pants-support/*
 /*
 !/*/
-/library_b/*
-!/library_b/*/
-/mandatory_z/*
-!/mandatory_z/*/
-/project_b/*
+/library_b/
+/mandatory_z/
+/project_b/
 !/project_b/*/
-/project_b/src/*
+/project_b/src/
 !/project_b/src/*/
-/project_b/src/main/*
+/project_b/src/main/
 !/project_b/src/main/*/
-/project_b/src/main/java/*
+/project_b/src/main/java/
 !/project_b/src/main/java/*/
-/project_b/src/main/java/com/*
+/project_b/src/main/java/com/
 !/project_b/src/main/java/com/*/
-/project_b/src/main/java/com/example/*
+/project_b/src/main/java/com/example/
 !/project_b/src/main/java/com/example/*/
-/project_b/src/main/java/com/example/cmdline/*
-!/project_b/src/main/java/com/example/cmdline/*/
+/project_b/src/main/java/com/example/cmdline/
+/3rdparty/
+/focus/
+/pants-internal/
+/pants-support/
+/tools/
 
