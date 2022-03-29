@@ -460,7 +460,7 @@ impl Repo {
             head_tree: &head_tree,
             caches: Default::default(),
         };
-        let odb = SimpleGitOdb::new();
+        let odb = SimpleGitOdb::new(&self.repo);
 
         let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
             (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),

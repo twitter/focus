@@ -136,19 +136,21 @@ pub mod testing {
 
 /// Simple object database which stores key-value pairs in the same repository
 /// that's being worked in.
-#[derive(Clone, Debug, Default)]
-pub struct SimpleGitOdb;
+#[derive(Clone)]
+pub struct SimpleGitOdb<'a> {
+    repo: &'a git2::Repository,
+}
 
-impl SimpleGitOdb {
+impl<'a> SimpleGitOdb<'a> {
     const REF_NAME: &'static str = "refs/focus/simple_kv_tree";
 
     /// Constructor.
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(repo: &'a git2::Repository) -> SimpleGitOdb<'a> {
+        Self { repo }
     }
 }
 
-impl ObjectDatabase for SimpleGitOdb {
+impl ObjectDatabase for SimpleGitOdb<'_> {
     fn get(
         &self,
         ctx: &HashContext,
@@ -245,7 +247,7 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let fix = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
         let repo = fix.repo()?;
-        let odb = SimpleGitOdb::new();
+        let odb = SimpleGitOdb::new(&repo);
 
         let head_tree_oid = repo.treebuilder(None)?.write()?;
         let head_tree = repo.find_tree(head_tree_oid)?;
