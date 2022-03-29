@@ -1,3 +1,4 @@
+use focus_util::{app::App, git_helper, paths, sandbox_command::SandboxCommandOutput};
 use std::{
     collections::HashSet,
     fs::{self},
@@ -7,11 +8,9 @@ use std::{
 };
 
 use crate::{
-    app::App,
     coordinate::CoordinateSet,
     coordinate_resolver::{CacheOptions, ResolutionRequest, Resolver, RoutingResolver},
     model::outlining::{LeadingPatternInserter, Pattern},
-    util::{git_helper, paths, sandbox_command::SandboxCommandOutput},
 };
 
 use super::{

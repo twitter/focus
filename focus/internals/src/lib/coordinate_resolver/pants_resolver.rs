@@ -7,7 +7,7 @@ use std::{
 use anyhow::{bail, Result};
 use tracing::error;
 
-use crate::util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
+use focus_util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
 
 use super::*;
 

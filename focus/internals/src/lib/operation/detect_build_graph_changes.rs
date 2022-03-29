@@ -5,9 +5,11 @@ use std::path::{Path, PathBuf};
 
 use std::sync::{mpsc, Arc};
 
-use crate::app::{App, ExitCode};
 use crate::model::repo::Repo;
-use crate::util::{git_helper, paths};
+use focus_util::{
+    app::{App, ExitCode},
+    git_helper, paths,
+};
 
 fn find_committed_changes(app: Arc<App>, repo_path: &Path) -> Result<Vec<PathBuf>> {
     let repo = Repo::open(repo_path, app.clone())?;

@@ -321,6 +321,8 @@ dependencies = [
  "clap",
  "dirs",
  "focus-internals",
+ "focus-testing",
+ "focus-util",
  "git2",
  "lazy_static",
  "nix",
@@ -349,6 +351,8 @@ dependencies = [
  "chrono",
  "clap",
  "dirs",
+ "focus-testing",
+ "focus-util",
  "git2",
  "heck",
  "insta",
@@ -378,6 +382,48 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
+ "which",
+ "whoami",
+]
+
+[[package]]
+name = "focus-testing"
+version = "0.3.3"
+dependencies = [
+ "anyhow",
+ "git2",
+ "insta",
+ "tempfile",
+ "termion",
+ "tracing",
+ "tracing-error",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "focus-util"
+version = "0.3.3"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "focus-testing",
+ "git2",
+ "insta",
+ "lazy_static",
+ "nix",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tempfile",
+ "termion",
+ "tool-insights-client",
+ "tracing",
+ "url",
+ "uuid",
  "which",
  "whoami",
 ]

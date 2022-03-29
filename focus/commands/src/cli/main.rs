@@ -12,8 +12,16 @@ use chrono::NaiveDate;
 use clap::Parser;
 use git2::Repository;
 
-use focus_internals::{
+use focus_util::{
     app::{App, ExitCode},
+    backed_up_file::BackedUpFile,
+    git_helper,
+    lock_file::LockFile,
+    paths,
+    time::FocusTime,
+};
+
+use focus_internals::{
     coordinate::Coordinate,
     model::layering::LayerSets,
     operation::{
@@ -22,7 +30,6 @@ use focus_internals::{
     },
     tracing as focus_tracing,
     tracker::Tracker,
-    util::{backed_up_file::BackedUpFile, git_helper, lock_file::LockFile, paths, time::FocusTime},
 };
 use strum::VariantNames;
 use tracing::{debug, info, info_span};

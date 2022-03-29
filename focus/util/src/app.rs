@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::{borrow::Borrow, fmt::Debug};
 
-use crate::util::sandbox::Sandbox;
+use crate::sandbox::Sandbox;
 use anyhow::{Context, Result};
 use std::time::SystemTime;
 use tool_insights_client::Client;

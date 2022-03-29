@@ -1,15 +1,14 @@
 use crate::{
-    app::App,
     coordinate::CoordinateSet,
     model::{
         layering::{Layer, LayerSet, LayerSets, RichLayerSet},
         repo::Repo,
     },
     tracker::Tracker,
-    util::{self, git_helper, sandbox_command::SandboxCommandOutput},
 };
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
+use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
 use git2::Repository;
 use tracing::{debug, error, info, info_span, warn};
 use url::Url;
@@ -39,7 +38,7 @@ impl TryFrom<&str> for Origin {
             Ok(Origin::Remote(url))
         } else {
             let dense_repo_path = PathBuf::from(value);
-            let dense_repo_path = util::paths::expand_tilde(dense_repo_path.as_path())?;
+            let dense_repo_path = focus_util::paths::expand_tilde(dense_repo_path.as_path())?;
             Ok(Origin::Local(dense_repo_path))
         }
     }
@@ -564,7 +563,10 @@ mod test {
     use tracing::info;
 
     use crate::operation::testing::integration::RepoPairFixture;
-    use crate::{app::App, model::repo::Repo, testing::init_logging};
+    use focus_testing::init_logging;
+    use focus_util::app::App;
+
+    use crate::model::repo::Repo;
 
     static MAIN_BRANCH_NAME: &str = "main";
 

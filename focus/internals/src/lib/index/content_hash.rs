@@ -14,7 +14,7 @@ use tracing::warn;
 
 use crate::coordinate::Label;
 use crate::coordinate::TargetName;
-use crate::util::paths::is_relevant_to_build_graph;
+use focus_util::paths::is_relevant_to_build_graph;
 
 use super::DependencyKey;
 

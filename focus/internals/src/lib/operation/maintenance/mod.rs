@@ -10,15 +10,14 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    app::App,
-    tracker::Tracker,
-    util::{
-        git_helper::{self, ConfigExt},
-        lock_file::LockFile,
-    },
-};
+use crate::tracker::Tracker;
+
 use anyhow::{bail, Context, Result};
+use focus_util::{
+    app::App,
+    git_helper::{self, ConfigExt},
+    lock_file::LockFile,
+};
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
@@ -408,8 +407,8 @@ pub fn run(cli: RunOptions, time_period: TimePeriod, app: Arc<App>) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::scratch_git_repo::ScratchGitRepo;
     use anyhow::Result;
+    use focus_testing::scratch_git_repo::ScratchGitRepo;
     use tempfile::TempDir;
 
     struct ConfigFixture {

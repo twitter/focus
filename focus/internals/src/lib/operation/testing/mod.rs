@@ -8,7 +8,7 @@ pub(in crate::operation) mod refs {
 
     use anyhow::{Context, Result};
 
-    use crate::app::App;
+    use focus_util::app::App;
     use git2::Repository;
 
     use tempfile::TempDir;
@@ -201,9 +201,10 @@ pub(in crate::operation) mod integration {
 
     use tracing::{info, warn};
 
-    use crate::{
-        app::App, model::repo::Repo, operation, testing::scratch_git_repo::ScratchGitRepo,
-    };
+    use focus_testing::scratch_git_repo::ScratchGitRepo;
+    use focus_util::app::App;
+
+    use crate::{model::repo::Repo, operation};
 
     #[allow(dead_code)]
     pub enum RepoDisposition {
