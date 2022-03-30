@@ -8,13 +8,13 @@ use std::{
 };
 
 use crate::{
-    coordinate::{Coordinate, CoordinateSet},
+    coordinate::CoordinateSet,
     coordinate_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
     },
     index::{
-        get_files_to_materialize, update_object_database_from_resolution, HashContext,
-        PathsToMaterializeResult, SimpleGitOdb,
+        get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
+        HashContext, PathsToMaterializeResult, SimpleGitOdb,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
 };
@@ -478,13 +478,8 @@ impl Repo {
                 coordinates
                     .underlying()
                     .iter()
-                    .filter_map(|x| match x {
-                        Coordinate::Bazel(label) => Some(label.clone()),
-                        Coordinate::Directory(_path) => None,
-                        Coordinate::Pants(_) => {
-                            unimplemented!("Pants coordinates not supported")
-                        }
-                    })
+                    .cloned()
+                    .map(DependencyKey::from)
                     .collect(),
             )?;
 
