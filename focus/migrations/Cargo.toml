@@ -1,0 +1,38 @@
+[package]
+name = "focus-migrations"
+version = "0.3.3"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "1.0.45", features = ["backtrace"] }
+focus-internals = { path = "../internals" }
+git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
+    "vendored-libgit2",
+] }
+lazy_static = "1.4.0"
+serde = "1.0.130"
+serde_derive = "1.0.130"
+serde_json = "1.0.68"
+tempfile = "3.2.0"
+tracing = "0.1.31"
+tracing-appender = "0.2.1"
+tracing-chrome = "0.4.0"
+tracing-error = "0.2.0"
+tracing-subscriber = { version = "0.3.9", features = [
+  "json",
+  "time",
+  "env-filter",
+  "fmt",
+  "ansi",
+  "registry",
+  "std",
+  "alloc",
+] }
+
+[dev-dependencies]
+insta = "1.13.0"
+tracing = "0.1.31"
+
+[lib]
+name = "focus_migrations"
+path = "src/lib.rs"
