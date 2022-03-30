@@ -50,7 +50,7 @@ impl WorkingTree {
         self.info_dir().join("sparse-checkout")
     }
 
-    /// Writes the given `patterns` to the working tree. If `cone` is set, the
+    /// Writes the given `patterns` to the working tree.
     pub fn apply_sparse_patterns(
         &self,
         patterns: &PatternSet,

@@ -10,9 +10,10 @@ chrono = "0.4"
 clap = { version = "3.1.0", features = ["derive", "env", "wrap_help"] }
 dirs = "4.0.0"
 focus-internals = { path = "../internals" }
-focus-util = { path = "../util" }
+focus-migrations = { path = "../migrations" }
 focus-testing = { path = "../testing" }
 focus-tracing = { path = "../tracing" }
+focus-util = { path = "../util" }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
   "vendored-libgit2",
 ] }

@@ -7,7 +7,7 @@ use std::{
     time::Instant,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use clap::Parser;
 use git2::Repository;
@@ -187,6 +187,12 @@ enum Subcommand {
     /// ````
     /// Then open chrome://tracing in your browser and load the /tmp/chrome-trace.json flie.
     GitTrace { input: PathBuf, output: PathBuf },
+
+    /// Upgrade the repository by running outstanding migration steps.
+    Upgrade {
+        #[clap(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -229,6 +235,8 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             },
         },
         Subcommand::GitTrace { .. } => "git-trace",
+
+        Subcommand::Upgrade { .. } => "upgrade",
     };
     subcommand_name.into()
 }
@@ -537,6 +545,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
+            ensure_repo_compatibility(&sparse_repo)?;
+
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::sync::run(&sparse_repo, app)?;
             Ok(ExitCode(0))
@@ -842,7 +852,27 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             focus_tracing::Trace::git_trace_from(input)?.write_trace_json_to(output)?;
             Ok(ExitCode(0))
         }
+
+        Subcommand::Upgrade { repo } => {
+            focus_migrations::production::perform_pending_migrations(&repo)
+                .context("Failed to upgrade repo")?;
+
+            Ok(ExitCode(0))
+        }
     }
+}
+
+fn ensure_repo_compatibility(sparse_repo: &Path) -> Result<()> {
+    if focus_migrations::production::is_upgrade_required(sparse_repo)
+        .context("Failed to determine whether an upgrade is required")?
+    {
+        bail!(
+            "Repo '{}' needs to be upgraded. Please run `focus upgrade`",
+            sparse_repo.display()
+        );
+    }
+
+    Ok(())
 }
 
 fn setup_thread_pool(resolution_threads: usize) -> Result<()> {

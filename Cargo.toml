@@ -1,9 +1,9 @@
 [workspace]
 members = [
+  "focus/commands",
+  "focus/internals",
   "focus/testing",
   "focus/tracing",
   "focus/util",
-  "focus/commands",
-  "focus/internals",
   "tool_insights_client",
 ]
