@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use crate::coordinate::{Label, TargetName};
+use crate::coordinate::{Coordinate, Label, TargetName};
 use crate::coordinate_resolver::ResolutionResult;
 
 use super::content_hash::HashContext;
@@ -92,6 +92,19 @@ impl DependencyKey {
         Self::BazelPackage {
             external_repository,
             path: path_components.into_iter().collect(),
+        }
+    }
+}
+
+impl From<Coordinate> for DependencyKey {
+    fn from(coordinate: Coordinate) -> Self {
+        match coordinate {
+            Coordinate::Bazel(label) => Self::new_bazel_package(label),
+            Coordinate::Directory(path) => Self::Path(PathBuf::from(path)),
+            Coordinate::Pants(label) => unimplemented!(
+                "DependencyKey from Pants label not supported (label: {})",
+                label
+            ),
         }
     }
 }
@@ -207,16 +220,9 @@ fn try_label_into_path(label: Label) -> anyhow::Result<PathBuf> {
 pub fn get_files_to_materialize(
     ctx: &HashContext,
     odb: &dyn ObjectDatabase,
-    packages: HashSet<Label>,
+    dep_keys: HashSet<DependencyKey>,
 ) -> anyhow::Result<PathsToMaterializeResult> {
-    let mut dep_keys: HashSet<DependencyKey> = packages
-        .into_iter()
-        .map(|label| {
-            // TODO: handle deps other than Bazel packages?
-            let dep_key = DependencyKey::new_bazel_package(label);
-            Ok(dep_key)
-        })
-        .collect::<anyhow::Result<_>>()?;
+    let mut dep_keys = dep_keys;
     debug!(?dep_keys, "Initial set of dependency keys");
 
     // Recursively resolve each dependency's content hashes.
@@ -314,7 +320,7 @@ mod tests {
     use maplit::hashset;
     use tempfile::tempdir;
 
-    use crate::coordinate::CoordinateSet;
+    use crate::coordinate::{Coordinate, CoordinateSet};
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use crate::index::object_database::{testing::HashMapOdb, MemoizationCacheAdapter};
     use focus_testing::init_logging;
@@ -333,6 +339,12 @@ mod tests {
             fix.add_file(file_name)?;
         }
         Ok(())
+    }
+
+    fn parse_label(label: &str) -> anyhow::Result<DependencyKey> {
+        let coordinate = Coordinate::try_from(format!("bazel:{}", label).as_str())?;
+        let dep_key = DependencyKey::from(coordinate);
+        Ok(dep_key)
     }
 
     #[test]
@@ -387,7 +399,7 @@ sh_binary(
                 head_tree: &head_tree,
                 caches: Default::default(),
             };
-            get_files_to_materialize(&ctx, &odb, hashset! { "//package1:foo".parse()? })?
+            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
         };
         // Confirm that the object for package1 is not yet in the database.
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
@@ -465,7 +477,7 @@ sh_binary(
         };
         update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
         let files_to_materialize =
-            get_files_to_materialize(&ctx, &odb, hashset! { "//package1:foo".parse()? })?;
+            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
             paths: {
@@ -554,7 +566,7 @@ New contents
             let files_to_materialize = get_files_to_materialize(
                 &hash_context,
                 &odb,
-                hashset! { "//package1:foo".parse()? },
+                hashset! { parse_label("//package1:foo")? },
             )?;
             (odb, files_to_materialize)
         };
@@ -593,7 +605,11 @@ def my_macro_inner(name):
                 head_tree: &head_tree,
                 caches: Default::default(),
             };
-            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?
+            get_files_to_materialize(
+                &hash_context,
+                &odb,
+                hashset! { parse_label("//package1:foo")? },
+            )?
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
@@ -621,7 +637,11 @@ def my_macro_inner(name):
                 caches: Default::default(),
             };
             update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
-            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?
+            get_files_to_materialize(
+                &hash_context,
+                &odb,
+                hashset! { parse_label("//package1:foo")? },
+            )?
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
@@ -689,7 +709,7 @@ def some_macro():
                 caches: Default::default(),
             };
             update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
-            get_files_to_materialize(&ctx, &odb, hashset! {"//package1:foo".parse()?})?
+            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
@@ -716,7 +736,11 @@ def some_macro():
                 head_tree: &head_tree,
                 caches: Default::default(),
             };
-            get_files_to_materialize(&hash_context, &odb, hashset! { "//package1:foo".parse()? })?
+            get_files_to_materialize(
+                &hash_context,
+                &odb,
+                hashset! { parse_label("//package1:foo")? },
+            )?
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
