@@ -256,6 +256,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             subcommand,
         } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear",
+            IndexSubcommand::Resolve { .. } => "index-resolve",
         },
     };
     subcommand_name.into()
@@ -479,6 +480,9 @@ enum IndexSubcommand {
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
     },
+
+    /// Resolve the coordinates to their resulting pattern sets.
+    Resolve { coordinates: Vec<String> },
 }
 
 #[derive(Parser, Debug)]
@@ -920,6 +924,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             IndexSubcommand::Clear { sparse_repo } => {
                 operation::index::clear(backend, sparse_repo)?;
                 Ok(ExitCode(0))
+            }
+
+            IndexSubcommand::Resolve { coordinates } => {
+                let exit_code = operation::index::resolve(app, backend, coordinates)?;
+                Ok(exit_code)
             }
         },
     }
