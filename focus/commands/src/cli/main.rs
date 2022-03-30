@@ -21,8 +21,6 @@ use focus_util::{
     time::FocusTime,
 };
 
-use focus_tracing;
-
 use focus_internals::{
     coordinate::Coordinate,
     model::layering::LayerSets,
