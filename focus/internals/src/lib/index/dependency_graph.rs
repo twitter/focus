@@ -373,9 +373,6 @@ sh_binary(
         )?;
         let head_oid = fix.commit_all("Wrote files")?;
 
-//<<<<<<< HEAD
-        //
-        //let odb = HashMapOdb::new();
         let file_path = tempdir()?.path().join("focus-rocks");
         let function_id = Oid::from_str(&format!("{:0>20}", "1")[..])?;
         let memo_cache = RocksDBMemoizationCache::open_with_ttl(file_path, Duration::from_secs(3600*24*90));
