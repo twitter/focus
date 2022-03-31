@@ -61,6 +61,13 @@ fn dep_key_to_coordinate(dep_key: &DependencyKey) -> String {
         DependencyKey::BazelBuildFile(label) => format!("bazel:{}", label),
 
         DependencyKey::Path(path) => format!("directory:{}", path.display()),
+
+        DependencyKey::DummyForTesting(inner_dep_key) => {
+            panic!(
+                "Cannot convert dummy testing key into coordinate: {:?}",
+                inner_dep_key
+            );
+        }
     }
 }
 
