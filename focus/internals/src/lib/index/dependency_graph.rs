@@ -316,7 +316,7 @@ mod tests {
 
     use crate::coordinate::CoordinateSet;
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
-    use crate::index::object_database::{MemoizationCacheAdapter, testing::HashMapOdb};
+    use crate::index::object_database::{testing::HashMapOdb, MemoizationCacheAdapter};
     use focus_testing::init_logging;
     use focus_testing::scratch_git_repo::ScratchGitRepo;
     use focus_util::app::App;
@@ -375,7 +375,8 @@ sh_binary(
 
         let file_path = tempdir()?.path().join("focus-rocks");
         let function_id = Oid::from_str(&format!("{:0>20}", "1")[..])?;
-        let memo_cache = RocksDBMemoizationCache::open_with_ttl(file_path, Duration::from_secs(3600*24*90));
+        let memo_cache =
+            RocksDBMemoizationCache::open_with_ttl(file_path, Duration::from_secs(3600 * 24 * 90));
         let odb = MemoizationCacheAdapter::new(memo_cache, function_id);
         let files_to_materialize = {
             let repo = fix.repo()?;
