@@ -1,3 +1,5 @@
+pub mod cleanup;
+
 use anyhow::{Context, Result};
 use std::fs;
 use std::fs::File;
@@ -14,10 +16,12 @@ pub struct Sandbox {
     serial_sequence: AtomicUsize,
 }
 
+const NAME_PREFIX: &'static str = "focus_sandbox_";
+
 impl Sandbox {
     pub fn new(preserve_contents: bool) -> Result<Self> {
         let underlying: TempDir = tempfile::Builder::new()
-            .prefix("focus.")
+            .prefix(NAME_PREFIX)
             .tempdir()
             .context("creating a temporary directory")?;
         let path: PathBuf = (&underlying.path().to_path_buf()).to_owned();
@@ -102,6 +106,9 @@ impl Clone for Sandbox {
     }
 }
 
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,4 +179,6 @@ mod tests {
 
         Ok(())
     }
+
+
 }

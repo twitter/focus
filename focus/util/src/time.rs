@@ -1,4 +1,5 @@
 use anyhow::Result;
+use filetime::FileTime;
 use std::borrow::Borrow;
 use std::fmt;
 use std::ops::{Add, Deref, Sub};
@@ -13,6 +14,10 @@ static DATE_FORMAT: &str = "%Y-%m-%d";
 
 pub trait ToRFC3339 {
     fn to_rfc3339(&self) -> String;
+}
+
+pub fn local_timestamp_rfc3339() -> String {
+    Local::now().to_rfc3339()
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -102,6 +107,18 @@ impl FocusTime {
             &NaiveDateTime::from_timestamp(localnow.timestamp(), localnow.nanosecond()),
         );
         FocusTime(fixed)
+    }
+}
+
+impl From<FileTime> for FocusTime {
+    fn from(ft: FileTime) -> Self {
+        Self(FixedOffset::east(0).timestamp(ft.seconds(), ft.nanoseconds()))
+    }
+}
+
+impl From<FocusTime> for FileTime {
+    fn from(ft: FocusTime) -> Self {
+        FileTime::from_unix_time(ft.timestamp(), ft.nanosecond())
     }
 }
 

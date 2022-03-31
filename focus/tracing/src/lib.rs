@@ -4,8 +4,8 @@ pub mod git_trace2;
 
 use std::path::{Path, PathBuf};
 
+pub use crate::focus::{init_tracing, Guard, TracingOpts};
 pub use chrome::Trace;
-pub use focus::{init_tracing, Guard, TracingOpts};
 
 use anyhow::Result;
 
