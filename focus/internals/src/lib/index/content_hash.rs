@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -211,6 +212,11 @@ pub fn content_hash_dependency_key(
                     // uniquely identifies any external packages.
                 }
             }
+        }
+
+        DependencyKey::DummyForTesting(inner_dep_key) => {
+            buf.push_str("DummyForTesting(");
+            buf.push_str(&content_hash_dependency_key(ctx, inner_dep_key.borrow())?.to_string());
         }
     };
 

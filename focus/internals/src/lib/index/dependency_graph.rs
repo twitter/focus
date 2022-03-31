@@ -78,6 +78,10 @@ pub enum DependencyKey {
     /// Example: a directory containing configuration files or other assets, but
     /// which isn't a Bazel package.
     Path(PathBuf),
+
+    /// This value was generated during testing, and should not appear in a
+    /// production object database.
+    DummyForTesting(Box<DependencyKey>),
 }
 
 impl DependencyKey {
@@ -128,6 +132,10 @@ pub enum DependencyValue {
         /// The path to check out. (This is most likely a directory.)
         path: PathBuf,
     },
+
+    /// This value was generated during testing, and should not appear in a
+    /// production object database.
+    DummyForTesting(DependencyKey),
 }
 
 /// Add content-addressable key-value pairs corresponding to the calculated
@@ -151,7 +159,9 @@ pub fn update_object_database_from_resolution(
             DependencyKey::BazelPackage { .. } => {
                 // Do nothing.
             }
-            DependencyKey::BazelBuildFile(_) | DependencyKey::Path(_) => {
+            DependencyKey::BazelBuildFile(_)
+            | DependencyKey::Path(_)
+            | DependencyKey::DummyForTesting(_) => {
                 warn!(
                     ?dep_key,
                     "Non-package dependency key returned in `ResolutionResult`"
@@ -269,6 +279,11 @@ pub fn get_files_to_materialize(
                             );
                             try_label_into_path(label.clone())?
                         }
+
+                        DependencyKey::DummyForTesting(inner_dep_key) => {
+                            warn!(?inner_dep_key, "Encountered dummy testing key; this should not appear in real-world data");
+                            continue;
+                        }
                     };
                     paths_to_materialize.insert(path);
 
@@ -277,6 +292,10 @@ pub fn get_files_to_materialize(
 
                 Some(DependencyValue::Path { path }) => {
                     paths_to_materialize.insert(path);
+                }
+
+                Some(DependencyValue::DummyForTesting(inner_dep_key)) => {
+                    warn!(?inner_dep_key, "Encountered dummy testing value; this should not appear in real-world data");
                 }
 
                 None => {

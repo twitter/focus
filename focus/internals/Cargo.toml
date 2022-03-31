@@ -55,9 +55,14 @@ which = "4.2.4"
 whoami = "1.2.1"
 
 [dev-dependencies]
+criterion = "0.3.5"
 insta = "1.13.0"
 tracing = "0.1.31"
 
 [lib]
 name = "focus_internals"
 path = "src/lib/lib.rs"
+
+[[bench]]
+name = "bench_content_hash"
+harness = false
