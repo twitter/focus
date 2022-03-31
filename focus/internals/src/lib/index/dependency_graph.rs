@@ -307,12 +307,16 @@ pub fn get_files_to_materialize(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
 
+    use distributed_memoization::RocksDBMemoizationCache;
+    use git2::Oid;
     use maplit::hashset;
+    use tempfile::tempdir;
 
     use crate::coordinate::CoordinateSet;
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
-    use crate::index::object_database::testing::HashMapOdb;
+    use crate::index::object_database::{MemoizationCacheAdapter, testing::HashMapOdb};
     use focus_testing::init_logging;
     use focus_testing::scratch_git_repo::ScratchGitRepo;
     use focus_util::app::App;
@@ -369,7 +373,13 @@ sh_binary(
         )?;
         let head_oid = fix.commit_all("Wrote files")?;
 
-        let odb = HashMapOdb::new();
+//<<<<<<< HEAD
+        //
+        //let odb = HashMapOdb::new();
+        let file_path = tempdir()?.path().join("focus-rocks");
+        let function_id = Oid::from_str(&format!("{:0>20}", "1")[..])?;
+        let memo_cache = RocksDBMemoizationCache::open_with_ttl(file_path, Duration::from_secs(3600*24*90));
+        let odb = MemoizationCacheAdapter::new(memo_cache, function_id);
         let files_to_materialize = {
             let repo = fix.repo()?;
             let head_commit = repo.find_commit(head_oid)?;
@@ -530,8 +540,12 @@ New contents
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
 
+        let file_path = tempdir()?.path().join("focus-rocks");
+        let function_id = Oid::from_str(&format!("{:0>20}", "1")[..])?;
+//<<<<<<< HEAD
+        let memo_cache = RocksDBMemoizationCache::open(file_path);
         let (odb, files_to_materialize) = {
-            let odb = HashMapOdb::new();
+            let odb = MemoizationCacheAdapter::new(memo_cache, function_id);
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
             let hash_context = HashContext {
@@ -546,6 +560,16 @@ New contents
                 hashset! { "//package1:foo".parse()? },
             )?;
             (odb, files_to_materialize)
+//=======
+//        let memo_cache = RocksDBMemoizationCache::open(file_path);
+//        let odb = MemoizationCacheAdapter::new(memo_cache, function_id);
+//        let repo = fix.repo()?;
+//        let head_commit = repo.find_commit(head_oid)?;
+//        let head_tree = head_commit.tree()?;
+//        let hash_context = HashContext {
+//            repo: &repo,
+//            head_tree: &head_tree,
+//>>>>>>> b817eb6... small fixes
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {

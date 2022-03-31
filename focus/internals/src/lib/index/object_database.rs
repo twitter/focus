@@ -1,6 +1,7 @@
 use anyhow::Context;
-use tracing::warn;
-
+use tracing::{debug, warn};
+use distributed_memoization::MemoizationCache;
+use git2::Oid;
 use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 
@@ -21,6 +22,50 @@ pub trait ObjectDatabase {
         key: &DependencyKey,
         value: DependencyValue,
     ) -> anyhow::Result<()>;
+}
+
+/// Adapts a MemoizationCache to work as an ObjectDatabase.
+pub struct MemoizationCacheAdapter {
+   cache: Box<dyn MemoizationCache>,
+   function_id: Oid,
+}
+
+impl MemoizationCacheAdapter {
+    /// Constructor
+    pub fn new(cache: impl MemoizationCache + 'static, function_id: Oid) -> Self {
+        Self {
+            cache: Box::new(cache),
+            function_id,
+        }
+    }
+}
+
+impl ObjectDatabase for MemoizationCacheAdapter {
+    fn get(
+        &self,
+        ctx: &HashContext,
+        key: &DependencyKey,
+    ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
+        let hash = content_hash_dependency_key(ctx, key)?;
+        let result = match self.cache.get(hash.0, self.function_id)? {
+            Some(content) => serde_json::from_slice(&content[..]).context("deserializing DependencyValue as JSON")?,
+            None => None
+        };
+        Ok((hash, result))
+    }
+
+    fn insert(
+        &self,
+        ctx: &HashContext,
+        key: &DependencyKey,
+        value: DependencyValue,
+    ) -> anyhow::Result<()> {
+        let hash = content_hash_dependency_key(ctx, key)?;
+        debug!(?hash, ?value, "Inserting entry into object database");
+        let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
+        self.cache.insert(hash.0, self.function_id, &payload[..])?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
