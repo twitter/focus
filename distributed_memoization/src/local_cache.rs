@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::default::Default;
 use std::string::ToString;
 use std::time::Duration;
@@ -5,8 +6,7 @@ use std::time::Duration;
 use anyhow::{self, Context};
 use git2::Oid;
 use rocksdb::{Options, DB};
-use std::path::PathBuf;
-use tracing::warn;
+use std::path::{Path, PathBuf};
 
 pub trait MemoizationCache {
     fn insert(&self, function_id: Oid, argument: Oid, value: &[u8]) -> anyhow::Result<()>;
@@ -15,7 +15,8 @@ pub trait MemoizationCache {
 }
 
 pub struct RocksDBMemoizationCache {
-    db: DB,
+    db: RefCell<Option<DB>>,
+    ttl: Duration,
 }
 
 pub struct CompositeKey {
@@ -71,11 +72,16 @@ impl CompositeKey {
 }
 
 impl RocksDBMemoizationCache {
-    pub fn open_with_ttl(path: PathBuf, ttl: Duration) -> Self {
+    fn make_db(path: &Path, ttl: Duration) -> DB {
         let mut opts = Options::default();
         opts.create_if_missing(true);
+        DB::open_with_ttl(&opts, path, ttl).unwrap()
+    }
+
+    pub fn open_with_ttl(path: impl AsRef<Path>, ttl: Duration) -> Self {
         Self {
-            db: DB::open_with_ttl(&opts, path, ttl).unwrap(),
+            db: RefCell::new(Some(Self::make_db(path.as_ref(), ttl))),
+            ttl,
         }
     }
     pub fn open(path: PathBuf) -> Self {
@@ -91,6 +97,9 @@ impl MemoizationCache for RocksDBMemoizationCache {
         }
         .to_bytes()[..];
         self.db
+            .borrow()
+            .as_ref()
+            .unwrap()
             .put(key, value)
             .with_context(|| format!("Putting {:?} failed", key))
     }
@@ -102,12 +111,21 @@ impl MemoizationCache for RocksDBMemoizationCache {
         }
         .to_bytes()[..];
         self.db
+            .borrow()
+            .as_ref()
+            .unwrap()
             .get(key)
             .with_context(|| format!("Getting {:?} failed", key))
     }
+
     fn clear(&self) -> anyhow::Result<()> {
-        // FIXME: maybe use `DB::destroy`?
-        warn!("clear not yet implemented for RocksDB backend");
+        let path = self.db.borrow().as_ref().unwrap().path().to_path_buf();
+        {
+            let db = self.db.borrow_mut().take().unwrap();
+            drop(db);
+        }
+        DB::destroy(&Options::default(), &path)?;
+        *self.db.borrow_mut() = Some(Self::make_db(&path, self.ttl));
         Ok(())
     }
 }
