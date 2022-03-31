@@ -12,7 +12,10 @@ use focus_internals::model::layering::LayerSets;
 fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -> Vec<ContentHash> {
     dep_keys
         .iter()
-        .map(|dep_key| content_hash_dependency_key(ctx, dep_key).unwrap())
+        .map(|dep_key| {
+            let dep_key = DependencyKey::DummyForTesting(Box::new(dep_key.clone()));
+            content_hash_dependency_key(ctx, &dep_key).unwrap()
+        })
         .collect::<Vec<_>>()
 }
 
