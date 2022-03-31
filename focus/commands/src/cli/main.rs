@@ -17,7 +17,7 @@ use focus_util::{
     backed_up_file::BackedUpFile,
     git_helper,
     lock_file::LockFile,
-    paths,
+    paths, sandbox,
     time::FocusTime,
 };
 
@@ -31,7 +31,7 @@ use focus_internals::{
     tracker::Tracker,
 };
 use strum::VariantNames;
-use tracing::{debug, info, info_span};
+use tracing::{debug, info, info_span, warn};
 
 #[derive(Parser, Debug)]
 enum Subcommand {
@@ -227,6 +227,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             MaintenanceSubcommand::Run { .. } => "maintenance-run",
             MaintenanceSubcommand::Register { .. } => "maintenance-register",
             MaintenanceSubcommand::SetDefaultConfig { .. } => "maintenance-set-default-config",
+            MaintenanceSubcommand::SandboxCleanup { .. } => "maintenance-sandbox-cleanup",
             MaintenanceSubcommand::Schedule { subcommand } => match subcommand {
                 MaintenanceScheduleSubcommand::Enable { .. } => "maintenance-schedule-enable",
                 MaintenanceScheduleSubcommand::Disable { .. } => "maintenance-schedule-disable",
@@ -284,6 +285,20 @@ enum MaintenanceSubcommand {
     Schedule {
         #[clap(subcommand)]
         subcommand: MaintenanceScheduleSubcommand,
+    },
+
+    SandboxCleanup {
+        /// Sandboxes older than this many hours will be deleted automatically.
+        /// if 0 then time based cleanup is not performed and we just go by
+        /// max_num_sandboxes.
+        #[clap(long)]
+        preserve_hours: Option<u32>,
+
+        /// The maximum number of sandboxes we'll allow to exist on disk.
+        /// this is computed after we clean up sandboxes that are older
+        /// than preserve_hours
+        #[clap(long)]
+        max_num_sandboxes: Option<u32>,
     },
 }
 
@@ -438,10 +453,6 @@ enum RefsSubcommand {
 #[derive(Parser, Debug)]
 #[clap(about = "Focused Development Tools")]
 struct FocusOpts {
-    /// Preserve the created sandbox directory for inspecting logs and other files.
-    #[clap(long, global = true, env = "FOCUS_PRESERVE_SANDBOX")]
-    preserve_sandbox: bool,
-
     /// Number of threads to use when performing parallel resolution (where possible).
     #[clap(
         long,
@@ -459,13 +470,6 @@ struct FocusOpts {
         env = "FOCUS_WORKING_DIRECTORY"
     )]
     working_directory: Option<PathBuf>,
-
-    /// Directory where the log files should be written. This directory will be
-    /// created if it doesn't exist. If not given, we'll use a system-appropriate
-    /// default (~/Library/Logs/focus/ for mac and ~/.local/focus/log/ for linux).
-    /// Can also use FOCUS_LOG_DIR to set this.
-    #[clap(long, global = true, env = "FOCUS_LOG_DIR")]
-    log_dir: Option<PathBuf>,
 
     /// Disables use of ANSI color escape sequences
     #[clap(long, global = true, env = "NO_COLOR")]
@@ -794,6 +798,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     time_period,
                     app,
                 )?;
+
+                sandbox::cleanup::run_with_default()?;
+
                 Ok(ExitCode(0))
             }
 
@@ -844,6 +851,23 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     Ok(ExitCode(0))
                 }
             },
+
+            MaintenanceSubcommand::SandboxCleanup {
+                preserve_hours,
+                max_num_sandboxes,
+            } => {
+                let config = sandbox::cleanup::Config {
+                    preserve_hours: preserve_hours
+                        .unwrap_or(sandbox::cleanup::Config::DEFAULT_HOURS),
+                    max_num_sandboxes: max_num_sandboxes
+                        .unwrap_or(sandbox::cleanup::Config::DEFAULT_MAX_NUM_SANDBOXES),
+                    ..sandbox::cleanup::Config::try_from_git_default()?
+                };
+
+                sandbox::cleanup::run(&config)?;
+
+                Ok(ExitCode(0))
+            }
         },
 
         Subcommand::GitTrace { input, output } => {
@@ -911,10 +935,8 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     let options = FocusOpts::parse();
 
     let FocusOpts {
-        preserve_sandbox,
         resolution_threads,
         working_directory,
-        log_dir,
         no_color,
         cmd: _,
     } = &options;
@@ -922,21 +944,28 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     if let Some(working_directory) = working_directory {
         std::env::set_current_dir(working_directory).context("Switching working directory")?;
     }
+
+    let preserve_sandbox = true;
+
+    let app = Arc::from(App::new(preserve_sandbox)?);
+    let ti_context = app.tool_insights_client();
+
     setup_thread_pool(*resolution_threads)?;
 
     let is_tty = termion::is_tty(&std::io::stdout());
 
+    let sandbox_dir = app.sandbox().path().to_owned();
+
     let _guard = focus_tracing::init_tracing(focus_tracing::TracingOpts {
         is_tty,
         no_color: *no_color,
-        log_dir: log_dir.to_owned(),
+        log_dir: Some(sandbox_dir.to_owned()),
     })?;
+
+    info!(?sandbox_dir, "sandbox path");
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
     setup_maintenance_scheduler(&options).context("Failed to setup maintenance scheduler")?;
-
-    let app = Arc::from(App::new(*preserve_sandbox)?);
-    let ti_context = app.tool_insights_client();
 
     let exit_code = match run_subcommand(app.clone(), options) {
         Ok(exit_code) => {
@@ -952,6 +981,8 @@ fn main_and_drop_locals() -> Result<ExitCode> {
             return Err(e);
         }
     };
+
+    sandbox::cleanup::run_with_default()?;
 
     let total_runtime = started_at.elapsed();
     debug!(

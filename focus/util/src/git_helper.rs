@@ -7,13 +7,13 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use git2;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::path::Path;
 use std::process::Command;
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::{
     app::App,
@@ -380,7 +380,8 @@ pub trait ConfigExt {
 
     fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool>;
     fn set_str_if_not_set<S: AsRef<str>>(&mut self, key: S, value: S) -> Result<()>;
-
+    fn get_bool_with_default<S: AsRef<str>>(&mut self, key: S, default: bool) -> Result<bool>;
+    fn get_i64_with_default<S: AsRef<str>>(&mut self, key: S, default: i64) -> Result<i64>;
     fn dump_config(&self, glob: Option<&str>) -> Result<Vec<(String, String)>>;
 }
 
@@ -399,6 +400,24 @@ impl ConfigExt for git2::Config {
         }
 
         Ok(values)
+    }
+
+    /// The git2 implementation of get_bool does not provide clear semantics around the
+    /// key's existence. In the case where the key does not exist, this method returns
+    /// the default.
+    fn get_bool_with_default<S: AsRef<str>>(&mut self, key: S, default: bool) -> Result<bool> {
+        if !self.is_config_key_set(key.as_ref())? {
+            Ok(default)
+        } else {
+            match self.get_bool(key.as_ref()) {
+                Ok(v) => Ok(v),
+                Err(e) if e.class() == git2::ErrorClass::Config => {
+                    warn!(key=?key.as_ref(), ?default, "bad config value for key, returning default");
+                    Ok(default)
+                }
+                Err(e) => Err(anyhow!(e)),
+            }
+        }
     }
 
     fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool> {
@@ -428,6 +447,21 @@ impl ConfigExt for git2::Config {
             }
         }
         Ok(result)
+    }
+
+    fn get_i64_with_default<S: AsRef<str>>(&mut self, key: S, default: i64) -> Result<i64> {
+        if !self.is_config_key_set(key.as_ref())? {
+            Ok(default)
+        } else {
+            match self.get_i64(key.as_ref()) {
+                Ok(v) => Ok(v),
+                Err(e) if e.class() == git2::ErrorClass::Config => {
+                    warn!(key=?key.as_ref(), ?default, "bad config value for key, returning default");
+                    Ok(default)
+                }
+                Err(e) => Err(anyhow!(e)),
+            }
+        }
     }
 }
 
@@ -505,6 +539,53 @@ mod tests {
     fn test_git_exec_path() -> Result<()> {
         // just make sure this doesn't barf
         git_exec_path(&git_binary_path()?)?;
+        Ok(())
+    }
+
+    fn mk_temp_config(content: &str) -> Result<(tempfile::NamedTempFile, git2::Config)> {
+        use std::io::prelude::*;
+
+        let temp = tempfile::NamedTempFile::new()?;
+        writeln!(temp.as_file(), "{}", content)?;
+        let config = git2::Config::open(temp.path())?;
+
+        Ok((temp, config))
+    }
+
+    #[test]
+    fn test_get_bool_with_default() -> Result<()> {
+        let (_temp, mut config) = mk_temp_config(
+            r##"
+[foo "bar"]
+istrue = true
+isfalse = false
+potato = potato
+"##,
+        )?;
+
+        assert!(config.get_bool_with_default("foo.bar.istrue", false)?);
+        assert!(!config.get_bool_with_default("foo.bar.isfalse", true)?);
+        assert!(config.get_bool_with_default("foo.bar.potato", true)?);
+        assert!(config.get_bool_with_default("foo.bar.missing", true)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_i64_with_default() -> Result<()> {
+        let (_temp, mut config) = mk_temp_config(
+            r##"
+[foo "bar"]
+positive = 1729
+negative = -721
+potato = potato
+"##,
+        )?;
+        assert_eq!(config.get_i64_with_default("foo.bar.positive", 22)?, 1729);
+        assert_eq!(config.get_i64_with_default("foo.bar.negative", 22)?, -721);
+        assert_eq!(config.get_i64_with_default("foo.bar.potato", 22)?, 22);
+        assert_eq!(config.get_i64_with_default("foo.bar.missing", 22)?, 22);
+
         Ok(())
     }
 }

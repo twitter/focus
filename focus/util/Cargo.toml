@@ -8,6 +8,7 @@ edition = "2021"
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "4.0.0"
+filetime = "0.2"
 focus-testing = { path = "../testing" }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
   "vendored-libgit2",
@@ -27,6 +28,7 @@ url = "2.2.2"
 uuid = { version = "0.8.2", features = ["v4"] }
 which = "4.2.4"
 whoami = "1.2.1"
+walkdir = "2.3.2"
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["focus-testing", "termion"]
