@@ -10,6 +10,7 @@ use std::path::PathBuf;
 pub trait MemoizationCache {
     fn insert(&self, function_id: Oid, argument: Oid, value: &[u8]) -> anyhow::Result<()>;
     fn get(&self, function_id: Oid, argument: Oid) -> anyhow::Result<Option<Vec<u8>>>;
+    fn clear(&self) -> anyhow::Result<()>;
 }
 
 pub struct RocksDBMemoizationCache {
@@ -102,6 +103,10 @@ impl MemoizationCache for RocksDBMemoizationCache {
         self.db
             .get(key)
             .with_context(|| format!("Getting {:?} failed", key))
+    }
+    fn clear(&self) -> anyhow::Result<()> {
+        // FIXME: maybe use `DB::destroy`?
+        unimplemented!("not yet implemented for RocksDB backend")
     }
 }
 
