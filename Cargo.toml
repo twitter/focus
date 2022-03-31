@@ -6,4 +6,5 @@ members = [
   "focus/tracing",
   "focus/util",
   "tool_insights_client",
+  "distributed_memoization",
 ]
