@@ -75,17 +75,11 @@ impl Layer {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub struct LayerSet {
     layers: Vec<Layer>,
-
-    #[serde(skip)]
-    content_hash: Option<String>, // Hex representation of a SHA-256 checksum
 }
 
 impl LayerSet {
     pub fn new(layers: Vec<Layer>) -> Self {
-        Self {
-            layers,
-            content_hash: None,
-        }
+        Self { layers }
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -140,14 +134,8 @@ impl LayerSet {
         let slice =
             &std::fs::read(&path).with_context(|| format!("opening file {:?} for read", &path))?;
 
-        let mut layer_set: LayerSet = serde_json::from_slice(slice)
+        let layer_set: LayerSet = serde_json::from_slice(slice)
             .with_context(|| format!("loading layer set from {}", &path.display()))?;
-
-        // let mut hasher = Sha256::new();
-        // hasher.update(&slice);
-        // layer_set.content_hash = Some(format!("{:x}", hasher.finalize()));
-        layer_set.content_hash = None;
-
         Ok(layer_set)
     }
 
@@ -354,10 +342,7 @@ impl LayerSets {
 
     // Return a layer_set cataloging all available layers
     pub fn available_layers(&self) -> Result<LayerSet> {
-        let mut layer = LayerSet {
-            layers: vec![],
-            content_hash: None,
-        };
+        let mut layer = LayerSet { layers: vec![] };
 
         let paths = self
             .locate_layer_set_files(&self.project_directory())
@@ -417,10 +402,7 @@ impl LayerSets {
             Self::find_named_layers(&layer_stack.selected_layer_names, &indexed_available_layers)
                 .context("extracting selected layers from the set of all available layers")?;
 
-        Ok(Some(LayerSet {
-            layers,
-            content_hash: None,
-        }))
+        Ok(Some(LayerSet { layers }))
     }
 
     // Return the computed layers, namely the mandatory layers and the selected layers
@@ -585,10 +567,7 @@ mod tests {
     }
 
     fn layer_set() -> LayerSet {
-        LayerSet {
-            layers: layers(),
-            content_hash: None,
-        }
+        LayerSet { layers: layers() }
     }
 
     #[test]
@@ -608,10 +587,7 @@ mod tests {
                 mandatory: false,
                 coordinates: vec!["it doesn't matter".to_owned()],
             });
-            let layer_set = LayerSet {
-                layers,
-                content_hash: None,
-            };
+            let layer_set = LayerSet { layers };
             let e = layer_set.validate().unwrap_err();
             assert_eq!("Layer named 'baseline/loglens' at index 4 has the same name as existing layer at index 2",e.to_string());
         }
@@ -636,10 +612,7 @@ mod tests {
                 mandatory: false,
                 coordinates: vec!["blah".to_owned()],
             });
-            let layer_set = LayerSet {
-                layers,
-                content_hash: None,
-            };
+            let layer_set = LayerSet { layers };
             let e = layer_set.validate().unwrap_err();
             assert_eq!("Layer name 'beep:boop' contains a colon (:); colons are not allowed in layer names",e.to_string());
         }
@@ -659,7 +632,6 @@ mod tests {
                 mandatory: false,
                 coordinates: vec!["//foo/bar/...".to_owned()],
             }],
-            content_hash: None,
         };
 
         t1.extend(t2.clone());
@@ -715,7 +687,6 @@ mod tests {
                 mandatory: false,
                 coordinates: vec![format!("//{}/...", name)],
             }],
-            content_hash: None,
         }
     }
 
@@ -770,10 +741,7 @@ mod tests {
                 mandatory: false,
             },
         ];
-        let t = LayerSet {
-            layers: ls,
-            content_hash: None,
-        };
+        let t = LayerSet { layers: ls };
 
         let layers = t.optional_layers()?;
         assert_eq!(layers.len(), 1);
