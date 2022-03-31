@@ -6,6 +6,7 @@ use anyhow::{self, Context};
 use git2::Oid;
 use rocksdb::{Options, DB};
 use std::path::PathBuf;
+use tracing::warn;
 
 pub trait MemoizationCache {
     fn insert(&self, function_id: Oid, argument: Oid, value: &[u8]) -> anyhow::Result<()>;
@@ -106,7 +107,8 @@ impl MemoizationCache for RocksDBMemoizationCache {
     }
     fn clear(&self) -> anyhow::Result<()> {
         // FIXME: maybe use `DB::destroy`?
-        unimplemented!("not yet implemented for RocksDB backend")
+        warn!("clear not yet implemented for RocksDB backend");
+        Ok(())
     }
 }
 

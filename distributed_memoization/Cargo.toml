@@ -14,3 +14,4 @@ git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b
 rocksdb = "0.18.0"
 tempfile = "3.2.0"
 thiserror = "1.0.30"
+tracing = "0.1.32"

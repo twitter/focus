@@ -340,6 +340,7 @@ dependencies = [
  "rocksdb",
  "tempfile",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

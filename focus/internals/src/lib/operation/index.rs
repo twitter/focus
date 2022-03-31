@@ -9,7 +9,7 @@ use focus_util::app::{App, ExitCode};
 use crate::coordinate::{Coordinate, CoordinateSet};
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
-    SimpleGitOdb,
+    RocksDBMemoizationCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use crate::model::repo::Repo;
 
@@ -27,11 +27,15 @@ use crate::model::repo::Repo;
 pub enum Backend {
     /// Use `SimpleGitOdb` as the back-end. Not for production use.
     Simple,
+
+    /// Use RocksDB an the back-end.
+    RocksDb,
 }
 
 fn make_odb<'a>(backend: Backend, repo: &'a git2::Repository) -> Box<dyn ObjectDatabase + 'a> {
     match backend {
-        Backend::Simple => Box::new(SimpleGitOdb::new(&repo)),
+        Backend::Simple => Box::new(SimpleGitOdb::new(repo)),
+        Backend::RocksDb => Box::new(RocksDBMemoizationCache::new(repo)),
     }
 }
 

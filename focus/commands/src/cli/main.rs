@@ -200,7 +200,7 @@ enum Subcommand {
             global = true,
             required = false,
             possible_values = operation::index::Backend::VARIANTS,
-            default_value = "simple",
+            default_value = "rocks-db",
         )]
         backend: operation::index::Backend,
 

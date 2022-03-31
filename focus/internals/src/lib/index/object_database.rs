@@ -1,9 +1,13 @@
+use std::time::Duration;
+
 use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 use anyhow::Context;
 use distributed_memoization::MemoizationCache;
-use git2::Oid;
+use lazy_static::lazy_static;
 use tracing::{debug, info, warn};
+
+pub use distributed_memoization::RocksDBMemoizationCache;
 
 /// A persistent key-value cache mapping the hashes of [`super::DependencyKey`]s
 /// to [`DependencyValue`]s.
@@ -27,30 +31,19 @@ pub trait ObjectDatabase {
     fn clear(&self) -> anyhow::Result<()>;
 }
 
-/// Adapts a MemoizationCache to work as an ObjectDatabase.
-pub struct MemoizationCacheAdapter {
-    cache: Box<dyn MemoizationCache>,
-    function_id: Oid,
+lazy_static! {
+    static ref FUNCTION_ID: git2::Oid =
+        git2::Oid::hash_object(git2::ObjectType::Blob, b"odb").unwrap();
 }
 
-impl MemoizationCacheAdapter {
-    /// Constructor
-    pub fn new(cache: impl MemoizationCache + 'static, function_id: Oid) -> Self {
-        Self {
-            cache: Box::new(cache),
-            function_id,
-        }
-    }
-}
-
-impl ObjectDatabase for MemoizationCacheAdapter {
+impl<T: MemoizationCache> ObjectDatabase for T {
     fn get(
         &self,
         ctx: &HashContext,
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
         let hash = content_hash_dependency_key(ctx, key)?;
-        let result = match self.cache.get(hash.0, self.function_id)? {
+        let result = match self.get(hash.0, *FUNCTION_ID)? {
             Some(content) => serde_json::from_slice(&content[..])
                 .context("deserializing DependencyValue as JSON")?,
             None => None,
@@ -67,13 +60,26 @@ impl ObjectDatabase for MemoizationCacheAdapter {
         let hash = content_hash_dependency_key(ctx, key)?;
         debug!(?hash, ?value, "Inserting entry into object database");
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
-        self.cache.insert(hash.0, self.function_id, &payload[..])?;
+        self.insert(hash.0, *FUNCTION_ID, &payload[..])?;
         Ok(())
     }
 
     fn clear(&self) -> anyhow::Result<()> {
-        self.cache.clear()?;
+        self.clear()?;
         Ok(())
+    }
+}
+
+/// Helper functions to use [`RocksDBMemoizationCache`] as an [`ObjectDatabase`].
+pub trait RocksDBMemoizationCacheExt {
+    /// Create the cache in a fixed directory under `.git`.
+    fn new(repo: &git2::Repository) -> Self;
+}
+
+impl RocksDBMemoizationCacheExt for RocksDBMemoizationCache {
+    fn new(repo: &git2::Repository) -> RocksDBMemoizationCache {
+        let rocksdb_path = repo.path().join("focus/focus-index-rocks-db");
+        RocksDBMemoizationCache::open_with_ttl(rocksdb_path, Duration::from_secs(3600 * 24 * 90))
     }
 }
 
