@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 chrono = { version = "0.4", features = ["serde"] }
-clap = "3.1.0"
+clap = "3.1.7"
 dirs = "4.0.0"
 focus-testing = { path = "../testing" }
 focus-tracing = { path = "../tracing" }

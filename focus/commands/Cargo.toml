@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.45"
 chrono = "0.4"
-clap = { version = "3.1.0", features = ["derive", "env", "wrap_help"] }
+clap = { version = "3.1.7", features = ["derive", "env", "wrap_help"] }
 dirs = "4.0.0"
 focus-internals = { path = "../internals" }
 focus-migrations = { path = "../migrations" }
