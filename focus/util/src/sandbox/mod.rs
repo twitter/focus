@@ -16,7 +16,7 @@ pub struct Sandbox {
     serial_sequence: AtomicUsize,
 }
 
-const NAME_PREFIX: &'static str = "focus_sandbox_";
+const NAME_PREFIX: &str = "focus_sandbox_";
 
 impl Sandbox {
     pub fn new(preserve_contents: bool) -> Result<Self> {
@@ -106,9 +106,6 @@ impl Clone for Sandbox {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,6 +176,4 @@ mod tests {
 
         Ok(())
     }
-
-
 }

@@ -26,11 +26,7 @@ pub struct ParseCompositeKeyError;
 
 impl ToString for CompositeKey {
     fn to_string(&self) -> String {
-        format!(
-            "{},{}",
-            self.argument.to_string(),
-            self.function_id.to_string()
-        )
+        format!("{},{}", self.argument, self.function_id)
     }
 }
 
@@ -44,8 +40,10 @@ impl CompositeKey {
     pub fn to_bytes(&self) -> CompositeKeyBytes {
         let mut c: [u8; COMPOSITE_KEY_LENGTH] = [0; COMPOSITE_KEY_LENGTH];
         c[..KEY_PREFIX_LENGTH].clone_from_slice(KEY_PREFIX);
-        c[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH+OID_BYTE_LENGTH].clone_from_slice(self.function_id.as_bytes());
-        c[KEY_PREFIX_LENGTH+OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH].clone_from_slice(self.argument.as_bytes());
+        c[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]
+            .clone_from_slice(self.function_id.as_bytes());
+        c[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]
+            .clone_from_slice(self.argument.as_bytes());
         c
     }
 
@@ -53,14 +51,16 @@ impl CompositeKey {
         if !s.starts_with(KEY_PREFIX) {
             return Err(ParseCompositeKeyError);
         }
-        let function_id = match Oid::from_bytes(&s[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]) {
-            Ok(oid) => oid,
-            Err(_) => return Err(ParseCompositeKeyError),
-        };
-        let argument = match Oid::from_bytes(&s[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
-            Ok(oid) => oid,
-            Err(_) => return Err(ParseCompositeKeyError),
-        };
+        let function_id =
+            match Oid::from_bytes(&s[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]) {
+                Ok(oid) => oid,
+                Err(_) => return Err(ParseCompositeKeyError),
+            };
+        let argument =
+            match Oid::from_bytes(&s[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
+                Ok(oid) => oid,
+                Err(_) => return Err(ParseCompositeKeyError),
+            };
         Ok(CompositeKey {
             function_id,
             argument,
@@ -114,7 +114,9 @@ mod tests {
     use rocksdb::{Options, DB};
     use tempfile::{tempdir, TempDir};
 
-    use crate::{CompositeKey, MemoizationCache, RocksDBMemoizationCache, local_cache::OID_BYTE_LENGTH};
+    use crate::{
+        local_cache::OID_BYTE_LENGTH, CompositeKey, MemoizationCache, RocksDBMemoizationCache,
+    };
 
     static ARG: &'static str = "12345678912345789ab";
     static FN_ID: &'static str = "abcd5abcd5abcd5abcd5";

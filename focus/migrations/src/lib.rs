@@ -81,13 +81,17 @@ impl Runner {
     }
 
     fn store_manifest(&self) -> Result<()> {
-        let writer = BufWriter::new(File::create(&self.manifest_path).with_context(|| format!("Opening manifest at {}", self.manifest_path.display()))?);
-        serde_json::to_writer(writer, &self.manifest).context("Failed writing serialized content")?;
+        let writer =
+            BufWriter::new(File::create(&self.manifest_path).with_context(|| {
+                format!("Opening manifest at {}", self.manifest_path.display())
+            })?);
+        serde_json::to_writer(writer, &self.manifest)
+            .context("Failed writing serialized content")?;
         Ok(())
     }
 
     fn ultimate_migration(&self) -> Option<Identifier> {
-        self.migrations.last().map(|m| m.as_ref().id().clone())
+        self.migrations.last().map(|m| m.as_ref().id())
     }
 
     pub fn is_upgrade_required(&self) -> Result<bool> {

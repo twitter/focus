@@ -372,7 +372,11 @@ impl OutliningTree {
                 None => {
                     debug!("Adding directory verbatim: {}", qualified_path.display());
                     if let Some(path) = treat_path(&qualified_path)? {
-                        patterns.insert(Pattern::Directory { precedence: LAST, path, recursive: true });
+                        patterns.insert(Pattern::Directory {
+                            precedence: LAST,
+                            path,
+                            recursive: true,
+                        });
                     }
                 }
             }
