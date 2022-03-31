@@ -34,24 +34,30 @@ impl ToString for CompositeKey {
     }
 }
 
+const KEY_PREFIX_LENGTH: usize = 3;
+const KEY_PREFIX: &[u8; KEY_PREFIX_LENGTH] = b"oid";
+const OID_BYTE_LENGTH: usize = 20;
+const COMPOSITE_KEY_LENGTH: usize = KEY_PREFIX_LENGTH + OID_BYTE_LENGTH + OID_BYTE_LENGTH;
+type CompositeKeyBytes = [u8; COMPOSITE_KEY_LENGTH];
+
 impl CompositeKey {
-    pub fn to_bytes(&self) -> [u8; 43] {
-        let mut c: [u8; 43] = [0; 43];
-        c[..3].clone_from_slice(b"oid");
-        c[3..23].clone_from_slice(self.function_id.as_bytes());
-        c[23..43].clone_from_slice(self.argument.as_bytes());
+    pub fn to_bytes(&self) -> CompositeKeyBytes {
+        let mut c: [u8; COMPOSITE_KEY_LENGTH] = [0; COMPOSITE_KEY_LENGTH];
+        c[..KEY_PREFIX_LENGTH].clone_from_slice(KEY_PREFIX);
+        c[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH+OID_BYTE_LENGTH].clone_from_slice(self.function_id.as_bytes());
+        c[KEY_PREFIX_LENGTH+OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH].clone_from_slice(self.argument.as_bytes());
         c
     }
 
-    pub fn from_bytes(s: &[u8; 43]) -> Result<Self, ParseCompositeKeyError> {
-        if !s.starts_with(b"oid") {
+    pub fn from_bytes(s: &[u8; COMPOSITE_KEY_LENGTH]) -> Result<Self, ParseCompositeKeyError> {
+        if !s.starts_with(KEY_PREFIX) {
             return Err(ParseCompositeKeyError);
         }
-        let function_id = match Oid::from_bytes(&s[3..23]) {
+        let function_id = match Oid::from_bytes(&s[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]) {
             Ok(oid) => oid,
             Err(_) => return Err(ParseCompositeKeyError),
         };
-        let argument = match Oid::from_bytes(&s[23..43]) {
+        let argument = match Oid::from_bytes(&s[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
             Ok(oid) => oid,
             Err(_) => return Err(ParseCompositeKeyError),
         };
@@ -108,7 +114,7 @@ mod tests {
     use rocksdb::{Options, DB};
     use tempfile::{tempdir, TempDir};
 
-    use crate::{CompositeKey, MemoizationCache, RocksDBMemoizationCache};
+    use crate::{CompositeKey, MemoizationCache, RocksDBMemoizationCache, local_cache::OID_BYTE_LENGTH};
 
     static ARG: &'static str = "12345678912345789ab";
     static FN_ID: &'static str = "abcd5abcd5abcd5abcd5";
@@ -206,5 +212,10 @@ mod tests {
         let inflated_oid = CompositeKey::from_bytes(&oid_bytes).unwrap();
         assert_eq!(inflated_oid.argument, Oid::from_str(ARG).unwrap());
         assert_eq!(inflated_oid.function_id, Oid::from_str(FN_ID).unwrap());
+    }
+
+    #[test]
+    fn test_oid_invariants() {
+        assert_eq!(OID_BYTE_LENGTH, Oid::zero().as_bytes().len());
     }
 }
