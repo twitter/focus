@@ -542,7 +542,6 @@ New contents
 
         let file_path = tempdir()?.path().join("focus-rocks");
         let function_id = Oid::from_str(&format!("{:0>20}", "1")[..])?;
-//<<<<<<< HEAD
         let memo_cache = RocksDBMemoizationCache::open(file_path);
         let (odb, files_to_materialize) = {
             let odb = MemoizationCacheAdapter::new(memo_cache, function_id);
@@ -560,16 +559,6 @@ New contents
                 hashset! { "//package1:foo".parse()? },
             )?;
             (odb, files_to_materialize)
-//=======
-//        let memo_cache = RocksDBMemoizationCache::open(file_path);
-//        let odb = MemoizationCacheAdapter::new(memo_cache, function_id);
-//        let repo = fix.repo()?;
-//        let head_commit = repo.find_commit(head_oid)?;
-//        let head_tree = head_commit.tree()?;
-//        let hash_context = HashContext {
-//            repo: &repo,
-//            head_tree: &head_tree,
-//>>>>>>> b817eb6... small fixes
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
