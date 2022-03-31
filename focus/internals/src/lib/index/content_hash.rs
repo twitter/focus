@@ -215,21 +215,25 @@ fn find_load_dependencies(
     ctx: &HashContext,
     package_path: &Path,
 ) -> anyhow::Result<BTreeSet<Label>> {
-    let tree_entry = match ctx.head_tree.get_path(package_path) {
-        Ok(tree_entry) => tree_entry,
-        Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(Default::default()),
-        Err(e) => return Err(e.into()),
-    };
-    let object = tree_entry
-        .to_object(ctx.repo)
-        .context("converting tree entry to object")?;
-    let tree = match object.as_tree() {
-        Some(tree) => tree,
-        None => todo!(),
+    let tree = if package_path == Path::new("") {
+        ctx.head_tree.to_owned()
+    } else {
+        let tree_entry = match ctx.head_tree.get_path(package_path) {
+            Ok(tree_entry) => tree_entry,
+            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(Default::default()),
+            Err(e) => return Err(e.into()),
+        };
+        let object = tree_entry
+            .to_object(ctx.repo)
+            .context("converting tree entry to object")?;
+        match object.as_tree() {
+            Some(tree) => tree.to_owned(),
+            None => todo!(),
+        }
     };
 
     let mut result = BTreeSet::new();
-    for tree_entry in tree {
+    for tree_entry in &tree {
         let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
         result.extend(deps);
     }

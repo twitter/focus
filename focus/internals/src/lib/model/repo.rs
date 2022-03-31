@@ -8,8 +8,14 @@ use std::{
 };
 
 use crate::{
-    coordinate::CoordinateSet,
-    coordinate_resolver::{CacheOptions, ResolutionRequest, Resolver, RoutingResolver},
+    coordinate::{Coordinate, CoordinateSet},
+    coordinate_resolver::{
+        CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
+    },
+    index::{
+        get_files_to_materialize, update_object_database_from_resolution, HashContext,
+        PathsToMaterializeResult, SimpleGitOdb,
+    },
     model::outlining::{LeadingPatternInserter, Pattern},
 };
 
@@ -20,7 +26,7 @@ use super::{
 
 use anyhow::{bail, Context, Result};
 use git2::{Oid, Repository, TreeWalkMode, TreeWalkResult};
-use tracing::{debug, info, info_span};
+use tracing::{debug, info, info_span, trace};
 use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
@@ -322,7 +328,7 @@ impl OutliningTree {
         commit_id: git2::Oid,
         coordinate_set: &CoordinateSet,
         app: Arc<App>,
-    ) -> Result<PatternSet> {
+    ) -> Result<(PatternSet, ResolutionResult)> {
         // Switch to the commit
         self.underlying()
             .switch_to_commit(commit_id, true, true, app.clone())
@@ -351,7 +357,7 @@ impl OutliningTree {
         };
 
         const LAST: usize = usize::MAX;
-        for path in result.paths {
+        for path in result.paths.iter() {
             let qualified_path = repo_path.join(path);
             match paths::find_closest_directory_with_build_file(&qualified_path, &repo_path)
                 .context("locating closest build file")?
@@ -382,7 +388,7 @@ impl OutliningTree {
             }
         }
 
-        Ok(patterns)
+        Ok((patterns, result))
     }
 }
 
@@ -442,29 +448,88 @@ impl Repo {
 
     /// Run a sync, returning the number of patterns that were applied.
     pub fn sync(&self, coordinates: &CoordinateSet, app: Arc<App>) -> Result<usize> {
-        match (&self.working_tree, &self.outlining_tree) {
-            (Some(working_tree), Some(outlining_tree)) => {
-                // Get the HEAD commit ID for the repo so that we can outline using the same commit.
-                let head_commit = self
-                    .repo
-                    .head()
-                    .context("Failed to resolve HEAD reference")?
-                    .peel_to_commit()
-                    .context("Failed to peel to commit")?;
+        let head_commit = self
+            .repo
+            .head()
+            .context("Failed to resolve HEAD reference")?
+            .peel_to_commit()
+            .context("Failed to peel to commit")?;
+        let head_tree = head_commit.tree().context("Failed to resolve head tree")?;
+        let hash_context = HashContext {
+            repo: &self.repo,
+            head_tree: &head_tree,
+            caches: Default::default(),
+        };
+        let odb = SimpleGitOdb::new();
 
-                let mut outline_patterns: PatternSet = outlining_tree
-                    .outline(head_commit.id(), coordinates, app.clone())
-                    .context("Failed to outline")?;
-                outline_patterns.extend(working_tree.default_working_tree_patterns()?);
-                working_tree
-                    .apply_sparse_patterns(&outline_patterns, true, app)
-                    .context("Failed to apply outlined patterns to working tree")?;
-                Ok(outline_patterns.len())
-            }
+        let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
+            (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),
             _ => {
-                bail!("Synchronization is only possible in a repo with both working and outlining trees")
+                // TODO: we might succeed in synchronization without an outlining tree.
+                bail!("Synchronization is only possible in a repo with both working and outlining trees");
             }
-        }
+        };
+
+        let mut outline_patterns = {
+            info!("Checking cache for sparse checkout patterns");
+            let paths_to_materialize = get_files_to_materialize(
+                &hash_context,
+                &odb,
+                coordinates
+                    .underlying()
+                    .iter()
+                    .filter_map(|x| match x {
+                        Coordinate::Bazel(label) => Some(label.clone()),
+                        Coordinate::Directory(_path) => None,
+                        Coordinate::Pants(_) => {
+                            unimplemented!("Pants coordinates not supported")
+                        }
+                    })
+                    .collect(),
+            )?;
+
+            match paths_to_materialize {
+                PathsToMaterializeResult::Ok { paths } => {
+                    info!("Cache hit for sparse checkout patterns");
+                    paths
+                        .into_iter()
+                        .map(|path| Pattern::Directory {
+                            precedence: 0,
+                            path,
+                            recursive: true,
+                        })
+                        .collect()
+                }
+
+                PathsToMaterializeResult::MissingKeys {
+                    // TODO: somehow populate odb
+                    keys: missing_keys,
+                } => {
+                    info!(
+                        ?missing_keys,
+                        "Cache miss for sparse checkout patterns; querying Bazel"
+                    );
+                    let (outline_patterns, resolution_result) = outlining_tree
+                        .outline(head_commit.id(), coordinates, app.clone())
+                        .context("Failed to outline")?;
+
+                    debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
+                    update_object_database_from_resolution(
+                        &hash_context,
+                        &odb,
+                        &resolution_result,
+                    )?;
+                    outline_patterns
+                }
+            }
+        };
+
+        trace!(?outline_patterns);
+        outline_patterns.extend(working_tree.default_working_tree_patterns()?);
+        working_tree
+            .apply_sparse_patterns(&outline_patterns, true, app)
+            .context("Failed to apply outlined patterns to working tree")?;
+        Ok(outline_patterns.len())
     }
 
     /// Creates an outlining tree for the repository.
