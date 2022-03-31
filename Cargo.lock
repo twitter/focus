@@ -331,7 +331,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "distributed_memoization"
+name = "distributed-memoization"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -416,7 +416,7 @@ dependencies = [
  "chrono",
  "clap",
  "dirs",
- "distributed_memoization",
+ "distributed-memoization",
  "focus-testing",
  "focus-tracing",
  "focus-util",
