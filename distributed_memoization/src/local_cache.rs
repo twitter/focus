@@ -82,15 +82,20 @@ impl MemoizationCache for RocksDBMemoizationCache {
             argument,
         }
         .to_bytes()[..];
-        self.db.put(key, value).context("Rocksdb failed on put.")
+        self.db
+            .put(key, value)
+            .with_context(|| format!("Putting {:?} failed", key))
     }
+
     fn get(&self, function_id: Oid, argument: Oid) -> anyhow::Result<Option<Vec<u8>>> {
         let key: &[u8] = &CompositeKey {
             function_id,
             argument,
         }
         .to_bytes()[..];
-        self.db.get(key).context("Rocksdb failed on get.")
+        self.db
+            .get(key)
+            .with_context(|| format!("Getting {:?} failed", key))
     }
 }
 
