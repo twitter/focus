@@ -3,7 +3,7 @@ use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyV
 use anyhow::Context;
 use distributed_memoization::MemoizationCache;
 use git2::Oid;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// A persistent key-value cache mapping the hashes of [`super::DependencyKey`]s
 /// to [`DependencyValue`]s.
@@ -22,6 +22,9 @@ pub trait ObjectDatabase {
         key: &DependencyKey,
         value: DependencyValue,
     ) -> anyhow::Result<()>;
+
+    /// Clear all entries.
+    fn clear(&self) -> anyhow::Result<()>;
 }
 
 /// Adapts a MemoizationCache to work as an ObjectDatabase.
@@ -65,6 +68,11 @@ impl ObjectDatabase for MemoizationCacheAdapter {
         debug!(?hash, ?value, "Inserting entry into object database");
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
         self.cache.insert(hash.0, self.function_id, &payload[..])?;
+        Ok(())
+    }
+
+    fn clear(&self) -> anyhow::Result<()> {
+        self.cache.clear()?;
         Ok(())
     }
 }
@@ -129,6 +137,11 @@ pub mod testing {
                     );
                 }
             }
+            Ok(())
+        }
+
+        fn clear(&self) -> anyhow::Result<()> {
+            self.entries.lock().unwrap().clear();
             Ok(())
         }
     }
@@ -230,6 +243,27 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
                 &format!("updating with key {:?}", key),
             )
             .context("updating reference")?;
+        Ok(())
+    }
+
+    fn clear(&self) -> anyhow::Result<()> {
+        match self.repo.find_reference(Self::REF_NAME) {
+            Ok(mut reference) => {
+                info!(
+                    reference_name = reference.name(),
+                    "Deleting SimpleGitOdb reference"
+                );
+                reference.delete().context("deleting reference")?;
+            }
+            Err(e) if e.code() == git2::ErrorCode::NotFound => {
+                // Do nothing.
+                info!(
+                    reference_name = Self::REF_NAME,
+                    "No SimpleGitOdb reference to delete; nothing to do"
+                );
+            }
+            Err(e) => return Err(e.into()),
+        }
         Ok(())
     }
 }

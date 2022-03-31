@@ -191,6 +191,22 @@ enum Subcommand {
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
     },
+
+    /// Interact with the on-disk focus index.
+    Index {
+        #[clap(
+            short,
+            long,
+            global = true,
+            required = false,
+            possible_values = operation::index::Backend::VARIANTS,
+            default_value = "simple",
+        )]
+        backend: operation::index::Backend,
+
+        #[clap(subcommand)]
+        subcommand: IndexSubcommand,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -234,8 +250,13 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             },
         },
         Subcommand::GitTrace { .. } => "git-trace",
-
         Subcommand::Upgrade { .. } => "upgrade",
+        Subcommand::Index {
+            backend: _,
+            subcommand,
+        } => match subcommand {
+            IndexSubcommand::Clear { .. } => "index-clear",
+        },
     };
     subcommand_name.into()
 }
@@ -447,6 +468,16 @@ enum RefsSubcommand {
         /// included in master
         #[clap(short = 'm', long = "check-merge-base")]
         check_merge_base: bool,
+    },
+}
+
+#[derive(Parser, Debug)]
+enum IndexSubcommand {
+    /// Clear the on-disk cache.
+    Clear {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
     },
 }
 
@@ -881,6 +912,16 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
             Ok(ExitCode(0))
         }
+
+        Subcommand::Index {
+            backend,
+            subcommand,
+        } => match subcommand {
+            IndexSubcommand::Clear { sparse_repo } => {
+                operation::index::clear(backend, sparse_repo)?;
+                Ok(ExitCode(0))
+            }
+        },
     }
 }
 
