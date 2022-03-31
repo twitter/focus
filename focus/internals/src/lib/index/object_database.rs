@@ -1,9 +1,9 @@
-use anyhow::Context;
-use tracing::{debug, warn};
-use distributed_memoization::MemoizationCache;
-use git2::Oid;
 use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
+use anyhow::Context;
+use distributed_memoization::MemoizationCache;
+use git2::Oid;
+use tracing::{debug, warn};
 
 /// A persistent key-value cache mapping the hashes of [`super::DependencyKey`]s
 /// to [`DependencyValue`]s.
@@ -26,8 +26,8 @@ pub trait ObjectDatabase {
 
 /// Adapts a MemoizationCache to work as an ObjectDatabase.
 pub struct MemoizationCacheAdapter {
-   cache: Box<dyn MemoizationCache>,
-   function_id: Oid,
+    cache: Box<dyn MemoizationCache>,
+    function_id: Oid,
 }
 
 impl MemoizationCacheAdapter {
@@ -48,8 +48,9 @@ impl ObjectDatabase for MemoizationCacheAdapter {
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
         let hash = content_hash_dependency_key(ctx, key)?;
         let result = match self.cache.get(hash.0, self.function_id)? {
-            Some(content) => serde_json::from_slice(&content[..]).context("deserializing DependencyValue as JSON")?,
-            None => None
+            Some(content) => serde_json::from_slice(&content[..])
+                .context("deserializing DependencyValue as JSON")?,
+            None => None,
         };
         Ok((hash, result))
     }

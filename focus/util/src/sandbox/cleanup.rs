@@ -129,7 +129,7 @@ pub fn run(config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let sb_root = sandbox_root.unwrap_or_else(|| std::env::temp_dir());
+    let sb_root = sandbox_root.unwrap_or_else(std::env::temp_dir);
 
     let walker = WalkDir::new(&sb_root)
         .follow_links(false)

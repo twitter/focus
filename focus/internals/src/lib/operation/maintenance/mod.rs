@@ -15,7 +15,8 @@ use anyhow::{bail, Context, Result};
 use focus_util::{
     app::App,
     git_helper::{self, ConfigExt},
-    lock_file::LockFile, sandbox_command::{SandboxCommand, SandboxCommandOutput},
+    lock_file::LockFile,
+    sandbox_command::{SandboxCommand, SandboxCommandOutput},
 };
 use strum_macros;
 use tracing::{debug, error, info, warn};

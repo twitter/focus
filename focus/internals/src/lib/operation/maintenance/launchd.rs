@@ -2,7 +2,10 @@ use super::*;
 use anyhow::{anyhow, bail, Context, Result};
 use nix::NixPath;
 use plist::{dictionary::Dictionary, Value};
-use std::{io::{Write, ErrorKind}, path::PathBuf};
+use std::{
+    io::{ErrorKind, Write},
+    path::PathBuf,
+};
 use strum::IntoEnumIterator;
 use tracing::{debug, error};
 
@@ -392,8 +395,8 @@ impl Launchctl {
             Err(e) => match e.kind() {
                 ErrorKind::NotFound => Ok(()),
                 _ => Err(anyhow!(e)),
-            }
-            _ => Ok(())
+            },
+            _ => Ok(()),
         };
 
         checked.with_context(|| format!("failed to remove path {:?}", path))
