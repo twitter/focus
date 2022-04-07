@@ -128,6 +128,38 @@ impl BazelResolver {
         Ok((paths, deps))
     }
 
+    fn run_bazel_query(
+        app: Arc<App>,
+        request: &ResolutionRequest,
+        bazel_args: &[&str],
+        query: &str,
+    ) -> Result<bazel_de::Query> {
+        let description = format!("bazel query '{}'", query);
+
+        let (mut cmd, scmd) =
+            SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app)?;
+        scmd.ensure_success_or_log(
+            cmd.arg("query")
+                .arg(&query)
+                .arg("--output=xml")
+                .args(bazel_args)
+                .current_dir(&request.repo),
+            SandboxCommandOutput::Stderr,
+            &description,
+        )?;
+
+        // Read to string so that we can print it if we need to debug.
+        let raw_result = {
+            let mut result = String::new();
+            scmd.read_to_string(SandboxCommandOutput::Stdout, &mut result)?;
+            result
+        };
+        let parsed_result: bazel_de::Query = serde_xml_rs::from_str(&raw_result)?;
+        debug!(?query, ?raw_result, "Query returned with result");
+        Ok(parsed_result)
+    }
+
+    /// Calculate the transitive dependencies of the provided targets.
     fn extract_dependencies(
         &self,
         app: Arc<App>,
@@ -151,28 +183,8 @@ impl BazelResolver {
                 .collect::<Vec<_>>()
                 .join(" "),
         );
-        let description = format!("bazel query '{}'", query);
-
-        let (mut cmd, scmd) =
-            SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app)?;
-        scmd.ensure_success_or_log(
-            cmd.arg("query")
-                .arg(&query)
-                .arg("--output=xml")
-                .arg("--noimplicit_deps")
-                .current_dir(&request.repo),
-            SandboxCommandOutput::Stderr,
-            &description,
-        )?;
-
-        // Read to string so that we can print it if we need to debug.
-        let query_result = {
-            let mut result = String::new();
-            scmd.read_to_string(SandboxCommandOutput::Stdout, &mut result)?;
-            result
-        };
-        let bazel_de::Query { rules } = serde_xml_rs::from_str(&query_result)?;
-        debug!(?query, ?query_result, "Query returned with result");
+        let bazel_de::Query { rules } =
+            Self::run_bazel_query(app, request, &["--noimplicit_deps"], &query)?;
 
         let mut result: BTreeMap<DependencyKey, BTreeSet<DependencyKey>> = BTreeMap::new();
         for rule in rules {
