@@ -60,6 +60,15 @@ pub struct Rule {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[allow(dead_code)]
+pub struct List {
+    pub name: String,
+    #[serde(default, rename = "$value")]
+    pub values: Vec<RuleElement>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[allow(dead_code)]
 pub enum RuleElement {
     Boolean {
         name: Option<String>,
@@ -73,11 +82,7 @@ pub enum RuleElement {
         name: Option<String>,
         value: Option<String>,
     },
-    List {
-        name: String,
-        #[serde(default, rename = "$value")]
-        values: Vec<Label>,
-    },
+    List(List),
     Dict {
         name: String,
     },
@@ -130,6 +135,9 @@ mod tests {
     </rule>
     <rule class="alias" location="/home/project/3rdparty/jvm/com/fasterxml/jackson/BUILD:16:7" name="//3rdparty/jvm/com/fasterxml/jackson:jackson-module-scala">
         <string name="name" value="jackson-module-scala"/>
+        <list name="tags">
+            <string value="bazel-compatible"/>
+        </list>
         <list name="visibility">
             <label value="//visibility:public"/>
         </list>
@@ -172,10 +180,21 @@ mod tests {
                                     "scala-collection-compat",
                                 ),
                             },
-                            List {
-                                name: "visibility",
-                                values: [],
-                            },
+                            List(
+                                List {
+                                    name: "visibility",
+                                    values: [
+                                        Label(
+                                            Label {
+                                                name: None,
+                                                value: Some(
+                                                    "//visibility:public",
+                                                ),
+                                            },
+                                        ),
+                                    ],
+                                },
+                            ),
                             String {
                                 name: Some(
                                     "generator_name",
@@ -200,10 +219,21 @@ mod tests {
                                     "/home/project/BUILD:108:12",
                                 ),
                             },
-                            List {
-                                name: "deps",
-                                values: [],
-                            },
+                            List(
+                                List {
+                                    name: "deps",
+                                    values: [
+                                        Label(
+                                            Label {
+                                                name: None,
+                                                value: Some(
+                                                    "@maven//:_scala-collection-compat",
+                                                ),
+                                            },
+                                        ),
+                                    ],
+                                },
+                            ),
                             RuleInput {
                                 name: "@maven//:_scala-collection-compat",
                             },
@@ -222,10 +252,34 @@ mod tests {
                                     "jackson-module-scala",
                                 ),
                             },
-                            List {
-                                name: "visibility",
-                                values: [],
-                            },
+                            List(
+                                List {
+                                    name: "tags",
+                                    values: [
+                                        String {
+                                            name: None,
+                                            value: Some(
+                                                "bazel-compatible",
+                                            ),
+                                        },
+                                    ],
+                                },
+                            ),
+                            List(
+                                List {
+                                    name: "visibility",
+                                    values: [
+                                        Label(
+                                            Label {
+                                                name: None,
+                                                value: Some(
+                                                    "//visibility:public",
+                                                ),
+                                            },
+                                        ),
+                                    ],
+                                },
+                            ),
                             Dict {
                                 name: "dummy-testing-dict",
                             },
@@ -375,10 +429,19 @@ mod tests {
                                     "foo",
                                 ),
                             },
-                            List {
-                                name: "tags",
-                                values: [],
-                            },
+                            List(
+                                List {
+                                    name: "tags",
+                                    values: [
+                                        String {
+                                            name: None,
+                                            value: Some(
+                                                "bazel-compatible",
+                                            ),
+                                        },
+                                    ],
+                                },
+                            ),
                             String {
                                 name: Some(
                                     "generator_name",
@@ -403,14 +466,31 @@ mod tests {
                                     "package1/BUILD:2:9",
                                 ),
                             },
-                            List {
-                                name: "srcs",
-                                values: [],
-                            },
-                            List {
-                                name: "outs",
-                                values: [],
-                            },
+                            List(
+                                List {
+                                    name: "srcs",
+                                    values: [
+                                        Label(
+                                            Label {
+                                                name: None,
+                                                value: Some(
+                                                    "//package2:contents",
+                                                ),
+                                            },
+                                        ),
+                                    ],
+                                },
+                            ),
+                            List(
+                                List {
+                                    name: "outs",
+                                    values: [
+                                        Output {
+                                            name: None,
+                                        },
+                                    ],
+                                },
+                            ),
                             String {
                                 name: Some(
                                     "cmd",
