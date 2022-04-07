@@ -53,6 +53,7 @@ pub enum QueryElement {
 #[allow(dead_code)]
 pub struct Rule {
     pub name: String,
+    pub location: Option<String>,
     #[serde(default, rename = "$value")]
     pub elements: Vec<RuleElement>,
 }
@@ -171,6 +172,9 @@ mod tests {
                 Rule(
                     Rule {
                         name: "//:scala-collection-compat",
+                        location: Some(
+                            "/home/project/BUILD:108:12",
+                        ),
                         elements: [
                             String {
                                 name: Some(
@@ -243,6 +247,9 @@ mod tests {
                 Rule(
                     Rule {
                         name: "//3rdparty/jvm/com/fasterxml/jackson:jackson-module-scala",
+                        location: Some(
+                            "/home/project/3rdparty/jvm/com/fasterxml/jackson/BUILD:16:7",
+                        ),
                         elements: [
                             String {
                                 name: Some(
@@ -420,6 +427,9 @@ mod tests {
                 Rule(
                     Rule {
                         name: "//package1:foo",
+                        location: Some(
+                            "/private/var/folders/gn/gdp9z_g968b9nx7c9lvgy8y00000gp/T/.tmpBC1AHJ/repo_ebfc2762-2b78-484f-92f6-03ed35e38249/package1/BUILD:2:9",
+                        ),
                         elements: [
                             String {
                                 name: Some(
