@@ -179,7 +179,11 @@ impl BazelResolver {
             use bazel_de::{QueryElement, Rule, RuleElement};
 
             match rule {
-                QueryElement::Rule(Rule { name, elements }) => {
+                QueryElement::Rule(Rule {
+                    name,
+                    location: _,
+                    elements,
+                }) => {
                     let target_label: Label = name.parse()?;
 
                     let mut rule_inputs = BTreeSet::new();
