@@ -92,7 +92,7 @@ pub enum RuleElement {
         name: String,
     },
     Output {
-        name: String,
+        name: Option<String>,
     },
     Tristate {
         name: String,
@@ -275,7 +275,9 @@ mod tests {
                                 name: "//3rdparty/jvm/com/fasterxml/jackson/module:jackson-module-scala",
                             },
                             Output {
-                                name: "dummy-output",
+                                name: Some(
+                                    "dummy-output",
+                                ),
                             },
                             Int {
                                 name: Some(
@@ -305,6 +307,144 @@ mod tests {
         }
         "###);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_bazel_query2() -> anyhow::Result<()> {
+        let payload = "<?xml version=\"1.1\" encoding=\"UTF-8\" standalone =\"no\"?>
+        <query version=\"2\">
+            <source-file location=\"/private/var/folders/gn/gdp9z_g968b9nx7c9lvgy8y00000gp/T/.tmpBC1AHJ/repo_ebfc2762-2b78-484f-92f6-03ed35e38249/macro/BUILD:1:1\" name=\"//macro:BUILD\" package_contains_errors=\"false\">
+                <visibility-label name=\"//visibility:private\"/>
+            </source-file>
+            <source-file location=\"/private/var/folders/gn/gdp9z_g968b9nx7c9lvgy8y00000gp/T/.tmpBC1AHJ/repo_ebfc2762-2b78-484f-92f6-03ed35e38249/package1/BUILD:1:1\" name=\"//package1:BUILD\" package_contains_errors=\"false\">
+                <load name=\"//macro:macro.bzl\"/>
+                <load name=\"//macro:macro_inner.bzl\"/>
+                <visibility-label name=\"//visibility:private\"/>
+            </source-file>
+            <rule class=\"genrule\" location=\"/private/var/folders/gn/gdp9z_g968b9nx7c9lvgy8y00000gp/T/.tmpBC1AHJ/repo_ebfc2762-2b78-484f-92f6-03ed35e38249/package1/BUILD:2:9\" name=\"//package1:foo\">
+                <string name=\"name\" value=\"foo\"/>
+                <list name=\"tags\">
+                    <string value=\"bazel-compatible\"/>
+                </list>
+                <string name=\"generator_name\" value=\"foo\"/>
+                <string name=\"generator_function\" value=\"my_macro\"/>
+                <string name=\"generator_location\" value=\"package1/BUILD:2:9\"/>
+                <list name=\"srcs\">
+                    <label value=\"//package2:contents\"/>
+                </list>
+                <list name=\"outs\">
+                    <output value=\"//package1:out.txt\"/>
+                </list>
+                <string name=\"cmd\" value=\"cp $(SRCS) $@\"/>
+                <rule-input name=\"//package2:contents\"/>
+                <rule-input name=\"@bazel_tools//tools/genrule:genrule-setup.sh\"/>
+                <rule-output name=\"//package1:out.txt\"/>
+            </rule>
+            <generated-file generating-rule=\"//package1:foo\" location=\"/private/var/folders/gn/gdp9z_g968b9nx7c9lvgy8y00000gp/T/.tmpBC1AHJ/repo_ebfc2762-2b78-484f-92f6-03ed35e38249/package1/BUILD:2:9\" name=\"//package1:out.txt\"/>
+            <source-file location=\"/private/var/folders/gn/gdp9z_g968b9nx7c9lvgy8y00000gp/T/.tmpBC1AHJ/repo_ebfc2762-2b78-484f-92f6-03ed35e38249/package2/BUILD:1:1\" name=\"//package2:BUILD\" package_contains_errors=\"false\">
+                <visibility-label name=\"//visibility:private\"/>
+            </source-file>
+            <source-file location=\"/private/var/folders/gn/gdp9z_g968b9nx7c9lvgy8y00000gp/T/.tmpBC1AHJ/repo_ebfc2762-2b78-484f-92f6-03ed35e38249/package2/contents:1:1\" name=\"//package2:contents\">
+                <visibility-label name=\"//visibility:public\"/>
+            </source-file>
+        </query>
+        ";
+        let result: Query = serde_xml_rs::from_str(payload)
+            .map_err(|e| anyhow::anyhow!("deserialization error: {:?}", e))?;
+        insta::assert_debug_snapshot!(result, @r###"
+        Query {
+            rules: [
+                SourceFile {
+                    name: "//macro:BUILD",
+                    body: (),
+                },
+                SourceFile {
+                    name: "//package1:BUILD",
+                    body: (),
+                },
+                Rule(
+                    Rule {
+                        name: "//package1:foo",
+                        elements: [
+                            String {
+                                name: Some(
+                                    "name",
+                                ),
+                                value: Some(
+                                    "foo",
+                                ),
+                            },
+                            List {
+                                name: "tags",
+                                values: [],
+                            },
+                            String {
+                                name: Some(
+                                    "generator_name",
+                                ),
+                                value: Some(
+                                    "foo",
+                                ),
+                            },
+                            String {
+                                name: Some(
+                                    "generator_function",
+                                ),
+                                value: Some(
+                                    "my_macro",
+                                ),
+                            },
+                            String {
+                                name: Some(
+                                    "generator_location",
+                                ),
+                                value: Some(
+                                    "package1/BUILD:2:9",
+                                ),
+                            },
+                            List {
+                                name: "srcs",
+                                values: [],
+                            },
+                            List {
+                                name: "outs",
+                                values: [],
+                            },
+                            String {
+                                name: Some(
+                                    "cmd",
+                                ),
+                                value: Some(
+                                    "cp $(SRCS) $@",
+                                ),
+                            },
+                            RuleInput {
+                                name: "//package2:contents",
+                            },
+                            RuleInput {
+                                name: "@bazel_tools//tools/genrule:genrule-setup.sh",
+                            },
+                            RuleOutput {
+                                name: "//package1:out.txt",
+                            },
+                        ],
+                    },
+                ),
+                GeneratedFile {
+                    body: (),
+                },
+                SourceFile {
+                    name: "//package2:BUILD",
+                    body: (),
+                },
+                SourceFile {
+                    name: "//package2:contents",
+                    body: (),
+                },
+            ],
+        }
+        "###);
         Ok(())
     }
 }
