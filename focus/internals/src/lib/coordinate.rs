@@ -97,8 +97,8 @@ pub enum CoordinateError {
     #[error("Scheme not supported")]
     UnsupportedScheme(String),
 
-    #[error("Failed to tokenize input")]
-    TokenizationError,
+    #[error("No coordinate scheme provided")]
+    NoSchemeProvidedError,
 
     #[error("Failed to parse label")]
     LabelError(#[from] LabelParseError),
@@ -122,7 +122,7 @@ impl TryFrom<&str> for Coordinate {
                     Err(CoordinateError::UnsupportedScheme(prefix.to_owned()))
                 }
             }
-            None => Err(CoordinateError::TokenizationError),
+            None => Err(CoordinateError::NoSchemeProvidedError),
         }
     }
 }
@@ -279,7 +279,7 @@ mod tests {
         );
         assert_eq!(
             Coordinate::try_from("okay").unwrap_err(),
-            CoordinateError::TokenizationError
+            CoordinateError::NoSchemeProvidedError
         );
 
         Ok(())
@@ -317,7 +317,7 @@ mod tests {
     pub fn failed_conversion_of_sets() -> Result<()> {
         assert_eq!(
             CoordinateSet::try_from(&[String::from("whatever")] as &[String]).unwrap_err(),
-            CoordinateError::TokenizationError
+            CoordinateError::NoSchemeProvidedError
         );
         assert_eq!(
             CoordinateSet::try_from(&[String::from("foo:bar")] as &[String]).unwrap_err(),
