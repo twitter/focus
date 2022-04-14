@@ -1,5 +1,6 @@
 use crate::{
     coordinate::CoordinateSet,
+    index::testing::HashMapOdb,
     model::{
         layering::{Layer, LayerSet, LayerSets, RichLayerSet},
         repo::Repo,
@@ -229,7 +230,8 @@ fn set_up_sparse_repo(
         )?
     };
 
-    repo.sync(&coordinate_set, app.clone())
+    let odb = HashMapOdb::new();
+    repo.sync(&coordinate_set, app.clone(), &odb)
         .context("Sync failed")?;
 
     repo.working_tree().unwrap().write_sync_point_ref()?;
