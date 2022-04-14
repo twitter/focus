@@ -1,8 +1,10 @@
 use crate::coordinate::CoordinateSet;
+use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::layering::Layer;
 use crate::model::layering::LayerSets;
 use crate::model::repo::Repo;
 use crate::operation::util::perform;
+use distributed_memoization::RocksDBMemoizationCache;
 use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;
 
@@ -61,7 +63,8 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
         CoordinateSet::try_from(coordinates.as_ref()).context("constructing coordinate set")?;
 
     let pattern_count = perform("Computing the new sparse profile", || {
-        repo.sync(&coordinate_set, app.clone())
+        let odb = RocksDBMemoizationCache::new(repo.underlying());
+        repo.sync(&coordinate_set, app.clone(), &odb)
             .context("Sync failed")
     })?;
     ti_client

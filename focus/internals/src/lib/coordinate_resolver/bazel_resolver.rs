@@ -206,7 +206,7 @@ impl BazelResolver {
                         None => false,
                         Some(location) => location.contains("/BUILD.bazel:"),
                     };
-                    let has_required_tag = {
+                    let has_required_tag = || {
                         elements.iter().any(|tag_element| match tag_element {
                             bazel_de::RuleElement::List(bazel_de::List { name, values })
                                 if name == "tags" =>
@@ -223,7 +223,7 @@ impl BazelResolver {
                         })
                     };
 
-                    if is_defined_in_bazel_file || has_required_tag {
+                    if is_defined_in_bazel_file || has_required_tag() {
                         let label: Label = name.parse()?;
                         result.insert(label);
                     }

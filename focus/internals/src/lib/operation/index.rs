@@ -115,7 +115,7 @@ pub fn resolve(
 
             let repo = Repo::open(repo.path(), app.clone())?;
             let coordinate_set = CoordinateSet::from(coordinates);
-            let num_applied_patterns = repo.sync(&coordinate_set, app)?;
+            let num_applied_patterns = repo.sync(&coordinate_set, app, odb.borrow())?;
             println!("Applied patterns: {}", num_applied_patterns);
 
             match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {

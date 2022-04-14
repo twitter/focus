@@ -14,7 +14,7 @@ use crate::{
     },
     index::{
         get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
-        HashContext, PathsToMaterializeResult, SimpleGitOdb,
+        HashContext, ObjectDatabase, PathsToMaterializeResult,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
 };
@@ -438,6 +438,10 @@ impl Repo {
         })
     }
 
+    pub fn underlying(&self) -> &git2::Repository {
+        &self.repo
+    }
+
     pub fn focus_git_dir_path(git_dir: &Path) -> PathBuf {
         git_dir.join("focus")
     }
@@ -447,7 +451,12 @@ impl Repo {
     }
 
     /// Run a sync, returning the number of patterns that were applied.
-    pub fn sync(&self, coordinates: &CoordinateSet, app: Arc<App>) -> Result<usize> {
+    pub fn sync(
+        &self,
+        coordinates: &CoordinateSet,
+        app: Arc<App>,
+        odb: &dyn ObjectDatabase,
+    ) -> Result<usize> {
         let head_commit = self
             .repo
             .head()
@@ -460,7 +469,6 @@ impl Repo {
             head_tree: &head_tree,
             caches: Default::default(),
         };
-        let odb = SimpleGitOdb::new(&self.repo);
 
         let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
             (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),
@@ -474,7 +482,7 @@ impl Repo {
             info!("Checking cache for sparse checkout patterns");
             let paths_to_materialize = get_files_to_materialize(
                 &hash_context,
-                &odb,
+                odb,
                 coordinates
                     .underlying()
                     .iter()
@@ -509,11 +517,7 @@ impl Repo {
                         .context("Failed to outline")?;
 
                     debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
-                    update_object_database_from_resolution(
-                        &hash_context,
-                        &odb,
-                        &resolution_result,
-                    )?;
+                    update_object_database_from_resolution(&hash_context, odb, &resolution_result)?;
                     outline_patterns
                 }
             }
