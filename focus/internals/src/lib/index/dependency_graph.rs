@@ -769,4 +769,70 @@ def some_macro():
 
         Ok(())
     }
+
+    #[test]
+    fn test_build_bazel_file() -> anyhow::Result<()> {
+        init_logging();
+
+        let temp = tempfile::tempdir()?;
+        let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
+
+        write_files(
+            &fix,
+            r#"
+file: WORKSPACE
+load("//macro:macro.bzl", "some_macro")
+some_macro()
+
+file: package1/foo.sh
+
+file: package1/BUILD.bazel
+sh_binary(
+    name = "foo",
+    srcs = ["foo.sh"],
+)
+
+file: macro/BUILD
+
+file: macro/macro.bzl
+def some_macro():
+    pass
+"#,
+        )?;
+        let head_oid = fix.commit_all("Wrote files")?;
+        let repo = fix.repo()?;
+
+        let app = Arc::new(App::new(false)?);
+        let cache_dir = tempfile::tempdir()?;
+        let resolver = BazelResolver::new(cache_dir.path());
+        let coordinate_set = CoordinateSet::from(hashset! {"bazel://package1:foo".try_into()?});
+        let request = ResolutionRequest {
+            repo: fix.path().to_path_buf(),
+            coordinate_set,
+        };
+        let cache_options = CacheOptions::default();
+        let resolve_result = resolver.resolve(&request, &cache_options, app)?;
+
+        let odb = HashMapOdb::new();
+        let files_to_materialize = {
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let ctx = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
+            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
+        };
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        Ok {
+            paths: {
+                "package1",
+            },
+        }
+        "###);
+
+        Ok(())
+    }
 }
