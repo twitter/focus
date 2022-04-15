@@ -124,7 +124,8 @@ impl BazelResolver {
         }
         info!("'{}' requires {} directories", &query, paths.len(),);
 
-        let deps = self.extract_dependencies(app, request, packages)?;
+        let targets = self.extract_targets(app.clone(), request, packages)?;
+        let deps = self.extract_dependencies(app, request, targets)?;
         Ok((paths, deps))
     }
 
@@ -154,9 +155,88 @@ impl BazelResolver {
             scmd.read_to_string(SandboxCommandOutput::Stdout, &mut result)?;
             result
         };
-        let parsed_result: bazel_de::Query = serde_xml_rs::from_str(&raw_result)?;
         debug!(?query, ?raw_result, "Query returned with result");
+        let parsed_result: bazel_de::Query = serde_xml_rs::from_str(&raw_result)?;
         Ok(parsed_result)
+    }
+
+    /// Extract Bazel-compatible top-level targets for the provided packages.
+    fn extract_targets(
+        &self,
+        app: Arc<App>,
+        request: &ResolutionRequest,
+        packages: BTreeSet<Label>,
+    ) -> Result<BTreeSet<Label>> {
+        fn make_top_level_targets_spec(package: Label) -> String {
+            let spec = Label {
+                // Use the `:*` syntax to get all top-level targets and files in
+                // the package. We filter out the files shortly. (We can't use
+                // `:all`, which would give us only the targets, because there
+                // may be real targets named `all`, and there's no way to
+                // disambigudate them.)
+                target_name: TargetName::Name("*".to_string()),
+                ..package
+            };
+            spec.to_string()
+        }
+
+        let query = format!(
+            "set({})",
+            packages
+                .into_iter()
+                .map(make_top_level_targets_spec)
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        let bazel_de::Query { rules } = Self::run_bazel_query(app, request, &[], &query)?;
+
+        // TODO: This mechanism for detecting Bazel-compatibility should be
+        // configurable.
+        const REQUIRED_TAG: &str = "bazel-compatible";
+
+        let mut result = BTreeSet::new();
+        for rule in rules {
+            match rule {
+                bazel_de::QueryElement::Rule(bazel_de::Rule {
+                    name,
+                    location,
+                    elements,
+                }) => {
+                    let is_defined_in_bazel_file = match location {
+                        None => false,
+                        Some(location) => location.contains("/BUILD.bazel:"),
+                    };
+                    let has_required_tag = {
+                        elements.iter().any(|tag_element| match tag_element {
+                            bazel_de::RuleElement::List(bazel_de::List { name, values })
+                                if name == "tags" =>
+                            {
+                                values.iter().any(|value| match value {
+                                    bazel_de::RuleElement::String {
+                                        name: None,
+                                        value: Some(value),
+                                    } => value == REQUIRED_TAG,
+                                    _ => false,
+                                })
+                            }
+                            _ => false,
+                        })
+                    };
+
+                    if is_defined_in_bazel_file || has_required_tag {
+                        let label: Label = name.parse()?;
+                        result.insert(label);
+                    }
+                }
+
+                bazel_de::QueryElement::SourceFile { .. }
+                | bazel_de::QueryElement::GeneratedFile { .. }
+                | bazel_de::QueryElement::PackageGroup { .. } => {
+                    // Do not include as top-level targets.
+                }
+            }
+        }
+        Ok(result)
     }
 
     /// Calculate the transitive dependencies of the provided targets.
@@ -164,22 +244,13 @@ impl BazelResolver {
         &self,
         app: Arc<App>,
         request: &ResolutionRequest,
-        packages: BTreeSet<Label>,
+        targets: BTreeSet<Label>,
     ) -> Result<BTreeMap<DependencyKey, DependencyValue>> {
-        const REQUIRED_TAG: &str = "bazel-compatible";
-
         let query = format!(
-            "deps(attr('tags', '{}', set({})))",
-            REQUIRED_TAG,
-            packages
+            "deps(set({}))",
+            targets
                 .into_iter()
-                .map(|package| format!(
-                    "{}",
-                    Label {
-                        target_name: TargetName::Name("all".to_string()),
-                        ..package
-                    }
-                ))
+                .map(|target| target.to_string())
                 .collect::<Vec<_>>()
                 .join(" "),
         );
