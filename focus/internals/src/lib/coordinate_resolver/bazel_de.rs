@@ -40,6 +40,8 @@ pub enum QueryElement {
         body: (),
     },
     GeneratedFile {
+        name: String,
+
         #[serde(default, rename = "$value")]
         body: (),
     },
@@ -359,6 +361,7 @@ mod tests {
                     body: (),
                 },
                 GeneratedFile {
+                    name: "@zlib//:zlib/include/inftrees.h",
                     body: (),
                 },
                 PackageGroup {
@@ -522,6 +525,7 @@ mod tests {
                     },
                 ),
                 GeneratedFile {
+                    name: "//package1:out.txt",
                     body: (),
                 },
                 SourceFile {
