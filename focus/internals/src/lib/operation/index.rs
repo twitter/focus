@@ -11,6 +11,7 @@ use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
     RocksDBMemoizationCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
+use crate::model::layering::LayerSets;
 use crate::model::repo::Repo;
 
 #[derive(
@@ -71,15 +72,11 @@ fn dep_key_to_coordinate(dep_key: &DependencyKey) -> String {
     }
 }
 
-pub fn resolve(
+fn resolve_coordinates(
     app: Arc<App>,
     backend: Backend,
-    coordinates: Vec<String>,
+    coordinates: HashSet<Coordinate>,
 ) -> anyhow::Result<ExitCode> {
-    let coordinates: HashSet<Coordinate> = coordinates
-        .into_iter()
-        .map(|coordinate| Coordinate::try_from(coordinate.as_str()))
-        .collect::<Result<_, _>>()?;
     let dep_keys: HashSet<DependencyKey> = coordinates
         .iter()
         .map(|coordinate| DependencyKey::from(coordinate.clone()))
@@ -131,4 +128,27 @@ pub fn resolve(
             }
         }
     }
+}
+
+pub fn resolve(
+    app: Arc<App>,
+    backend: Backend,
+    coordinates: Vec<String>,
+) -> anyhow::Result<ExitCode> {
+    let coordinates: HashSet<Coordinate> = coordinates
+        .into_iter()
+        .map(|coordinate| Coordinate::try_from(coordinate.as_str()))
+        .collect::<Result<_, _>>()?;
+    resolve_coordinates(app, backend, coordinates)
+}
+
+pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
+    let all_layers = LayerSets::new(&sparse_repo).available_layers()?;
+    let all_coordinates: HashSet<Coordinate> = all_layers
+        .layers()
+        .iter()
+        .flat_map(|layer| layer.coordinates())
+        .map(|coordinate| Coordinate::try_from(coordinate.as_str()))
+        .collect::<Result<_, _>>()?;
+    resolve_coordinates(app, backend, all_coordinates)
 }
