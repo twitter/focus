@@ -256,6 +256,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             subcommand,
         } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear",
+            IndexSubcommand::Generate { .. } => "index-generate",
             IndexSubcommand::Resolve { .. } => "index-resolve",
         },
     };
@@ -476,6 +477,13 @@ enum RefsSubcommand {
 enum IndexSubcommand {
     /// Clear the on-disk cache.
     Clear {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
+
+    /// Populate the index with entries for all projects.
+    Generate {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
@@ -924,6 +932,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             IndexSubcommand::Clear { sparse_repo } => {
                 operation::index::clear(backend, sparse_repo)?;
                 Ok(ExitCode(0))
+            }
+
+            IndexSubcommand::Generate { sparse_repo } => {
+                let exit_code = operation::index::generate(app, backend, sparse_repo)?;
+                Ok(exit_code)
             }
 
             IndexSubcommand::Resolve { coordinates } => {
