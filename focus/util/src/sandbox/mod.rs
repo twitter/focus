@@ -1,6 +1,6 @@
 pub mod cleanup;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -19,7 +19,9 @@ pub struct Sandbox {
 const NAME_PREFIX: &str = "focus_sandbox_";
 
 impl Sandbox {
-    pub fn new(preserve_contents: bool) -> Result<Self> {
+    pub fn new(description: Option<&str>, preserve_contents: bool) -> Result<Self> {
+        use std::io::Write;
+
         let underlying: TempDir = tempfile::Builder::new()
             .prefix(NAME_PREFIX)
             .tempdir()
@@ -42,12 +44,33 @@ impl Sandbox {
         };
 
         let serial_sequence = AtomicUsize::new(0);
-
-        Ok(Self {
+        let instance = Self {
             temp_dir,
             path,
             serial_sequence,
-        })
+        };
+
+        if let Some(description) = description {
+            let description_path = instance.command_description_path();
+            match File::create(&description_path) {
+                Ok(mut f) => {
+                    writeln!(f, "{}", description)?;
+                }
+                Err(e) => {
+                    bail!(
+                        "failed writing description file to {}: {}",
+                        description_path.display(),
+                        e
+                    );
+                }
+            }
+        }
+
+        Ok(instance)
+    }
+
+    pub fn command_description_path(&self) -> PathBuf {
+        self.path.join("cmd")
     }
 
     pub fn create_file(
@@ -116,7 +139,7 @@ mod tests {
     #[test]
     fn sandbox_deletion() -> Result<()> {
         let path = {
-            let sandbox = Sandbox::new(false)?;
+            let sandbox = Sandbox::new(None, false)?;
             let owned_path = sandbox.path().to_owned();
             owned_path
         };
@@ -126,7 +149,7 @@ mod tests {
 
     #[test]
     fn sandbox_preservation() -> Result<()> {
-        let sandbox = Sandbox::new(true)?;
+        let sandbox = Sandbox::new(None, true)?;
         let path = sandbox.path().to_owned();
         drop(sandbox);
         assert!(fs::metadata(&path)?.is_dir());
@@ -136,7 +159,7 @@ mod tests {
 
     #[test]
     fn file_naming() -> Result<()> {
-        let sandbox = Sandbox::new(true)?;
+        let sandbox = Sandbox::new(None, true)?;
         match sandbox.create_file(Some("hello"), Some("txt"), None) {
             Ok((_, path, ser)) => {
                 assert_eq!(ser, 0);
@@ -174,6 +197,17 @@ mod tests {
             _ => bail!("expected a file"),
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn writing_command_descripton() -> Result<()> {
+        let description = "hello";
+        let sandbox = Sandbox::new(Some(description), true)?;
+        assert_eq!(
+            fs::read_to_string(sandbox.command_description_path())?,
+            format!("{}\n", description)
+        );
         Ok(())
     }
 }
