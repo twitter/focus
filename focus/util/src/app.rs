@@ -24,8 +24,15 @@ impl Debug for App {
 
 impl App {
     pub fn new(preserve_sandbox_contents: bool) -> Result<Self> {
-        let sandbox =
-            Arc::from(Sandbox::new(preserve_sandbox_contents).context("Failed to create sandbox")?);
+        let invocation_description = std::env::args()
+            .map(|arg| arg.to_string())
+            .collect::<Vec<String>>()
+            .join(" ");
+
+        let sandbox = Arc::from(
+            Sandbox::new(Some(&invocation_description), preserve_sandbox_contents)
+                .context("Failed to create sandbox")?,
+        );
         let tool_insights_client = Client::new(
             env!("CARGO_PKG_NAME").to_owned(),
             env!("CARGO_PKG_VERSION").to_owned(),
