@@ -572,12 +572,12 @@ New contents
                 caches: Default::default(),
             };
             update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
-            let files_to_materialize = get_files_to_materialize(
+            
+            get_files_to_materialize(
                 &hash_context,
                 &odb,
                 hashset! { parse_label("//package1:foo")? },
-            )?;
-            files_to_materialize
+            )?
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {

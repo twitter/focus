@@ -325,6 +325,7 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
 
+    #[allow(clippy::redundant_clone)]
     #[test]
     fn sandboxed_command_capture_all() -> Result<()> {
         init_logging();

@@ -143,9 +143,9 @@ mod tests {
         local_cache::OID_BYTE_LENGTH, CompositeKey, MemoizationCache, RocksDBMemoizationCache,
     };
 
-    static ARG: &'static str = "12345678912345789ab";
-    static FN_ID: &'static str = "abcd5abcd5abcd5abcd5";
-    static BAD_OID: &'static str = "deadbeefdeadbeefdead";
+    static ARG: &str = "12345678912345789ab";
+    static FN_ID: &str = "abcd5abcd5abcd5abcd5";
+    static BAD_OID: &str = "deadbeefdeadbeefdead";
 
     #[test]
     fn test_rocks_ttl_0() {
