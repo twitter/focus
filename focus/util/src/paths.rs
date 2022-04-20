@@ -25,6 +25,24 @@ pub fn focus_config_dir() -> PathBuf {
         .join("focus")
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn focus_sandbox_dir() -> PathBuf {
+    dirs::data_dir()
+        .expect("failed to determine data directory")
+        .join("focus")
+        .join("sandboxes")
+        .to_owned()
+}
+
+#[cfg(target_os = "macos")]
+pub fn focus_sandbox_dir() -> PathBuf {
+    dirs::home_dir()
+        .expect("failed to determine home directory")
+        .join("Library")
+        .join("Logs")
+        .join("focus")
+}
+
 pub fn find_closest_directory_with_build_file<P0: AsRef<Path>, P1: AsRef<Path>>(
     file: P0,
     ceiling: P1,

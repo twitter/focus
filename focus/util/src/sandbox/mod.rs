@@ -9,6 +9,8 @@ use tracing::info;
 
 use tempfile::TempDir;
 
+use crate::paths;
+
 pub struct Sandbox {
     #[allow(dead_code)]
     temp_dir: Option<tempfile::TempDir>,
@@ -22,10 +24,15 @@ impl Sandbox {
     pub fn new(description: Option<&str>, preserve_contents: bool) -> Result<Self> {
         use std::io::Write;
 
+        let sandbox_root = paths::focus_sandbox_dir();
+        std::fs::create_dir_all(&sandbox_root)
+            .with_context(|| format!("creating sandbox root {}", sandbox_root.display()))?;
+
         let underlying: TempDir = tempfile::Builder::new()
             .prefix(NAME_PREFIX)
-            .tempdir()
-            .context("creating a temporary directory")?;
+            .tempdir_in(sandbox_root)
+            .context("creating a temporary directory to house the sandbox")?;
+
         let path: PathBuf = (&underlying.path().to_path_buf()).to_owned();
 
         let temp_dir: Option<TempDir> = if preserve_contents {
