@@ -1,5 +1,5 @@
 use super::*;
-use crate::git_helper::ConfigExt;
+use crate::{git_helper::ConfigExt, paths};
 use chrono::{DateTime, Utc};
 use tracing::{debug, warn};
 use walkdir::{DirEntry, WalkDir};
@@ -26,7 +26,7 @@ impl Default for Config {
             cleanup_enabled: true,
             preserve_hours: Self::DEFAULT_HOURS,
             max_num_sandboxes: Self::DEFAULT_MAX_NUM_SANDBOXES,
-            sandbox_root: None,
+            sandbox_root: Some(paths::focus_sandbox_dir()),
         }
     }
 }
@@ -129,7 +129,14 @@ pub fn run(config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let sb_root = sandbox_root.unwrap_or_else(std::env::temp_dir);
+    let sb_root = match sandbox_root {
+        Some(sandbox_root) => {
+            std::fs::create_dir_all(&sandbox_root)
+                .with_context(|| format!("creating sandbox root at {}", sandbox_root.display()))?;
+            sandbox_root
+        }
+        None => std::env::temp_dir(),
+    };
 
     let walker = WalkDir::new(&sb_root)
         .follow_links(false)
