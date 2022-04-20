@@ -527,7 +527,7 @@ mod tests {
         let opts = RunOptions {
             git_binary_path: git_binary_path.into(),
             git_config_key: config_key.into(),
-            git_config_path: Some(config_path.into()),
+            git_config_path: Some(config_path),
             tracked: false,
         };
 

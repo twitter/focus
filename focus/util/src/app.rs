@@ -25,7 +25,6 @@ impl Debug for App {
 impl App {
     pub fn new(preserve_sandbox_contents: bool) -> Result<Self> {
         let invocation_description = std::env::args()
-            .map(|arg| arg.to_string())
             .collect::<Vec<String>>()
             .join(" ");
 
