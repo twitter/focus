@@ -113,7 +113,8 @@ impl BazelResolver {
         for line in reader.lines() {
             if let Ok(line) = line {
                 let path = PathBuf::from(&line);
-                if !&line.starts_with('@')
+                if !line.is_empty()
+                    && !line.starts_with('@')
                     && !path.starts_with("bazel-out/")
                     && !path.starts_with("external/")
                 {
