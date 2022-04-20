@@ -572,7 +572,7 @@ New contents
                 caches: Default::default(),
             };
             update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
-            
+
             get_files_to_materialize(
                 &hash_context,
                 &odb,
