@@ -70,7 +70,7 @@ impl From<ProgramArguments> for Value {
             "git_binary_path was empty string"
         );
 
-        let config_key = format!("--config-key={}", config_key);
+        let config_key = format!("--git-config-key={}", config_key);
         let git_binary_path = format!("--git-binary-path={}", git_binary_path.to_str().unwrap());
         let time_period = format!("--time-period={}", time_period);
 
