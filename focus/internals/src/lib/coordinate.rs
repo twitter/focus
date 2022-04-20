@@ -190,6 +190,9 @@ impl Debug for Label {
 pub enum LabelParseError {
     #[error("No target name")]
     NoTargetName,
+
+    #[error("Empty label")]
+    EmptyLabel,
 }
 
 impl FromStr for Label {
@@ -202,29 +205,35 @@ impl FromStr for Label {
             Some((external_package, label)) => (Some(external_package.to_string()), label),
         };
 
-        let mut path_components: Vec<String> = label.split('/').map(|s| s.to_string()).collect();
-        let target_name = match path_components.pop() {
-            Some(target_name) => target_name,
-            None => return Err(LabelParseError::NoTargetName),
+        let (package, target) = match label.split_once(':') {
+            Some((package, target)) => (package, Some(target)),
+            None => (label, None),
         };
 
-        if target_name == "..." {
+        let path_components: Vec<String> = package.split('/').map(|s| s.to_string()).collect();
+        let target = match (path_components.last(), target) {
+            (Some(_last_component), Some(target)) => target.to_string(),
+            (None, Some(target)) => target.to_string(),
+            (Some(last_component), None) if last_component == "" => {
+                return Err(LabelParseError::EmptyLabel)
+            }
+            (None, None) => return Err(LabelParseError::EmptyLabel),
+            (Some(last_component), None) => last_component.clone(),
+        };
+
+        if target == "..." {
+            let mut path_components = path_components;
+            path_components.pop();
             Ok(Self {
                 external_repository: external_package,
                 path_components,
                 target_name: TargetName::Ellipsis,
             })
         } else {
-            let (last_component, target_name) = match target_name.split_once(':') {
-                Some((last_component, target_name)) => (last_component, target_name),
-                None => (target_name.as_str(), target_name.as_str()),
-            };
-
-            path_components.push(last_component.to_string());
             Ok(Self {
                 external_repository: external_package,
                 path_components,
-                target_name: TargetName::Name(target_name.to_string()),
+                target_name: TargetName::Name(target.to_string()),
             })
         }
     }
@@ -272,6 +281,14 @@ mod tests {
                 target_name: TargetName::Name("qux".to_string()),
             }))
         );
+        assert_eq!(
+            Coordinate::try_from("bazel://foo/bar:baz/qux.py"),
+            Ok(Coordinate::Bazel(Label {
+                external_repository: None,
+                path_components: vec!["foo".to_string(), "bar".to_string()],
+                target_name: TargetName::Name("baz/qux.py".to_string()),
+            }))
+        );
 
         assert_eq!(
             Coordinate::try_from("bogus:whatever").unwrap_err(),
@@ -280,6 +297,10 @@ mod tests {
         assert_eq!(
             Coordinate::try_from("okay").unwrap_err(),
             CoordinateError::NoSchemeProvidedError
+        );
+        assert_eq!(
+            Coordinate::try_from("bazel://").unwrap_err(),
+            CoordinateError::LabelError(LabelParseError::EmptyLabel),
         );
 
         Ok(())
