@@ -24,9 +24,7 @@ impl Debug for App {
 
 impl App {
     pub fn new(preserve_sandbox_contents: bool) -> Result<Self> {
-        let invocation_description = std::env::args()
-            .collect::<Vec<String>>()
-            .join(" ");
+        let invocation_description = std::env::args().collect::<Vec<String>>().join(" ");
 
         let sandbox = Arc::from(
             Sandbox::new(Some(&invocation_description), preserve_sandbox_contents)
