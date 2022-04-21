@@ -422,7 +422,7 @@ dependencies = [
 
 [[package]]
 name = "distributed-memoization"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "ciborium",
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "focus-commands"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -501,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "focus-internals"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "focus-migrations"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "focus-internals",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "focus-testing"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "git2",
@@ -581,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "focus-tracing"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -616,7 +616,7 @@ dependencies = [
 
 [[package]]
 name = "focus-util"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",
