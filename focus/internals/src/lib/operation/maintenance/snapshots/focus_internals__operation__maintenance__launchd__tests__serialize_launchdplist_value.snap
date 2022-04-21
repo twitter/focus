@@ -1,6 +1,6 @@
 ---
 source: focus/internals/src/lib/operation/maintenance/launchd.rs
-assertion_line: 523
+assertion_line: 555
 expression: v
 ---
 Disabled: false
@@ -8,7 +8,7 @@ Label: com.twitter.git-maintenance.hourly
 ProgramArguments:
   - /path/to/focus
   - maintenance
-  - "--config-key=maintenance.repo"
+  - "--git-config-key=maintenance.repo"
   - run
   - "--git-binary-path=/usr/local/bin/git"
   - "--time-period=hourly"
