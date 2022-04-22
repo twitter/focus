@@ -136,6 +136,7 @@ pub mod testing {
             if let Some(old_value) = entries.insert(hash.clone(), value.clone()) {
                 if value != old_value {
                     error!(
+                        ?key,
                         ?old_value,
                         new_value = ?value,
                         ?hash,
