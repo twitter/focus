@@ -509,10 +509,9 @@ impl Repo {
                     keys: missing_keys,
                 } => {
                     info!(
-                        num_missing_keys = ?missing_keys.len(),
+                        ?missing_keys,
                         "Cache miss for sparse checkout patterns; querying Bazel"
                     );
-                    debug!(?missing_keys, "These are the missing keys");
                     let (outline_patterns, resolution_result) = outlining_tree
                         .outline(head_commit.id(), coordinates, app.clone())
                         .context("Failed to outline")?;
