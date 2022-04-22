@@ -67,11 +67,10 @@ impl Resolver for BazelResolver {
             })
             .collect();
 
-        for label in labels {
-            let (paths, deps) = self.query_package_dependencies(app.clone(), request, label)?;
-            directories.extend(paths);
-            package_deps.extend(deps);
-        }
+        let (paths, deps) =
+            self.query_package_dependencies(app.clone(), request, labels.into_iter().collect())?;
+        directories.extend(paths);
+        package_deps.extend(deps);
 
         Ok(ResolutionResult {
             paths: directories,
@@ -85,11 +84,18 @@ impl BazelResolver {
         &self,
         app: Arc<App>,
         request: &ResolutionRequest,
-        label: &Label,
+        labels: HashSet<&Label>,
     ) -> anyhow::Result<(BTreeSet<PathBuf>, BTreeMap<DependencyKey, DependencyValue>)> {
         let mut paths = BTreeSet::new();
         let mut packages = BTreeSet::new();
-        let query = format!("buildfiles(deps({}))", label);
+        let query = format!(
+            "buildfiles(deps(set({})))",
+            labels
+                .into_iter()
+                .map(|label| label.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
 
         // Run Bazel query
         let description = format!("bazel query '{}'", &query);
