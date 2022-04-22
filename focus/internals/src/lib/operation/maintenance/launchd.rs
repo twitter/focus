@@ -436,9 +436,16 @@ impl Default for ScheduleOpts {
     }
 }
 
+#[tracing::instrument]
+#[cfg(target_os = "linux")]
+pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
+    Ok(())
+}
+
 /// This is the function that main calls to write out the plists and load them.
 /// If time_period is None that means "all"
 #[tracing::instrument]
+#[cfg(target_os = "macos")]
 pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
     let ScheduleOpts {
         time_period,
