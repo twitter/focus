@@ -18,7 +18,7 @@ pub fn init_logging() {
         tracing_subscriber::registry()
             .with(ErrorLayer::default())
             .with(EnvFilter::new(
-                std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
+                std::env::var("RUST_LOG").unwrap_or_else(|_| "focus=debug".to_string()),
             ))
             .with(
                 tracing_subscriber::fmt::layer()
