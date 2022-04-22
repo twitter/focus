@@ -273,31 +273,36 @@ fn get_tree_path_id(tree: &git2::Tree, path: &Path) -> Result<git2::Oid, git2::E
     }
 }
 
-fn find_load_dependencies(
-    ctx: &HashContext,
+fn get_tree_for_path<'repo>(
+    ctx: &HashContext<'repo>,
     package_path: &Path,
-) -> anyhow::Result<BTreeSet<Label>> {
-    let tree = if package_path == Path::new("") {
-        ctx.head_tree.to_owned()
+) -> anyhow::Result<Option<git2::Tree<'repo>>> {
+    if package_path == Path::new("") {
+        Ok(Some(ctx.head_tree.to_owned()))
     } else {
         let tree_entry = match ctx.head_tree.get_path(package_path) {
             Ok(tree_entry) => tree_entry,
-            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(Default::default()),
+            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(None),
             Err(e) => return Err(e.into()),
         };
         let object = tree_entry
             .to_object(ctx.repo)
             .context("converting tree entry to object")?;
-        match object.as_tree() {
-            Some(tree) => tree.to_owned(),
-            None => todo!(),
-        }
-    };
+        let tree = object.as_tree().map(|tree| tree.to_owned());
+        Ok(tree)
+    }
+}
 
+fn find_load_dependencies(
+    ctx: &HashContext,
+    package_path: &Path,
+) -> anyhow::Result<BTreeSet<Label>> {
     let mut result = BTreeSet::new();
-    for tree_entry in &tree {
-        let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
-        result.extend(deps);
+    if let Some(tree) = get_tree_for_path(ctx, package_path)? {
+        for tree_entry in &tree {
+            let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
+            result.extend(deps);
+        }
     }
     Ok(result)
 }
