@@ -124,8 +124,26 @@ impl BazelResolver {
         }
         info!("'{}' requires {} directories", &query, paths.len(),);
 
+        // Avoid exceeding max argument list length.
+        const MAX_NUM_ARGS: usize = 1000;
+
         let targets = self.extract_targets(app.clone(), request, packages)?;
-        let deps = self.extract_dependencies(app, request, targets)?;
+        let deps = {
+            let mut result = Vec::new();
+            for chunk in targets
+                .into_iter()
+                .collect::<Vec<_>>()
+                .as_slice()
+                .chunks(MAX_NUM_ARGS)
+            {
+                result.extend(self.extract_dependencies(
+                    app.clone(),
+                    request,
+                    chunk.into_iter().cloned().collect(),
+                )?);
+            }
+            result.into_iter().collect()
+        };
         Ok((paths, deps))
     }
 
