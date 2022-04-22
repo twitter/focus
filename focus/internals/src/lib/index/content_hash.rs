@@ -121,14 +121,20 @@ pub fn content_hash_dependency_key(
     buf.push_str("DependencyKey");
 
     match key {
-        DependencyKey::BazelPackage {
-            external_repository: None,
-            path,
-        } => {
+        DependencyKey::BazelPackage(
+            label @ Label {
+                external_repository: None,
+                path_components,
+                target_name: _,
+            },
+        ) => {
+            let path: PathBuf = path_components.iter().collect();
             buf.push_str("::BazelPackage(");
-            buf.push_str(&content_hash_tree_path(ctx, path)?.to_string());
+            buf.push_str(&label.to_string());
+            buf.push(',');
+            buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
 
-            let loaded_deps = find_load_dependencies(ctx, path)?;
+            let loaded_deps = find_load_dependencies(ctx, &path)?;
             for label in loaded_deps {
                 let key = DependencyKey::BazelBuildFile(label);
                 buf.push_str(", ");
@@ -150,10 +156,11 @@ pub fn content_hash_dependency_key(
             buf.push_str(&content_hash_tree_path(ctx, path)?.to_string());
         }
 
-        DependencyKey::BazelPackage {
+        DependencyKey::BazelPackage(Label {
             external_repository: Some(_),
-            path: _,
-        } => {
+            path_components: _,
+            target_name: _,
+        }) => {
             // Nothing to do. The package in question will already have
             // established a dependency on the `WORKSPACE` file, which uniquely
             // identifies any external packages.

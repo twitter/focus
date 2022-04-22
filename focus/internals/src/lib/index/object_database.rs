@@ -281,6 +281,8 @@ mod tests {
 
     use focus_testing::scratch_git_repo::ScratchGitRepo;
 
+    use crate::coordinate::{Label, TargetName};
+
     use super::*;
 
     #[test]
@@ -297,13 +299,18 @@ mod tests {
             head_tree: &head_tree,
             caches: Default::default(),
         };
-        let key = DependencyKey::BazelPackage {
+        let key = DependencyKey::BazelPackage(Label {
             external_repository: None,
-            path: "foo/bar".into(),
-        };
+            path_components: vec!["foo".to_string(), "bar".to_string()],
+            target_name: TargetName::Name("bar".to_string()),
+        });
         let value = DependencyValue::PackageInfo {
             deps: btreeset! {
-                DependencyKey::BazelPackage { external_repository: None, path: "baz/qux".into() }
+                DependencyKey::BazelPackage(Label {
+                    external_repository: None,
+                    path_components: vec!["baz".to_string(), "qux".to_string()],
+                    target_name: TargetName::Name("qux".to_string()),
+                }),
             },
         };
         assert!(odb.get(&ctx, &key)?.1.is_none());

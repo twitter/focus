@@ -42,16 +42,8 @@ pub enum DependencyKey {
     /// For example, if `//foo` depends on `//bar`, then we need to materialize
     /// both `//foo` and `//bar`'s files.
     ///
-    /// This is the same as [`Label`], but represents a package rather than an
-    /// individual target, so it doesn't have a `target_name` field.
-    BazelPackage {
-        /// Same as for [`Label`].
-        external_repository: Option<String>,
-
-        /// The same value as is represented by the `path_components` of a
-        /// [`Label`].
-        path: PathBuf,
-    },
+    /// TODO: explain what happens in the cases of ellipses
+    BazelPackage(Label),
 
     /// Represents a dependency on a `BUILD` or `.bzl` file.
     ///
@@ -84,26 +76,10 @@ pub enum DependencyKey {
     DummyForTesting(Box<DependencyKey>),
 }
 
-impl DependencyKey {
-    /// Construct a [`DependencyKey`] corresponding to the package containing
-    /// the provided `label`.
-    pub fn new_bazel_package(label: Label) -> Self {
-        let Label {
-            external_repository,
-            path_components,
-            target_name: _,
-        } = label;
-        Self::BazelPackage {
-            external_repository,
-            path: path_components.into_iter().collect(),
-        }
-    }
-}
-
 impl From<Coordinate> for DependencyKey {
     fn from(coordinate: Coordinate) -> Self {
         match coordinate {
-            Coordinate::Bazel(label) => Self::new_bazel_package(label),
+            Coordinate::Bazel(label) => Self::BazelPackage(label),
             Coordinate::Directory(path) => Self::Path(PathBuf::from(path)),
             Coordinate::Pants(label) => unimplemented!(
                 "DependencyKey from Pants label not supported (label: {})",
@@ -255,16 +231,22 @@ pub fn get_files_to_materialize(
             match dep_value {
                 Some(DependencyValue::PackageInfo { deps }) => {
                     let path = match dep_key {
-                        DependencyKey::BazelPackage {
+                        DependencyKey::BazelPackage(Label {
                             external_repository: None,
-                            path,
+                            path_components,
+                            target_name: _, // TODO: use
+                        }) => {
+                            let path: PathBuf = path_components.iter().collect();
+                            path
                         }
-                        | DependencyKey::Path(path) => path.clone(),
 
-                        DependencyKey::BazelPackage {
+                        DependencyKey::Path(path) => path.clone(),
+
+                        DependencyKey::BazelPackage(Label {
                             external_repository: Some(_),
-                            path: _,
-                        } => {
+                            path_components: _,
+                            target_name: _,
+                        }) => {
                             // Do nothing, we expect Bazel itself to have loaded
                             // external packages.
                             // TODO: run `bazel sync` to ensure that?
@@ -418,12 +400,11 @@ sh_binary(
         MissingKeys {
             keys: {
                 (
-                    BazelPackage {
-                        external_repository: None,
-                        path: "package1",
-                    },
+                    BazelPackage(
+                        Label("//package1:foo"),
+                    ),
                     ContentHash(
-                        11d7b2748d158c66aef9f0c51be3a34e70cfa2c8,
+                        39f39e1ba338d2f09fc1eabe7393272b0aea6d09,
                     ),
                 ),
             },
@@ -449,31 +430,46 @@ sh_binary(
                 "package2",
             },
             package_deps: {
-                BazelPackage {
-                    external_repository: None,
-                    path: "package1",
-                }: PackageInfo {
+                BazelPackage(
+                    Label("//package1:BUILD"),
+                ): PackageInfo {
+                    deps: {},
+                },
+                BazelPackage(
+                    Label("//package1:foo"),
+                ): PackageInfo {
                     deps: {
-                        BazelPackage {
-                            external_repository: None,
-                            path: "package1",
-                        },
-                        BazelPackage {
-                            external_repository: None,
-                            path: "package2",
-                        },
+                        BazelPackage(
+                            Label("//package1:foo.sh"),
+                        ),
+                        BazelPackage(
+                            Label("//package2:bar"),
+                        ),
                     },
                 },
-                BazelPackage {
-                    external_repository: None,
-                    path: "package2",
-                }: PackageInfo {
+                BazelPackage(
+                    Label("//package1:foo.sh"),
+                ): PackageInfo {
+                    deps: {},
+                },
+                BazelPackage(
+                    Label("//package2:BUILD"),
+                ): PackageInfo {
+                    deps: {},
+                },
+                BazelPackage(
+                    Label("//package2:bar"),
+                ): PackageInfo {
                     deps: {
-                        BazelPackage {
-                            external_repository: None,
-                            path: "package2",
-                        },
+                        BazelPackage(
+                            Label("//package2:bar.sh"),
+                        ),
                     },
+                },
+                BazelPackage(
+                    Label("//package2:bar.sh"),
+                ): PackageInfo {
+                    deps: {},
                 },
             },
         }
@@ -624,12 +620,11 @@ def my_macro_inner(name):
         MissingKeys {
             keys: {
                 (
-                    BazelPackage {
-                        external_repository: None,
-                        path: "package1",
-                    },
+                    BazelPackage(
+                        Label("//package1:foo"),
+                    ),
                     ContentHash(
-                        cf2dfad9daf205271ad02bfb1924133e581328e4,
+                        5855ab1dd39c6546913580c406cb5dd8e9a054ae,
                     ),
                 ),
             },
@@ -755,12 +750,11 @@ def some_macro():
         MissingKeys {
             keys: {
                 (
-                    BazelPackage {
-                        external_repository: None,
-                        path: "package1",
-                    },
+                    BazelPackage(
+                        Label("//package1:foo"),
+                    ),
                     ContentHash(
-                        871239f642ec8245e2cfc0a0feb40f00802540d5,
+                        9b762728f674f074cd9c8201b70eaaf3173c4987,
                     ),
                 ),
             },
