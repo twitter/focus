@@ -51,17 +51,9 @@ pub fn clear(backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<()> {
 
 fn dep_key_to_coordinate(dep_key: &DependencyKey) -> String {
     match dep_key {
-        DependencyKey::BazelPackage {
-            external_repository: None,
-            path,
-        } => format!("bazel://{}", path.display()),
-
-        DependencyKey::BazelPackage {
-            external_repository: Some(external_repository),
-            path,
-        } => format!("bazel:{}//{}", external_repository, path.display()),
-
-        DependencyKey::BazelBuildFile(label) => format!("bazel:{}", label),
+        DependencyKey::BazelPackage(label) | DependencyKey::BazelBuildFile(label) => {
+            format!("bazel:{}", label)
+        }
 
         DependencyKey::Path(path) => format!("directory:{}", path.display()),
 

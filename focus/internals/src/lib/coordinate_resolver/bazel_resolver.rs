@@ -303,7 +303,7 @@ impl BazelResolver {
                         match rule_element {
                             RuleElement::RuleInput { name } => {
                                 let label: Label = name.parse()?;
-                                rule_inputs.insert(DependencyKey::new_bazel_package(label));
+                                rule_inputs.insert(DependencyKey::BazelPackage(label));
                             }
 
                             RuleElement::Boolean { .. }
@@ -321,14 +321,14 @@ impl BazelResolver {
                         }
                     }
 
-                    let key = DependencyKey::new_bazel_package(target_label);
+                    let key = DependencyKey::BazelPackage(target_label);
                     result.entry(key).or_default().extend(rule_inputs);
                 }
 
                 QueryElement::SourceFile { name, body: () }
                 | QueryElement::GeneratedFile { name, body: () } => {
                     let target_label: Label = name.parse()?;
-                    let key = DependencyKey::new_bazel_package(target_label);
+                    let key = DependencyKey::BazelPackage(target_label);
 
                     // Create an entry for this package if it doesn't exist. We
                     // don't need to add any dependencies, since source files
