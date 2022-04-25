@@ -1,17 +1,19 @@
 use std::borrow::Borrow;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
 use focus_util::app::{App, ExitCode};
+use focus_util::paths::assert_focused_repo;
+use tracing::{debug, info};
 
 use crate::coordinate::{Coordinate, CoordinateSet};
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
     RocksDBMemoizationCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
-use crate::model::layering::LayerSets;
+use crate::model::layering::{LayerSets, RichLayerSet};
 use crate::model::repo::Repo;
 
 #[derive(
@@ -57,7 +59,7 @@ fn dep_key_to_coordinate(dep_key: &DependencyKey) -> String {
         DependencyKey::BazelPackage {
             external_repository: Some(external_repository),
             path,
-        } => format!("bazel:@{}//{}", external_repository, path.display()),
+        } => format!("bazel:{}//{}", external_repository, path.display()),
 
         DependencyKey::BazelBuildFile(label) => format!("bazel:{}", label),
 
@@ -133,10 +135,29 @@ fn resolve_coordinates(
 pub fn resolve(
     app: Arc<App>,
     backend: Backend,
-    coordinates: Vec<String>,
+    coordinates_or_layers: Vec<String>,
 ) -> anyhow::Result<ExitCode> {
-    let coordinates: HashSet<Coordinate> = coordinates
+    let sparse_repo = Path::new(".");
+    assert_focused_repo(&sparse_repo)?;
+
+    let all_layers = LayerSets::new(sparse_repo);
+    let all_layers = all_layers.available_layers()?;
+    let all_layers = RichLayerSet::new(all_layers)?;
+    let coordinates: HashSet<Coordinate> = coordinates_or_layers
         .into_iter()
+        .flat_map(|coordinate| match all_layers.get(&coordinate) {
+            Some(layer) => {
+                let coordinates = layer.coordinates();
+                info!(
+                    num_coordinates = ?coordinates.len(),
+                    layer = ?layer.name(),
+                    "Num expanded coordinates for layer"
+                );
+                debug!(?coordinates, layer = ?layer.name(), "Expanded coordinates for layer");
+                coordinates.to_vec()
+            }
+            None => vec![coordinate],
+        })
         .map(|coordinate| Coordinate::try_from(coordinate.as_str()))
         .collect::<Result<_, _>>()?;
     resolve_coordinates(app, backend, coordinates)
