@@ -2,8 +2,10 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::hash::Hash;
+use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -125,7 +127,7 @@ pub fn content_hash_dependency_key(
             label @ Label {
                 external_repository: None,
                 path_components,
-                target_name: _,
+                target_name,
             },
         ) => {
             let path: PathBuf = path_components.iter().collect();
@@ -134,7 +136,10 @@ pub fn content_hash_dependency_key(
             buf.push(',');
             buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
 
-            let loaded_deps = find_load_dependencies(ctx, &path)?;
+            let loaded_deps = match target_name {
+                TargetName::Name(_) => find_load_dependencies(ctx, &path)?,
+                TargetName::Ellipsis => find_load_dependencies(ctx, &path)?,
+            };
             for label in loaded_deps {
                 let key = DependencyKey::BazelBuildFile(label);
                 buf.push_str(", ");
@@ -297,11 +302,17 @@ fn find_load_dependencies(
     ctx: &HashContext,
     package_path: &Path,
 ) -> anyhow::Result<BTreeSet<Label>> {
+    debug!(?package_path, "Finding load dependencies");
+
     let mut result = BTreeSet::new();
     if let Some(tree) = get_tree_for_path(ctx, package_path)? {
         for tree_entry in &tree {
             let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
             result.extend(deps);
+            if tree_entry.to_object(ctx.repo)?.as_tree().is_some() {
+                let subdir_path = package_path.join(OsStr::from_bytes(tree_entry.name_bytes()));
+                result.extend(find_load_dependencies(ctx, &subdir_path)?);
+            }
         }
     }
     Ok(result)
