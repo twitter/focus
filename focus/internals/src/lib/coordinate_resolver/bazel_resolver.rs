@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     io::Write,
     path::{Path, PathBuf},
     str::FromStr,
@@ -90,12 +91,8 @@ impl BazelResolver {
     ) -> anyhow::Result<(BTreeSet<PathBuf>, BTreeMap<DependencyKey, DependencyValue>)> {
         let (paths, packages) = {
             let query = format!(
-                "buildfiles(deps(set({})))",
-                labels
-                    .iter()
-                    .map(|label| label.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ")
+                "buildfiles(deps({}))",
+                Self::make_bazel_set(labels.iter().copied())
             );
             let result = Self::run_bazel_query(
                 app.clone(),
@@ -197,6 +194,25 @@ impl BazelResolver {
         Ok(parsed_result)
     }
 
+    fn make_bazel_set(labels: impl IntoIterator<Item = impl Borrow<Label>>) -> String {
+        format!(
+            "set({})",
+            labels
+                .into_iter()
+                .map(|label| label.borrow().to_string())
+                .map(|label| Self::quote_target_name(&label))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    }
+
+    /// Escape any characters with special meaning to Bazel. For example, by
+    /// default, Bazel will try to lex curly braces (`{}`) as part of a
+    /// different token.
+    fn quote_target_name(target_name: &str) -> String {
+        format!("\"{}\"", target_name)
+    }
+
     /// Extract Bazel-compatible top-level targets for the provided packages.
     fn extract_top_level_targets(
         &self,
@@ -204,8 +220,8 @@ impl BazelResolver {
         request: &ResolutionRequest,
         packages: BTreeSet<Label>,
     ) -> Result<BTreeSet<Label>> {
-        fn make_top_level_targets_spec(package: Label) -> String {
-            let spec = Label {
+        fn make_top_level_targets_spec(package: Label) -> Label {
+            Label {
                 // Use the `:*` syntax to get all top-level targets and files in
                 // the package. We filter out the files shortly. (We can't use
                 // `:all`, which would give us only the targets, because there
@@ -213,18 +229,10 @@ impl BazelResolver {
                 // disambigudate them.)
                 target_name: TargetName::Name("*".to_string()),
                 ..package
-            };
-            spec.to_string()
+            }
         }
 
-        let query = format!(
-            "set({})",
-            packages
-                .into_iter()
-                .map(make_top_level_targets_spec)
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
+        let query = Self::make_bazel_set(packages.into_iter().map(make_top_level_targets_spec));
         let bazel_de::Query { rules } = Self::run_bazel_query_xml(app, request, vec![], &query)?;
 
         // TODO: This mechanism for detecting Bazel-compatibility should be
@@ -287,14 +295,7 @@ impl BazelResolver {
         request: &ResolutionRequest,
         targets: BTreeSet<Label>,
     ) -> Result<BTreeMap<DependencyKey, DependencyValue>> {
-        let query = format!(
-            "set({})",
-            targets
-                .into_iter()
-                .map(|target| target.to_string())
-                .collect::<Vec<_>>()
-                .join(" "),
-        );
+        let query = Self::make_bazel_set(targets.iter());
         let bazel_de::Query { rules } =
             Self::run_bazel_query_xml(app, request, vec!["--noimplicit_deps"], &query)?;
 
