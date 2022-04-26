@@ -220,6 +220,48 @@ pub fn get_files_to_materialize(
         for dep_key in dep_keys {
             seen_keys.insert(dep_key.clone());
 
+            let path = match &dep_key {
+                DependencyKey::BazelPackage(Label {
+                    external_repository: None,
+                    path_components,
+                    target_name: _, // TODO: use
+                }) => {
+                    let path: PathBuf = path_components.iter().collect();
+                    path
+                }
+
+                DependencyKey::Path(path) => path.clone(),
+
+                DependencyKey::BazelPackage(Label {
+                    external_repository: Some(_),
+                    path_components: _,
+                    target_name: _,
+                }) => {
+                    // Do nothing, we expect Bazel itself to have loaded
+                    // external packages.
+                    // TODO: run `bazel sync` to ensure that?
+                    continue;
+                }
+
+                dep_value @ DependencyKey::BazelBuildFile(label) => {
+                    warn!(
+                        ?dep_key,
+                        dep_value = ?dep_value,
+                        "PackageInfo value corresponded to a key that was not a package"
+                    );
+                    try_label_into_path(label.clone())?
+                }
+
+                DependencyKey::DummyForTesting(inner_dep_key) => {
+                    warn!(
+                        ?inner_dep_key,
+                        "Encountered dummy testing key; this should not appear in real-world data"
+                    );
+                    continue;
+                }
+            };
+            paths_to_materialize.insert(path);
+
             let (dep_hash, dep_value) = odb.get(ctx, &dep_key)?;
             debug!(
                 ?dep_hash,
@@ -230,45 +272,6 @@ pub fn get_files_to_materialize(
 
             match dep_value {
                 Some(DependencyValue::PackageInfo { deps }) => {
-                    let path = match dep_key {
-                        DependencyKey::BazelPackage(Label {
-                            external_repository: None,
-                            path_components,
-                            target_name: _, // TODO: use
-                        }) => {
-                            let path: PathBuf = path_components.iter().collect();
-                            path
-                        }
-
-                        DependencyKey::Path(path) => path.clone(),
-
-                        DependencyKey::BazelPackage(Label {
-                            external_repository: Some(_),
-                            path_components: _,
-                            target_name: _,
-                        }) => {
-                            // Do nothing, we expect Bazel itself to have loaded
-                            // external packages.
-                            // TODO: run `bazel sync` to ensure that?
-                            continue;
-                        }
-
-                        DependencyKey::BazelBuildFile(label) => {
-                            warn!(
-                                key = ?dep_hash,
-                                value = ?DependencyKey::BazelBuildFile(label.clone()),
-                                "PackageInfo value corresponded to a key that was not a package"
-                            );
-                            try_label_into_path(label.clone())?
-                        }
-
-                        DependencyKey::DummyForTesting(inner_dep_key) => {
-                            warn!(?inner_dep_key, "Encountered dummy testing key; this should not appear in real-world data");
-                            continue;
-                        }
-                    };
-                    paths_to_materialize.insert(path);
-
                     next_deps.extend(deps.into_iter());
                 }
 
