@@ -160,7 +160,8 @@ impl Display for Label {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "//{}",
+            "{}//{}",
+            self.external_repository.as_deref().unwrap_or_default(),
             // Note that `path_components` may be empty, which is fine.
             self.path_components.join("/")
         )?;
