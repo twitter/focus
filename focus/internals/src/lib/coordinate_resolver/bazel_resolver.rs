@@ -1,5 +1,4 @@
 use std::{
-    io::BufRead,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Mutex,
@@ -86,38 +85,26 @@ impl BazelResolver {
         request: &ResolutionRequest,
         labels: HashSet<&Label>,
     ) -> anyhow::Result<(BTreeSet<PathBuf>, BTreeMap<DependencyKey, DependencyValue>)> {
-        let mut paths = BTreeSet::new();
-        let mut packages = BTreeSet::new();
-        let query = format!(
-            "buildfiles(deps(set({})))",
-            labels
-                .into_iter()
-                .map(|label| label.to_string())
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
+        let (paths, packages) = {
+            let query = format!(
+                "buildfiles(deps(set({})))",
+                labels
+                    .into_iter()
+                    .map(|label| label.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            let result = Self::run_bazel_query(
+                app.clone(),
+                request,
+                &["--output=package", "--noimplicit_deps"],
+                &query,
+            )?;
 
-        // Run Bazel query
-        let description = format!("bazel query '{}'", &query);
-        let (mut cmd, scmd) = SandboxCommand::new(
-            description.clone(),
-            Self::locate_bazel_binary(request),
-            app.clone(),
-        )?;
-        scmd.ensure_success_or_log(
-            cmd.arg("query")
-                .arg(&query)
-                .arg("--output=package")
-                .arg("--noimplicit_deps")
-                .current_dir(&request.repo),
-            SandboxCommandOutput::Stderr,
-            &description,
-        )?;
-
-        let reader = scmd.read_buffered(SandboxCommandOutput::Stdout)?;
-        #[allow(clippy::manual_flatten)]
-        for line in reader.lines() {
-            if let Ok(line) = line {
+            let mut paths = BTreeSet::new();
+            let mut packages = BTreeSet::new();
+            #[allow(clippy::manual_flatten)]
+            for line in result.lines() {
                 let path = PathBuf::from(&line);
                 if !line.is_empty()
                     && !line.starts_with('@')
@@ -128,8 +115,9 @@ impl BazelResolver {
                     packages.insert(Label::from_str(&line)?);
                 }
             }
-        }
-        info!("'{}' requires {} packages", &query, paths.len(),);
+            info!("'{}' requires {} packages", &query, paths.len());
+            (paths, packages)
+        };
 
         // Avoid exceeding max argument list length.
         const MAX_NUM_ARGS: usize = 1000;
@@ -159,7 +147,7 @@ impl BazelResolver {
         request: &ResolutionRequest,
         bazel_args: &[&str],
         query: &str,
-    ) -> Result<bazel_de::Query> {
+    ) -> Result<String> {
         let description = format!("bazel query '{}'", query);
 
         let (mut cmd, scmd) =
@@ -167,7 +155,6 @@ impl BazelResolver {
         scmd.ensure_success_or_log(
             cmd.arg("query")
                 .arg(&query)
-                .arg("--output=xml")
                 .args(bazel_args)
                 .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
@@ -181,6 +168,21 @@ impl BazelResolver {
             result
         };
         debug!(?query, ?raw_result, "Query returned with result");
+        Ok(raw_result)
+    }
+
+    fn run_bazel_query_xml(
+        app: Arc<App>,
+        request: &ResolutionRequest,
+        bazel_args: Vec<&str>,
+        query: &str,
+    ) -> Result<bazel_de::Query> {
+        let bazel_args = {
+            let mut bazel_args = bazel_args;
+            bazel_args.push("--output=xml");
+            bazel_args
+        };
+        let raw_result = Self::run_bazel_query(app, request, &bazel_args, query)?;
         let parsed_result: bazel_de::Query = serde_xml_rs::from_str(&raw_result)?;
         Ok(parsed_result)
     }
@@ -213,7 +215,7 @@ impl BazelResolver {
                 .collect::<Vec<_>>()
                 .join(" ")
         );
-        let bazel_de::Query { rules } = Self::run_bazel_query(app, request, &[], &query)?;
+        let bazel_de::Query { rules } = Self::run_bazel_query_xml(app, request, vec![], &query)?;
 
         // TODO: This mechanism for detecting Bazel-compatibility should be
         // configurable.
@@ -284,7 +286,7 @@ impl BazelResolver {
                 .join(" "),
         );
         let bazel_de::Query { rules } =
-            Self::run_bazel_query(app, request, &["--noimplicit_deps"], &query)?;
+            Self::run_bazel_query_xml(app, request, vec!["--noimplicit_deps"], &query)?;
 
         let mut result: BTreeMap<DependencyKey, BTreeSet<DependencyKey>> = BTreeMap::new();
         for rule in rules {
