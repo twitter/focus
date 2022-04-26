@@ -3,6 +3,7 @@ filegroup(
     srcs = [
         "quotes.txt",
     ],
+    tags = ["bazel-compatible"],
     visibility = [
         "//visibility:public",
     ],
