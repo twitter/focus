@@ -1,4 +1,5 @@
 use std::{
+    io::Write,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Mutex,
@@ -119,26 +120,8 @@ impl BazelResolver {
             (paths, packages)
         };
 
-        // Avoid exceeding max argument list length.
-        const MAX_NUM_ARGS: usize = 1000;
-
         let targets = self.extract_top_level_targets(app.clone(), request, packages)?;
-        let deps = {
-            let mut result = Vec::new();
-            for chunk in targets
-                .into_iter()
-                .collect::<Vec<_>>()
-                .as_slice()
-                .chunks(MAX_NUM_ARGS)
-            {
-                result.extend(self.extract_immediate_dependencies(
-                    app.clone(),
-                    request,
-                    chunk.into_iter().cloned().collect(),
-                )?);
-            }
-            result.into_iter().collect()
-        };
+        let deps = self.extract_immediate_dependencies(app.clone(), request, targets)?;
         Ok((paths, deps))
     }
 
@@ -150,11 +133,22 @@ impl BazelResolver {
     ) -> Result<String> {
         let description = format!("bazel query '{}'", query);
 
+        let query_file_path = {
+            let (mut file, path, _serial) = app
+                .sandbox()
+                .create_file(Some("bazel_query"), None, None)
+                .context("creating bazel query file")?;
+            file.write_all(query.as_bytes())
+                .context("writing bazel query to disk")?;
+            path
+        };
+
         let (mut cmd, scmd) =
             SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app)?;
         scmd.ensure_success_or_log(
             cmd.arg("query")
-                .arg(&query)
+                .arg(format!("--query_file"))
+                .arg(query_file_path)
                 .args(bazel_args)
                 .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
