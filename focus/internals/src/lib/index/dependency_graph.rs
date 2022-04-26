@@ -91,7 +91,7 @@ impl From<Coordinate> for DependencyKey {
 
 /// The semantic content associated with a [`DependencyKey`], produced by
 /// expensive operations such as querying Bazel.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum DependencyValue {
     /// The provided [`DependencyKey`] represented a Bazel package.
     PackageInfo {
@@ -823,6 +823,69 @@ def some_macro():
         Ok {
             paths: {
                 "package1",
+            },
+        }
+        "###);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_recursive_package_query() -> anyhow::Result<()> {
+        init_logging();
+
+        let temp = tempfile::tempdir()?;
+        let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
+
+        write_files(
+            &fix,
+            r#"
+file: WORKSPACE
+
+file: package1/some/sub/package/foo.sh
+
+file: package1/some/sub/package/BUILD
+sh_binary(
+    name = "foo",
+    srcs = ["foo.sh"],
+)
+"#,
+        )?;
+        let head_oid = fix.commit_all("Wrote files")?;
+        let repo = fix.repo()?;
+
+        let app = Arc::new(App::new(false)?);
+        let cache_dir = tempfile::tempdir()?;
+        let resolver = BazelResolver::new(cache_dir.path());
+        let coordinate_set = CoordinateSet::from(hashset! {
+            // Note that `//package1` itself is not a package, but
+            // `//package1/...` expands to some number of subpackages anyways.
+            "bazel://package1/...".try_into()?
+        });
+        let request = ResolutionRequest {
+            repo: fix.path().to_path_buf(),
+            coordinate_set,
+        };
+        let cache_options = CacheOptions::default();
+        let resolve_result = resolver.resolve(&request, &cache_options, app)?;
+
+        let odb = HashMapOdb::new();
+        let files_to_materialize = {
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let ctx = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
+            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1/...")? })?
+        };
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        Ok {
+            paths: {
+                "package1",
+                "package1/some/sub/package",
             },
         }
         "###);
