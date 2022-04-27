@@ -272,7 +272,7 @@ enum MaintenanceSubcommand {
     Run {
         /// The absolute path to the git binary to use. If not given, the default MDE path
         /// will be used.
-        #[clap(long, default_value = maintenance::DEFAULT_GIT_BINARY_PATH_FOR_PLISTS, env = "FOCUS_GIT_BINARY_PATH")]
+        #[clap(long, default_value = maintenance::DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS, env = "FOCUS_GIT_BINARY_PATH")]
         git_binary_path: PathBuf,
 
         /// The git config file to use to read the list of repos to run maintenance in. If not
@@ -348,7 +348,7 @@ enum MaintenanceScheduleSubcommand {
         focus_path: Option<PathBuf>,
 
         /// path to git
-        #[clap(long, default_value = operation::maintenance::DEFAULT_GIT_BINARY_PATH_FOR_PLISTS, env = "FOCUS_GIT_BINARY_PATH")]
+        #[clap(long, default_value = operation::maintenance::DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS, env = "FOCUS_GIT_BINARY_PATH")]
         git_binary_path: PathBuf,
 
         /// Normally, we check to see if the scheduled job is already defined and if it is

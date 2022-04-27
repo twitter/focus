@@ -1,0 +1,65 @@
+---
+source: focus/internals/src/lib/operation/maintenance/launchd.rs
+expression: v
+---
+Disabled: false
+Label: com.twitter.git-maintenance.hourly
+ProgramArguments:
+  - /path/to/focus
+  - maintenance
+  - "--git-config-key=maintenance.repo"
+  - run
+  - "--git-binary-path=/usr/local/bin/git"
+  - "--time-period=hourly"
+  - "--config-path=/path/to/config"
+  - "--tracked"
+StartCalendarInterval:
+  - Hour: 0
+    Minute: 12
+  - Hour: 1
+    Minute: 12
+  - Hour: 2
+    Minute: 12
+  - Hour: 3
+    Minute: 12
+  - Hour: 4
+    Minute: 12
+  - Hour: 5
+    Minute: 12
+  - Hour: 6
+    Minute: 12
+  - Hour: 7
+    Minute: 12
+  - Hour: 8
+    Minute: 12
+  - Hour: 9
+    Minute: 12
+  - Hour: 10
+    Minute: 12
+  - Hour: 11
+    Minute: 12
+  - Hour: 12
+    Minute: 12
+  - Hour: 13
+    Minute: 12
+  - Hour: 14
+    Minute: 12
+  - Hour: 15
+    Minute: 12
+  - Hour: 16
+    Minute: 12
+  - Hour: 17
+    Minute: 12
+  - Hour: 18
+    Minute: 12
+  - Hour: 19
+    Minute: 12
+  - Hour: 20
+    Minute: 12
+  - Hour: 21
+    Minute: 12
+  - Hour: 22
+    Minute: 12
+  - Hour: 23
+    Minute: 12
+

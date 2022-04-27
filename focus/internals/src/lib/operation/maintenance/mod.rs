@@ -1,4 +1,5 @@
 pub mod launchd;
+pub mod scheduling;
 
 use std::{
     ffi::OsString,
@@ -21,10 +22,10 @@ use focus_util::{
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
-pub use self::launchd::{
-    schedule_disable, schedule_enable, Launchctl, PlistOpts, ScheduleOpts, DEFAULT_FOCUS_PATH,
-    DEFAULT_GIT_BINARY_PATH_FOR_PLISTS,
-};
+pub use self::launchd::{schedule_disable, schedule_enable, Launchctl, ScheduleOpts};
+
+pub(crate) const DEFAULT_FOCUS_PATH: &str = "/opt/twitter_mde/bin/focus";
+pub const DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS: &str = "/opt/twitter_mde/bin/git";
 
 #[allow(dead_code)]
 #[derive(

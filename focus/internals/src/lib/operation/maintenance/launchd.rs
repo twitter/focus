@@ -1,220 +1,11 @@
-use super::*;
+use super::{scheduling::*, *};
 use anyhow::{anyhow, bail, Context, Result};
-use nix::NixPath;
-use plist::{dictionary::Dictionary, Value};
 use std::{
     io::{ErrorKind, Write},
     path::PathBuf,
 };
 use strum::IntoEnumIterator;
 use tracing::{debug, error};
-
-pub const DEFAULT_FOCUS_PATH: &str = "/opt/twitter_mde/bin/focus";
-pub const DEFAULT_GIT_BINARY_PATH_FOR_PLISTS: &str = "/opt/twitter_mde/bin/git";
-
-#[derive(Debug, Clone)]
-pub struct PlistOpts {
-    pub focus_path: PathBuf,
-    pub git_binary_path: PathBuf,
-    pub time_period: TimePeriod,
-    pub config_key: String,
-    pub config_path: Option<String>,
-    pub schedule_defaults: Option<CalendarInterval>,
-    /// run maintenance on all tracked repos
-    pub tracked: bool,
-}
-
-impl PlistOpts {
-    pub fn label(&self) -> String {
-        format!("com.twitter.git-maintenance.{}", self.time_period)
-    }
-}
-
-impl Default for PlistOpts {
-    fn default() -> Self {
-        Self {
-            focus_path: DEFAULT_FOCUS_PATH.into(),
-            git_binary_path: DEFAULT_GIT_BINARY_PATH_FOR_PLISTS.into(),
-            time_period: TimePeriod::Hourly,
-            config_key: DEFAULT_CONFIG_KEY.into(),
-            config_path: None,
-            schedule_defaults: None,
-            tracked: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct ProgramArguments(PlistOpts);
-
-impl From<PlistOpts> for ProgramArguments {
-    fn from(t: PlistOpts) -> Self {
-        Self(t)
-    }
-}
-
-impl From<ProgramArguments> for Value {
-    fn from(args: ProgramArguments) -> Self {
-        let ProgramArguments(PlistOpts {
-            focus_path,
-            git_binary_path,
-            time_period,
-            config_key,
-            config_path,
-            tracked,
-            schedule_defaults: _,
-        }) = args;
-
-        assert!(
-            !git_binary_path.is_empty(),
-            "git_binary_path was empty string"
-        );
-
-        let config_key = format!("--git-config-key={}", config_key);
-        let git_binary_path = format!("--git-binary-path={}", git_binary_path.to_str().unwrap());
-        let time_period = format!("--time-period={}", time_period);
-
-        let mut args: Vec<String> = vec![
-            focus_path.to_str().unwrap().to_owned(),
-            "maintenance".into(),
-            config_key,
-            "run".into(),
-            git_binary_path,
-            time_period,
-        ];
-
-        if let Some(config_path) = config_path.as_deref() {
-            args.push(format!("--config-path={}", config_path));
-        }
-
-        if tracked {
-            args.push("--tracked".into());
-        }
-
-        Value::Array(args.into_iter().map(|a| a.into()).collect())
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CalendarInterval {
-    day: Option<u32>,
-    hour: Option<u32>,
-    minute: Option<u32>,
-    weekday: Option<u32>,
-}
-
-#[allow(dead_code)]
-const DEFAULT_DAILY_HOUR: u32 = 4;
-const DEFAULT_WEEKLY_WEEKDAY: u32 = 1;
-
-fn random_minute() -> u32 {
-    rand::random::<u32>() % 60
-}
-
-impl CalendarInterval {
-    fn daily(minute: u32, hour: u32) -> Vec<CalendarInterval> {
-        (0..7)
-            .into_iter()
-            .map(|weekday| CalendarInterval {
-                weekday: Some(weekday),
-                hour: Some(hour),
-                minute: Some(minute),
-                ..Default::default()
-            })
-            .collect()
-    }
-
-    fn hourly(minute: u32) -> Vec<CalendarInterval> {
-        (0..24)
-            .into_iter()
-            .map(|hour: u32| CalendarInterval {
-                hour: Some(hour),
-                minute: Some(minute),
-                ..Default::default()
-            })
-            .collect()
-    }
-
-    fn weekly(minute: u32, hour: u32, weekday: u32) -> Vec<CalendarInterval> {
-        vec![CalendarInterval {
-            weekday: Some(weekday),
-            hour: Some(hour),
-            minute: Some(minute),
-            ..Default::default()
-        }]
-    }
-
-    pub(crate) fn for_time_period(
-        tp: TimePeriod,
-        defaults: CalendarInterval,
-    ) -> Vec<CalendarInterval> {
-        match tp {
-            TimePeriod::Hourly => Self::hourly(defaults.minute.unwrap_or_else(random_minute)),
-            TimePeriod::Daily => {
-                let CalendarInterval {
-                    day: _,
-                    hour,
-                    minute,
-                    weekday: _,
-                } = defaults;
-                Self::daily(
-                    minute.unwrap_or_else(random_minute),
-                    hour.unwrap_or(DEFAULT_DAILY_HOUR),
-                )
-            }
-            TimePeriod::Weekly => {
-                let CalendarInterval {
-                    day: _,
-                    hour,
-                    minute,
-                    weekday,
-                } = defaults;
-                Self::weekly(
-                    minute.unwrap_or_else(random_minute),
-                    hour.unwrap_or(DEFAULT_DAILY_HOUR),
-                    weekday.unwrap_or(DEFAULT_WEEKLY_WEEKDAY),
-                )
-            }
-        }
-    }
-}
-
-impl From<CalendarInterval> for Value {
-    fn from(ci: CalendarInterval) -> Self {
-        (&ci).into()
-    }
-}
-
-impl From<&CalendarInterval> for Value {
-    fn from(t: &CalendarInterval) -> Value {
-        let CalendarInterval {
-            day,
-            hour,
-            minute,
-            weekday,
-        } = t;
-
-        let mut dict = Dictionary::new();
-
-        if let Some(day) = day {
-            dict.insert("Day".into(), day.into());
-        }
-
-        if let Some(hour) = hour {
-            dict.insert("Hour".into(), hour.into());
-        }
-
-        if let Some(minute) = minute {
-            dict.insert("Minute".into(), minute.into());
-        }
-
-        if let Some(weekday) = weekday {
-            dict.insert("Weekday".into(), weekday.into());
-        }
-
-        dict.into()
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 struct LaunchdPlist {
@@ -229,15 +20,15 @@ const LABEL: &str = "Label";
 const PROGRAM_ARGUMENTS: &str = "ProgramArguments";
 const START_CALENDAR_INTERVAL: &str = "StartCalendarInterval";
 
-impl From<LaunchdPlist> for Value {
+impl From<LaunchdPlist> for PlistValue {
     fn from(t: LaunchdPlist) -> Self {
-        let mut dict = Dictionary::new();
+        let mut dict = PlistDictionary::new();
         dict.insert(DISABLED.into(), t.disabled.into());
         dict.insert(LABEL.into(), t.label.deref().into());
         dict.insert(PROGRAM_ARGUMENTS.into(), t.program_args.clone().into());
         dict.insert(
             START_CALENDAR_INTERVAL.into(),
-            Value::Array(
+            PlistValue::Array(
                 t.start_calendar_interval
                     .iter()
                     .map(|ci| ci.into())
@@ -248,8 +39,8 @@ impl From<LaunchdPlist> for Value {
     }
 }
 
-impl From<PlistOpts> for LaunchdPlist {
-    fn from(plist_opts: PlistOpts) -> Self {
+impl From<ScheduledJobOpts> for LaunchdPlist {
+    fn from(plist_opts: ScheduledJobOpts) -> Self {
         LaunchdPlist {
             disabled: false,
             label: plist_opts.label(),
@@ -262,10 +53,10 @@ impl From<PlistOpts> for LaunchdPlist {
     }
 }
 
-pub fn write_plist<W: Write>(writer: W, plist_opts: PlistOpts) -> Result<()> {
+pub fn write_plist<W: Write>(writer: W, plist_opts: ScheduledJobOpts) -> Result<()> {
     let lp: LaunchdPlist = plist_opts.into();
 
-    let v: Value = lp.into();
+    let v: PlistValue = lp.into();
 
     Ok(plist::to_writer_xml(writer, &v)?)
 }
@@ -376,7 +167,7 @@ impl Launchctl {
         output_path
     }
 
-    pub fn write_plist(&self, opts: &PlistOpts) -> Result<PathBuf> {
+    pub fn write_plist(&self, opts: &ScheduledJobOpts) -> Result<PathBuf> {
         let output_path = self.plist_path(&opts.label());
 
         let mut temp = tempfile::NamedTempFile::new_in(&self.launch_agents_path)?;
@@ -387,7 +178,7 @@ impl Launchctl {
         Ok(output_path)
     }
 
-    pub fn delete_plist(&self, opts: &PlistOpts) -> Result<()> {
+    pub fn delete_plist(&self, opts: &ScheduledJobOpts) -> Result<()> {
         let path = self.plist_path(&opts.label());
         let res = std::fs::remove_file(&path);
 
@@ -427,7 +218,7 @@ impl Default for ScheduleOpts {
     fn default() -> Self {
         Self {
             time_period: Default::default(),
-            git_path: DEFAULT_GIT_BINARY_PATH_FOR_PLISTS.into(),
+            git_path: DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS.into(),
             focus_path: std::env::current_exe()
                 .expect("could not determine current executable path"),
             skip_if_already_scheduled: true,
@@ -473,7 +264,7 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
         None => TimePeriod::iter().collect(),
     };
 
-    let plist_opts = PlistOpts {
+    let plist_opts = ScheduledJobOpts {
         focus_path,
         git_binary_path: git_path,
         tracked,
@@ -481,7 +272,7 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
     };
 
     for tp in time_periods {
-        let plist_opts = PlistOpts {
+        let plist_opts = ScheduledJobOpts {
             time_period: tp,
             ..plist_opts.clone()
         };
@@ -511,9 +302,9 @@ pub fn schedule_disable(delete: bool) -> Result<()> {
     let time_periods: Vec<TimePeriod> = TimePeriod::iter().collect();
 
     for tp in time_periods {
-        let plist_opts = PlistOpts {
+        let plist_opts = ScheduledJobOpts {
             time_period: tp,
-            git_binary_path: DEFAULT_GIT_BINARY_PATH_FOR_PLISTS.into(),
+            git_binary_path: DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS.into(),
             ..Default::default()
         };
 
@@ -535,10 +326,9 @@ pub fn schedule_disable(delete: bool) -> Result<()> {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use plist;
 
-    fn plist_opts_fix() -> PlistOpts {
-        PlistOpts {
+    fn plist_opts_fix() -> ScheduledJobOpts {
+        ScheduledJobOpts {
             focus_path: "/path/to/focus".into(),
             git_binary_path: "/usr/local/bin/git".into(),
             time_period: TimePeriod::Hourly,
@@ -554,10 +344,10 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_launchdplist_value() -> Result<()> {
+    fn test_serialize_plist_value() -> Result<()> {
         let plist_opts = plist_opts_fix();
 
-        let v: plist::Value = LaunchdPlist::from(plist_opts).into();
+        let v: PlistValue = LaunchdPlist::from(plist_opts).into();
 
         insta::assert_yaml_snapshot!(v);
 
