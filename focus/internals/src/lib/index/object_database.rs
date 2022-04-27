@@ -3,11 +3,11 @@ use std::time::Duration;
 use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 use anyhow::Context;
-use distributed_memoization::MemoizationCache;
+use content_addressed_cache::Cache;
 use lazy_static::lazy_static;
 use tracing::{debug, info, warn};
 
-pub use distributed_memoization::RocksDBMemoizationCache;
+pub use content_addressed_cache::RocksDBCache;
 
 /// A persistent key-value cache mapping the hashes of [`super::DependencyKey`]s
 /// to [`DependencyValue`]s.
@@ -20,7 +20,7 @@ pub trait ObjectDatabase {
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)>;
 
     /// Insert a new key-value pair into persistent storage.
-    fn insert(
+    fn put(
         &self,
         ctx: &HashContext,
         key: &DependencyKey,
@@ -36,7 +36,7 @@ lazy_static! {
         git2::Oid::hash_object(git2::ObjectType::Blob, b"odb").unwrap();
 }
 
-impl<T: MemoizationCache> ObjectDatabase for T {
+impl<T: Cache> ObjectDatabase for T {
     fn get(
         &self,
         ctx: &HashContext,
@@ -51,7 +51,7 @@ impl<T: MemoizationCache> ObjectDatabase for T {
         Ok((hash, result))
     }
 
-    fn insert(
+    fn put(
         &self,
         ctx: &HashContext,
         key: &DependencyKey,
@@ -60,7 +60,7 @@ impl<T: MemoizationCache> ObjectDatabase for T {
         let hash = content_hash_dependency_key(ctx, key)?;
         debug!(?hash, ?value, "Inserting entry into object database");
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
-        self.insert(hash.0, *FUNCTION_ID, &payload[..])?;
+        self.put(hash.0, *FUNCTION_ID, &payload[..])?;
         Ok(())
     }
 
@@ -76,10 +76,10 @@ pub trait RocksDBMemoizationCacheExt {
     fn new(repo: &git2::Repository) -> Self;
 }
 
-impl RocksDBMemoizationCacheExt for RocksDBMemoizationCache {
-    fn new(repo: &git2::Repository) -> RocksDBMemoizationCache {
+impl RocksDBMemoizationCacheExt for RocksDBCache {
+    fn new(repo: &git2::Repository) -> RocksDBCache {
         let rocksdb_path = repo.path().join("focus/focus-index-rocks-db");
-        RocksDBMemoizationCache::open_with_ttl(rocksdb_path, Duration::from_secs(3600 * 24 * 90))
+        RocksDBCache::open_with_ttl(rocksdb_path, Duration::from_secs(3600 * 24 * 90))
     }
 }
 
@@ -123,7 +123,7 @@ pub mod testing {
             Ok((hash, dep_value))
         }
 
-        fn insert(
+        fn put(
             &self,
             ctx: &HashContext,
             key: &DependencyKey,
@@ -210,7 +210,7 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
         Ok((hash, Some(result)))
     }
 
-    fn insert(
+    fn put(
         &self,
         ctx: &HashContext,
         key: &DependencyKey,
@@ -315,7 +315,7 @@ mod tests {
         };
         assert!(odb.get(&ctx, &key)?.1.is_none());
 
-        odb.insert(&ctx, &key, value.clone())?;
+        odb.put(&ctx, &key, value.clone())?;
         assert_eq!(odb.get(&ctx, &key)?.1, Some(value));
 
         Ok(())

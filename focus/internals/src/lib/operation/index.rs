@@ -11,7 +11,7 @@ use tracing::{debug, info};
 use crate::coordinate::{Coordinate, CoordinateSet};
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
-    RocksDBMemoizationCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
+    RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use crate::model::layering::{LayerSets, RichLayerSet};
 use crate::model::repo::Repo;
@@ -38,7 +38,7 @@ pub enum Backend {
 fn make_odb<'a>(backend: Backend, repo: &'a git2::Repository) -> Box<dyn ObjectDatabase + 'a> {
     match backend {
         Backend::Simple => Box::new(SimpleGitOdb::new(repo)),
-        Backend::RocksDb => Box::new(RocksDBMemoizationCache::new(repo)),
+        Backend::RocksDb => Box::new(RocksDBCache::new(repo)),
     }
 }
 

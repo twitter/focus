@@ -4,24 +4,25 @@ use std::string::ToString;
 use std::time::Duration;
 
 use anyhow::{self, Context};
-use git2::Oid;
 use rocksdb::{Options, DB};
 use std::path::{Path, PathBuf};
 
-pub trait MemoizationCache {
-    fn insert(&self, function_id: Oid, argument: Oid, value: &[u8]) -> anyhow::Result<()>;
-    fn get(&self, function_id: Oid, argument: Oid) -> anyhow::Result<Option<Vec<u8>>>;
+pub type Key = git2::Oid;
+
+pub trait Cache {
+    fn put(&self, function_id: Key, argument: Key, value: &[u8]) -> anyhow::Result<()>;
+    fn get(&self, function_id: Key, argument: Key) -> anyhow::Result<Option<Vec<u8>>>;
     fn clear(&self) -> anyhow::Result<()>;
 }
 
-pub struct RocksDBMemoizationCache {
+pub struct RocksDBCache {
     db: RefCell<Option<DB>>,
     ttl: Duration,
 }
 
 pub struct CompositeKey {
-    argument: Oid,
-    function_id: Oid,
+    argument: Key,
+    function_id: Key,
 }
 
 #[derive(Debug, Clone)]
@@ -55,12 +56,12 @@ impl CompositeKey {
             return Err(ParseCompositeKeyError);
         }
         let function_id =
-            match Oid::from_bytes(&s[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]) {
+            match Key::from_bytes(&s[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]) {
                 Ok(oid) => oid,
                 Err(_) => return Err(ParseCompositeKeyError),
             };
         let argument =
-            match Oid::from_bytes(&s[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
+            match Key::from_bytes(&s[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
                 Ok(oid) => oid,
                 Err(_) => return Err(ParseCompositeKeyError),
             };
@@ -71,7 +72,7 @@ impl CompositeKey {
     }
 }
 
-impl RocksDBMemoizationCache {
+impl RocksDBCache {
     fn make_db(path: &Path, ttl: Duration) -> DB {
         let mut opts = Options::default();
         opts.create_if_missing(true);
@@ -89,8 +90,8 @@ impl RocksDBMemoizationCache {
     }
 }
 
-impl MemoizationCache for RocksDBMemoizationCache {
-    fn insert(&self, function_id: Oid, argument: Oid, value: &[u8]) -> anyhow::Result<()> {
+impl Cache for RocksDBCache {
+    fn put(&self, function_id: Key, argument: Key, value: &[u8]) -> anyhow::Result<()> {
         let key: &[u8] = &CompositeKey {
             function_id,
             argument,
@@ -104,7 +105,7 @@ impl MemoizationCache for RocksDBMemoizationCache {
             .with_context(|| format!("Putting {:?} failed", key))
     }
 
-    fn get(&self, function_id: Oid, argument: Oid) -> anyhow::Result<Option<Vec<u8>>> {
+    fn get(&self, function_id: Key, argument: Key) -> anyhow::Result<Option<Vec<u8>>> {
         let key: &[u8] = &CompositeKey {
             function_id,
             argument,
@@ -135,12 +136,11 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
-    use git2::Oid;
     use rocksdb::{Options, DB};
     use tempfile::{tempdir, TempDir};
 
     use crate::{
-        local_cache::OID_BYTE_LENGTH, CompositeKey, MemoizationCache, RocksDBMemoizationCache,
+        local_cache::OID_BYTE_LENGTH, CompositeKey, Cache, RocksDBCache, Key,
     };
 
     static ARG: &str = "12345678912345789ab";
@@ -177,11 +177,11 @@ mod tests {
         let tmp_dir = tempdir().unwrap();
         let file_path = tmp_dir.path().join("focus-rocks");
         {
-            let cache = RocksDBMemoizationCache::open(file_path.clone());
+            let cache = RocksDBCache::open(file_path.clone());
             cache
-                .insert(
-                    Oid::from_str(FN_ID).unwrap(),
-                    Oid::from_str(ARG).unwrap(),
+                .put(
+                    Key::from_str(FN_ID).unwrap(),
+                    Key::from_str(ARG).unwrap(),
                     b"abcd",
                 )
                 .unwrap();
@@ -192,9 +192,9 @@ mod tests {
     #[test]
     fn test_key_insert_get() -> anyhow::Result<()> {
         let (_temp_dir, file_path) = create_test_repo();
-        let cache = RocksDBMemoizationCache::open(file_path);
+        let cache = RocksDBCache::open(file_path);
         std::thread::sleep(Duration::from_secs(2));
-        let value = cache.get(Oid::from_str(FN_ID).unwrap(), Oid::from_str(ARG).unwrap());
+        let value = cache.get(Key::from_str(FN_ID).unwrap(), Key::from_str(ARG).unwrap());
         assert_eq!(value?.unwrap(), b"abcd".to_vec());
         Ok(())
     }
@@ -202,8 +202,8 @@ mod tests {
     #[test]
     fn test_key_insert_get_ttl() -> anyhow::Result<()> {
         let (_temp_dir, file_path) = create_test_repo();
-        let cache = RocksDBMemoizationCache::open_with_ttl(file_path, Duration::from_secs(3600));
-        let value = cache.get(Oid::from_str(FN_ID).unwrap(), Oid::from_str(ARG).unwrap());
+        let cache = RocksDBCache::open_with_ttl(file_path, Duration::from_secs(3600));
+        let value = cache.get(Key::from_str(FN_ID).unwrap(), Key::from_str(ARG).unwrap());
         assert_eq!(value?.unwrap(), b"abcd".to_vec());
         Ok(())
     }
@@ -211,10 +211,10 @@ mod tests {
     #[test]
     fn test_arg_missing() -> anyhow::Result<()> {
         let (_temp_dir, file_path) = create_test_repo();
-        let cache = RocksDBMemoizationCache::open(file_path);
+        let cache = RocksDBCache::open(file_path);
         let value = cache.get(
-            Oid::from_str(FN_ID).unwrap(),
-            Oid::from_str(BAD_OID).unwrap(),
+            Key::from_str(FN_ID).unwrap(),
+            Key::from_str(BAD_OID).unwrap(),
         );
         assert_eq!(value?, None);
         Ok(())
@@ -223,8 +223,8 @@ mod tests {
     #[test]
     fn test_function_missing() -> anyhow::Result<()> {
         let (_temp_dir, file_path) = create_test_repo();
-        let cache = RocksDBMemoizationCache::open(file_path);
-        let value = cache.get(Oid::from_str(BAD_OID).unwrap(), Oid::from_str(ARG).unwrap());
+        let cache = RocksDBCache::open(file_path);
+        let value = cache.get(Key::from_str(BAD_OID).unwrap(), Key::from_str(ARG).unwrap());
         assert_eq!(value?, None);
         Ok(())
     }
@@ -232,17 +232,17 @@ mod tests {
     #[test]
     fn test_compositekey() {
         let oid_bytes = CompositeKey {
-            argument: Oid::from_str(ARG).unwrap(),
-            function_id: Oid::from_str(FN_ID).unwrap(),
+            argument: Key::from_str(ARG).unwrap(),
+            function_id: Key::from_str(FN_ID).unwrap(),
         }
         .to_bytes();
         let inflated_oid = CompositeKey::from_bytes(&oid_bytes).unwrap();
-        assert_eq!(inflated_oid.argument, Oid::from_str(ARG).unwrap());
-        assert_eq!(inflated_oid.function_id, Oid::from_str(FN_ID).unwrap());
+        assert_eq!(inflated_oid.argument, Key::from_str(ARG).unwrap());
+        assert_eq!(inflated_oid.function_id, Key::from_str(FN_ID).unwrap());
     }
 
     #[test]
     fn test_oid_invariants() {
-        assert_eq!(OID_BYTE_LENGTH, Oid::zero().as_bytes().len());
+        assert_eq!(OID_BYTE_LENGTH, Key::zero().as_bytes().len());
     }
 }

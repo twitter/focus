@@ -15,5 +15,5 @@ pub use dependency_graph::{
 };
 pub use object_database::testing;
 pub use object_database::{
-    ObjectDatabase, RocksDBMemoizationCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
+    ObjectDatabase, RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
