@@ -145,7 +145,7 @@ pub fn update_object_database_from_resolution(
             }
         }
 
-        odb.insert(ctx, dep_key, dep_value.clone())?;
+        odb.put(ctx, dep_key, dep_value.clone())?;
     }
     Ok(())
 }
@@ -319,7 +319,7 @@ mod tests {
 
     use crate::coordinate::{Coordinate, CoordinateSet};
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
-    use crate::index::object_database::{testing::HashMapOdb, RocksDBMemoizationCache};
+    use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
     use focus_testing::init_logging;
     use focus_testing::scratch_git_repo::ScratchGitRepo;
@@ -384,7 +384,7 @@ sh_binary(
         let head_oid = fix.commit_all("Wrote files")?;
 
         let repo = fix.repo()?;
-        let odb = RocksDBMemoizationCache::new(&repo);
+        let odb = RocksDBCache::new(&repo);
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
@@ -558,7 +558,7 @@ New contents
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
 
-        let odb = RocksDBMemoizationCache::new(&repo);
+        let odb = RocksDBCache::new(&repo);
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;

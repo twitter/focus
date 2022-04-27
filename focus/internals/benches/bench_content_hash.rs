@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use distributed_memoization::RocksDBMemoizationCache;
+use content_addressed_cache::RocksDBCache;
 use focus_internals::coordinate::Coordinate;
 use focus_internals::index::{
     content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue, HashContext,
@@ -65,7 +65,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
                 },
                 |hash_context| {
                     for dep_key in dep_keys.iter() {
-                        odb.insert(
+                        odb.put(
                             &hash_context,
                             dep_key,
                             DependencyValue::DummyForTesting(dep_key.clone()),
@@ -80,7 +80,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
     }
 
     {
-        let odb = RocksDBMemoizationCache::new(&repo);
+        let odb = RocksDBCache::new(&repo);
         c.bench_function("content_hash_insert_rocks_db", |b| {
             b.iter_batched(
                 || {
@@ -93,7 +93,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
                 },
                 |hash_context| {
                     for dep_key in dep_keys.iter() {
-                        odb.insert(
+                        odb.put(
                             &hash_context,
                             dep_key,
                             DependencyValue::DummyForTesting(dep_key.clone()),

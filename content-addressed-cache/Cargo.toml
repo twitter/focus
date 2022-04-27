@@ -1,5 +1,5 @@
 [package]
-name = "distributed-memoization"
+name = "content-addressed-cache"
 version = "0.4.1"
 edition = "2021"
 

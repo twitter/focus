@@ -12,7 +12,7 @@ dirs = "4.0.0"
 focus-testing = { path = "../testing" }
 focus-tracing = { path = "../tracing" }
 focus-util = { path = "../util" }
-distributed-memoization = { path = "../../distributed_memoization" }
+content-addressed-cache = { path = "../../content-addressed-cache" }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
   "vendored-libgit2",
 ] }
