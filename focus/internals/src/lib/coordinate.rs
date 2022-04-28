@@ -214,7 +214,7 @@ impl FromStr for Label {
         let target = match (path_components.last(), target) {
             (Some(_last_component), Some(target)) => target.to_string(),
             (None, Some(target)) => target.to_string(),
-            (Some(last_component), None) if last_component == "" => {
+            (Some(last_component), None) if last_component.is_empty() => {
                 return Err(LabelParseError::EmptyLabel)
             }
             (None, None) => return Err(LabelParseError::EmptyLabel),
@@ -233,7 +233,7 @@ impl FromStr for Label {
             Ok(Self {
                 external_repository: external_package,
                 path_components,
-                target_name: TargetName::Name(target.to_string()),
+                target_name: TargetName::Name(target),
             })
         }
     }

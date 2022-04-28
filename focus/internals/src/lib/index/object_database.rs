@@ -97,7 +97,7 @@ pub mod testing {
     /// Object database backed by an in-memory hashmap. This doesn't actually
     /// persist data between invocations of the program, so it's primarily
     /// useful for testing.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Default)]
     pub struct HashMapOdb {
         entries: Arc<Mutex<HashMap<ContentHash, DependencyValue>>>,
     }
