@@ -2,10 +2,8 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -55,6 +53,10 @@ pub struct Caches {
     ///
     /// These are only valid for the provided `repo`/`head_tree`.
     tree_path_cache: HashMap<PathBuf, ContentHash>,
+
+    /// Cache of parsed load dependencies. The OIDs here are tree OIDs which
+    /// have to be traversed to find any files relevant to the build graph.
+    load_dependencies_cache: HashMap<git2::Oid, BTreeSet<Label>>,
 }
 
 /// Context used to compute a content hash.
@@ -127,7 +129,7 @@ pub fn content_hash_dependency_key(
             label @ Label {
                 external_repository: None,
                 path_components,
-                target_name,
+                target_name: _,
             },
         ) => {
             let path: PathBuf = path_components.iter().collect();
@@ -136,9 +138,9 @@ pub fn content_hash_dependency_key(
             buf.push(',');
             buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
 
-            let loaded_deps = match target_name {
-                TargetName::Name(_) => find_load_dependencies(ctx, &path)?,
-                TargetName::Ellipsis => find_load_dependencies(ctx, &path)?,
+            let loaded_deps = match get_tree_for_path(ctx, &path)? {
+                Some(tree) => find_load_dependencies(ctx, &tree)?,
+                None => Default::default(),
             };
             for label in loaded_deps {
                 let key = DependencyKey::BazelBuildFile(label);
@@ -298,23 +300,26 @@ fn get_tree_for_path<'repo>(
     }
 }
 
-fn find_load_dependencies(
-    ctx: &HashContext,
-    package_path: &Path,
-) -> anyhow::Result<BTreeSet<Label>> {
-    debug!(?package_path, "Finding load dependencies");
+fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Result<BTreeSet<Label>> {
+    debug!(?tree, "Finding load dependencies");
+    if let Some(result) = ctx.caches.borrow().load_dependencies_cache.get(&tree.id()) {
+        return Ok(result.clone());
+    }
 
     let mut result = BTreeSet::new();
-    if let Some(tree) = get_tree_for_path(ctx, package_path)? {
-        for tree_entry in &tree {
-            let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
-            result.extend(deps);
-            if tree_entry.to_object(ctx.repo)?.as_tree().is_some() {
-                let subdir_path = package_path.join(OsStr::from_bytes(tree_entry.name_bytes()));
-                result.extend(find_load_dependencies(ctx, &subdir_path)?);
+    for tree_entry in tree {
+        let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
+        result.extend(deps);
+        if tree_entry.filemode() == i32::from(git2::FileMode::Tree) {
+            if let Some(tree) = tree_entry.to_object(ctx.repo)?.as_tree() {
+                result.extend(find_load_dependencies(ctx, tree)?);
             }
         }
     }
+    ctx.caches
+        .borrow_mut()
+        .load_dependencies_cache
+        .insert(tree.id(), result.clone());
     Ok(result)
 }
 
