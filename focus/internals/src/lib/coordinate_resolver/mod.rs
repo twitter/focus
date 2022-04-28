@@ -123,36 +123,60 @@ impl Resolver for RoutingResolver {
     ) -> Result<ResolutionResult> {
         use rayon::prelude::*;
 
-        request
-            .coordinate_set
-            .underlying()
+        let subrequests = {
+            let mut bazel_coordinates = HashSet::new();
+            let mut directory_coordinates = HashSet::new();
+            let mut pants_coordinates = HashSet::new();
+            for coordinate in request.coordinate_set.underlying().iter().cloned() {
+                match coordinate {
+                    coordinate @ Coordinate::Bazel(_) => {
+                        bazel_coordinates.insert(coordinate);
+                    }
+                    coordinate @ Coordinate::Directory(_) => {
+                        directory_coordinates.insert(coordinate);
+                    }
+                    coordinate @ Coordinate::Pants(_) => {
+                        pants_coordinates.insert(coordinate);
+                    }
+                }
+            }
+
+            let bazel_subrequest = ResolutionRequest {
+                coordinate_set: bazel_coordinates.into(),
+                ..request.clone()
+            };
+            let directory_subrequest = ResolutionRequest {
+                coordinate_set: directory_coordinates.into(),
+                ..request.clone()
+            };
+            let pants_subrequest = ResolutionRequest {
+                coordinate_set: pants_coordinates.into(),
+                ..request.clone()
+            };
+            vec![bazel_subrequest, directory_subrequest, pants_subrequest]
+        };
+
+        subrequests
             .par_iter()
-            .map(|coordinate| {
+            .map(|subrequest| {
                 let app_clone = app.clone();
 
-                let mut set = HashSet::<Coordinate>::new();
-                set.insert(coordinate.to_owned());
-
-                let subrequest = ResolutionRequest {
-                    coordinate_set: CoordinateSet::from(set),
-                    ..request.clone()
-                };
-
-                match coordinate {
-                    Coordinate::Bazel(_) => {
+                debug_assert!(subrequest.coordinate_set.is_uniform());
+                match subrequest.coordinate_set.underlying().iter().next() {
+                    Some(Coordinate::Bazel(_)) => {
                         self.bazel_resolver
                             .resolve(&subrequest, cache_options, app_clone)
                     }
-                    Coordinate::Directory(_) => {
+                    Some(Coordinate::Directory(_)) => {
                         self.directory_resolver
                             .resolve(&subrequest, cache_options, app_clone)
                     }
-                    Coordinate::Pants(_) => {
+                    Some(Coordinate::Pants(_)) => {
                         self.pants_resolver
                             .resolve(&subrequest, cache_options, app_clone)
                     }
+                    None => Ok(Default::default()),
                 }
-                .with_context(|| format!("failed to resolve coordinate {}", coordinate))
             })
             .try_reduce(ResolutionResult::new, |mut acc, result| {
                 acc.merge(result);
