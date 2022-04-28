@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use criterion::{criterion_group, criterion_main, Criterion};
 use content_addressed_cache::RocksDBCache;
+use criterion::{criterion_group, criterion_main, Criterion};
 use focus_internals::coordinate::Coordinate;
 use focus_internals::index::{
     content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue, HashContext,
