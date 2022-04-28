@@ -54,7 +54,7 @@ impl Resolver for BazelResolver {
 
         let mut directories = BTreeSet::<PathBuf>::new();
         let mut package_deps = BTreeMap::new();
-        let labels: Vec<&Label> = request
+        let labels: HashSet<&Label> = request
             .coordinate_set
             .underlying()
             .iter()
@@ -67,8 +67,10 @@ impl Resolver for BazelResolver {
             })
             .collect();
 
-        let (paths, deps) =
-            self.query_package_dependencies(app.clone(), request, labels.into_iter().collect())?;
+        #[allow(clippy::redundant_clone)]
+        let app = app.clone();
+
+        let (paths, deps) = self.query_package_dependencies(app, request, labels)?;
         directories.extend(paths);
         package_deps.extend(deps);
 
@@ -113,7 +115,7 @@ impl BazelResolver {
                     && !path.starts_with("external/")
                 {
                     paths.insert(path);
-                    packages.insert(Label::from_str(&line)?);
+                    packages.insert(Label::from_str(line)?);
                 }
             }
             info!("'{}' requires {} packages", &query, paths.len());
@@ -123,7 +125,7 @@ impl BazelResolver {
         let package_top_level_targets =
             self.extract_top_level_targets(app.clone(), request, packages)?;
         let immediate_deps =
-            self.extract_immediate_dependencies(app.clone(), request, package_top_level_targets)?;
+            self.extract_immediate_dependencies(app, request, package_top_level_targets)?;
 
         let recursive_package_queries: BTreeSet<&Label> = labels
             .into_iter()
@@ -161,7 +163,7 @@ impl BazelResolver {
             SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app)?;
         scmd.ensure_success_or_log(
             cmd.arg("query")
-                .arg(format!("--query_file"))
+                .arg("--query_file")
                 .arg(query_file_path)
                 .args(bazel_args)
                 .current_dir(&request.repo),
@@ -384,7 +386,7 @@ impl BazelResolver {
 
             // Given the label `//foo/...`, try to find targets like
             // `//foo/bar:baz`, for which `//foo` is a prefix.
-            for (dep_key, _) in immediate_deps {
+            for dep_key in immediate_deps.keys() {
                 match dep_key {
                     DependencyKey::BazelPackage(Label {
                         external_repository: None,

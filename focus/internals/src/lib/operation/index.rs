@@ -130,7 +130,7 @@ pub fn resolve(
     coordinates_or_layers: Vec<String>,
 ) -> anyhow::Result<ExitCode> {
     let sparse_repo = Path::new(".");
-    assert_focused_repo(&sparse_repo)?;
+    assert_focused_repo(sparse_repo)?;
 
     let all_layers = LayerSets::new(sparse_repo);
     let all_layers = all_layers.available_layers()?;
