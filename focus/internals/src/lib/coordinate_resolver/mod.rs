@@ -165,15 +165,15 @@ impl Resolver for RoutingResolver {
                 match subrequest.coordinate_set.underlying().iter().next() {
                     Some(Coordinate::Bazel(_)) => {
                         self.bazel_resolver
-                            .resolve(&subrequest, cache_options, app_clone)
+                            .resolve(subrequest, cache_options, app_clone)
                     }
                     Some(Coordinate::Directory(_)) => {
                         self.directory_resolver
-                            .resolve(&subrequest, cache_options, app_clone)
+                            .resolve(subrequest, cache_options, app_clone)
                     }
                     Some(Coordinate::Pants(_)) => {
                         self.pants_resolver
-                            .resolve(&subrequest, cache_options, app_clone)
+                            .resolve(subrequest, cache_options, app_clone)
                     }
                     None => Ok(Default::default()),
                 }

@@ -139,9 +139,7 @@ mod tests {
     use rocksdb::{Options, DB};
     use tempfile::{tempdir, TempDir};
 
-    use crate::{
-        local_cache::OID_BYTE_LENGTH, CompositeKey, Cache, RocksDBCache, Key,
-    };
+    use crate::{local_cache::OID_BYTE_LENGTH, Cache, CompositeKey, Key, RocksDBCache};
 
     static ARG: &str = "12345678912345789ab";
     static FN_ID: &str = "abcd5abcd5abcd5abcd5";
