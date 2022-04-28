@@ -438,11 +438,6 @@ sh_binary(
             },
             package_deps: {
                 BazelPackage(
-                    Label("//package1:BUILD"),
-                ): PackageInfo {
-                    deps: {},
-                },
-                BazelPackage(
                     Label("//package1:foo"),
                 ): PackageInfo {
                     deps: {
@@ -456,11 +451,6 @@ sh_binary(
                 },
                 BazelPackage(
                     Label("//package1:foo.sh"),
-                ): PackageInfo {
-                    deps: {},
-                },
-                BazelPackage(
-                    Label("//package2:BUILD"),
                 ): PackageInfo {
                     deps: {},
                 },

@@ -7,7 +7,6 @@ expression: "std::fs::read_to_string(&profile_path)?"
 /library_b/
 /mandatory_z/
 /project_b/
-!/project_b/*/
 /project_b/src/
 !/project_b/src/*/
 /project_b/src/main/

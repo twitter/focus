@@ -8,7 +8,6 @@ expression: "std::fs::read_to_string(&profile_path)?"
 /library_b/
 /mandatory_z/
 /project_a/
-!/project_a/*/
 /project_a/src/
 !/project_a/src/*/
 /project_a/src/main/
@@ -21,7 +20,6 @@ expression: "std::fs::read_to_string(&profile_path)?"
 !/project_a/src/main/java/com/example/*/
 /project_a/src/main/java/com/example/cmdline/
 /project_b/
-!/project_b/*/
 /project_b/src/
 !/project_b/src/*/
 /project_b/src/main/

@@ -89,40 +89,41 @@ impl BazelResolver {
         request: &ResolutionRequest,
         labels: HashSet<&Label>,
     ) -> anyhow::Result<(BTreeSet<PathBuf>, BTreeMap<DependencyKey, DependencyValue>)> {
-        let (paths, packages) = {
+        let dep_labels = {
             let query = format!(
-                "buildfiles(deps({}))",
+                // Use `deps(...)` so that we preserve the actual names of the
+                // targets which were declared as dependencies, but also add in
+                // any `buildfiles` dependencies that might exist in the
+                // repository. This includes dependencies on `BUILD` or `.bzl`
+                // files (such as those `load`ed by the other `BUILD` files).
+                //
+                // We limit buildfile dependencies to only those in the
+                // repository, because `.bzl` files, etc., in external
+                // repositories are typically not supported, so querying them
+                // fails.
+                "deps({0}) union (buildfiles(deps({0})) intersect //...)",
                 Self::make_bazel_set(labels.iter().copied())
             );
-            let result = Self::run_bazel_query(
-                app.clone(),
-                request,
-                &["--output=package", "--noimplicit_deps"],
-                &query,
-            )?;
 
-            let mut paths = BTreeSet::new();
-            let mut packages = BTreeSet::new();
-            #[allow(clippy::manual_flatten)]
+            let result =
+                Self::run_bazel_query(app.clone(), request, &["--noimplicit_deps"], &query)?;
+
+            // Initialize `labels` to the set of labels that we were given.
+            // It's possible that those labels will not appear in the
+            // `buildfiles(deps(...))` output if the only dependencies for those
+            // labels are in external repositories, so we need to make sure to
+            // include them explicitly.
+            let mut dep_labels: BTreeSet<Label> = labels.iter().copied().cloned().collect();
+
             for line in result.lines() {
-                let path = PathBuf::from(&line);
-                if !line.is_empty()
-                    && !line.starts_with('@')
-                    && !path.starts_with("bazel-out/")
-                    && !path.starts_with("external/")
-                {
-                    paths.insert(path);
-                    packages.insert(Label::from_str(line)?);
-                }
+                dep_labels.insert(Label::from_str(line)?);
             }
-            info!("'{}' requires {} packages", &query, paths.len());
-            (paths, packages)
+
+            info!("'{}' requires {} packages", &query, dep_labels.len());
+            dep_labels
         };
 
-        let package_top_level_targets =
-            self.extract_top_level_targets(app.clone(), request, packages)?;
-        let immediate_deps =
-            self.extract_immediate_dependencies(app, request, package_top_level_targets)?;
+        let immediate_deps = self.extract_immediate_dependencies(app, request, dep_labels)?;
 
         let recursive_package_queries: BTreeSet<&Label> = labels
             .into_iter()
@@ -131,10 +132,50 @@ impl BazelResolver {
         let recursive_package_query_deps =
             self.add_recursive_package_query_deps(recursive_package_queries, &immediate_deps);
 
-        let deps = immediate_deps
+        let deps: BTreeMap<DependencyKey, DependencyValue> = immediate_deps
             .into_iter()
             .chain(recursive_package_query_deps.into_iter())
             .collect();
+
+        let paths = deps
+            .iter()
+            .filter_map(|(dep_key, _dep_value)| match dep_key {
+                DependencyKey::BazelPackage(Label {
+                    external_repository: None,
+                    path_components,
+                    target_name: _,
+                })
+                | DependencyKey::BazelBuildFile(Label {
+                    external_repository: None,
+                    path_components,
+                    target_name: _,
+                }) => {
+                    let path: PathBuf = path_components.iter().collect();
+                    Some(path)
+                }
+
+                DependencyKey::BazelPackage(Label {
+                    external_repository: Some(_),
+                    path_components: _,
+                    target_name: _,
+                })
+                | DependencyKey::BazelBuildFile(Label {
+                    external_repository: Some(_),
+                    path_components: _,
+                    target_name: _,
+                }) => {
+                    // Don't need to materialize external repositories.
+                    None
+                }
+
+                DependencyKey::Path(path) => Some(path.clone()),
+
+                key @ DependencyKey::DummyForTesting(_) => {
+                    panic!("Got dummy dependency key: {:?}", key)
+                }
+            })
+            .collect();
+
         Ok((paths, deps))
     }
 
@@ -211,81 +252,6 @@ impl BazelResolver {
     /// different token.
     fn quote_target_name(target_name: &str) -> String {
         format!("\"{}\"", target_name)
-    }
-
-    /// Extract Bazel-compatible top-level targets for the provided packages.
-    fn extract_top_level_targets(
-        &self,
-        app: Arc<App>,
-        request: &ResolutionRequest,
-        packages: BTreeSet<Label>,
-    ) -> Result<BTreeSet<Label>> {
-        fn make_top_level_targets_spec(package: Label) -> Label {
-            Label {
-                // Use the `:*` syntax to get all top-level targets and files in
-                // the package. We filter out the files shortly. (We can't use
-                // `:all`, which would give us only the targets, because there
-                // may be real targets named `all`, and there's no way to
-                // disambigudate them.)
-                target_name: TargetName::Name("*".to_string()),
-                ..package
-            }
-        }
-
-        let query = Self::make_bazel_set(packages.into_iter().map(make_top_level_targets_spec));
-        let bazel_de::Query { rules } = Self::run_bazel_query_xml(app, request, vec![], &query)?;
-
-        // TODO: This mechanism for detecting Bazel-compatibility should be
-        // configurable.
-        const REQUIRED_TAG: &str = "bazel-compatible";
-
-        let mut result = BTreeSet::new();
-        for rule in rules {
-            match rule {
-                bazel_de::QueryElement::Rule(bazel_de::Rule {
-                    name,
-                    location,
-                    elements,
-                }) => {
-                    let is_defined_in_bazel_file = match location {
-                        None => false,
-                        Some(location) => location.contains("/BUILD.bazel:"),
-                    };
-                    let has_required_tag = || {
-                        elements.iter().any(|tag_element| match tag_element {
-                            bazel_de::RuleElement::List(bazel_de::List { name, values })
-                                if name == "tags" =>
-                            {
-                                values.iter().any(|value| match value {
-                                    bazel_de::RuleElement::String {
-                                        name: None,
-                                        value: Some(value),
-                                    } => value == REQUIRED_TAG,
-                                    _ => false,
-                                })
-                            }
-                            _ => false,
-                        })
-                    };
-
-                    if is_defined_in_bazel_file || has_required_tag() {
-                        let label: Label = name.parse()?;
-                        result.insert(label);
-                    }
-                }
-
-                bazel_de::QueryElement::SourceFile { name, .. }
-                | bazel_de::QueryElement::GeneratedFile { name, .. } => {
-                    let label: Label = name.parse()?;
-                    result.insert(label);
-                }
-
-                bazel_de::QueryElement::PackageGroup { .. } => {
-                    // Do not include as top-level targets.
-                }
-            }
-        }
-        Ok(result)
     }
 
     /// Calculate the immediate dependencies of the provided targets.
@@ -418,8 +384,14 @@ impl BazelResolver {
                         path_components: _,
                         target_name: _,
                     })
-                    | DependencyKey::Path(_) => todo!(),
-                    DependencyKey::DummyForTesting(_) => todo!(),
+                    | DependencyKey::Path(_) => {
+                        // None of these could have been associated with a
+                        // `//...` pattern inside the repository itself.
+                    }
+
+                    key @ DependencyKey::DummyForTesting(_) => {
+                        panic!("Got dummy dependency key: {:?}", key);
+                    }
                 }
             }
         }
