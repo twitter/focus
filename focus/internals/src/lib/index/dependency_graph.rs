@@ -220,17 +220,20 @@ pub fn get_files_to_materialize(
         for dep_key in dep_keys {
             seen_keys.insert(dep_key.clone());
 
-            let path = match &dep_key {
+            match &dep_key {
                 DependencyKey::BazelPackage(Label {
                     external_repository: None,
                     path_components,
                     target_name: _, // TODO: use
                 }) => {
                     let path: PathBuf = path_components.iter().collect();
-                    path
+                    paths_to_materialize.insert(path);
                 }
 
-                DependencyKey::Path(path) => path.clone(),
+                DependencyKey::Path(path) => {
+                    paths_to_materialize.insert(path.clone());
+                    continue;
+                }
 
                 DependencyKey::BazelPackage(Label {
                     external_repository: Some(_),
@@ -249,7 +252,9 @@ pub fn get_files_to_materialize(
                         dep_value = ?dep_value,
                         "PackageInfo value corresponded to a key that was not a package"
                     );
-                    try_label_into_path(label.clone())?
+                    let path = try_label_into_path(label.clone())?;
+                    paths_to_materialize.insert(path);
+                    continue;
                 }
 
                 DependencyKey::DummyForTesting(inner_dep_key) => {
@@ -260,7 +265,6 @@ pub fn get_files_to_materialize(
                     continue;
                 }
             };
-            paths_to_materialize.insert(path);
 
             let (dep_hash, dep_value) = odb.get(ctx, &dep_key)?;
             debug!(
