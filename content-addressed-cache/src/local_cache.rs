@@ -1,7 +1,7 @@
-use std::cell::RefCell;
 use std::default::Default;
 use std::string::ToString;
 use std::time::Duration;
+use std::{cell::RefCell, fmt::Debug, str::FromStr};
 
 use anyhow::{self, Context};
 use rocksdb::{Options, DB};
@@ -9,35 +9,52 @@ use std::path::{Path, PathBuf};
 
 pub type Key = git2::Oid;
 
-pub trait Cache {
+pub trait Cache: Debug {
     fn put(&self, function_id: Key, argument: Key, value: &[u8]) -> anyhow::Result<()>;
     fn get(&self, function_id: Key, argument: Key) -> anyhow::Result<Option<Vec<u8>>>;
     fn clear(&self) -> anyhow::Result<()>;
 }
 
+#[derive(Debug)]
 pub struct RocksDBCache {
     db: RefCell<Option<DB>>,
     ttl: Duration,
 }
 
+#[derive(Debug)]
 pub struct CompositeKey {
-    argument: Key,
-    function_id: Key,
+    pub argument: Key,
+    pub function_id: Key,
+}
+
+impl PartialEq for CompositeKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.argument == other.argument && self.function_id == other.function_id
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct ParseCompositeKeyError;
+pub enum ParseCompositeKeyError {
+    NoMatch,
+    MissingPrefix,
+    MissingFunctionIdentifier,
+    MissingArgument,
+    MissingDelimeter,
+}
 
 impl ToString for CompositeKey {
     fn to_string(&self) -> String {
-        format!("{},{}", self.argument, self.function_id)
+        format!("oid{},{}", self.argument, self.function_id)
     }
 }
 
 const KEY_PREFIX_LENGTH: usize = 3;
 const KEY_PREFIX: &[u8; KEY_PREFIX_LENGTH] = b"oid";
+const KEY_PREFIX_STR: &str = "oid";
 const OID_BYTE_LENGTH: usize = 20;
 const COMPOSITE_KEY_LENGTH: usize = KEY_PREFIX_LENGTH + OID_BYTE_LENGTH + OID_BYTE_LENGTH;
+const HEX_ENCODED_COMPOSITE_KEY_LENGTH: usize =
+    KEY_PREFIX_LENGTH + (OID_BYTE_LENGTH * 2) + 1 /* DELIMITER ',' */ + (OID_BYTE_LENGTH * 2);
 type CompositeKeyBytes = [u8; COMPOSITE_KEY_LENGTH];
 
 impl CompositeKey {
@@ -53,21 +70,53 @@ impl CompositeKey {
 
     pub fn from_bytes(s: &[u8; COMPOSITE_KEY_LENGTH]) -> Result<Self, ParseCompositeKeyError> {
         if !s.starts_with(KEY_PREFIX) {
-            return Err(ParseCompositeKeyError);
+            return Err(ParseCompositeKeyError::MissingPrefix);
         }
         let function_id =
             match Key::from_bytes(&s[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]) {
                 Ok(oid) => oid,
-                Err(_) => return Err(ParseCompositeKeyError),
+                Err(_) => return Err(ParseCompositeKeyError::MissingFunctionIdentifier),
             };
         let argument =
             match Key::from_bytes(&s[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
                 Ok(oid) => oid,
-                Err(_) => return Err(ParseCompositeKeyError),
+                Err(_) => return Err(ParseCompositeKeyError::MissingArgument),
             };
         Ok(CompositeKey {
             function_id,
             argument,
+        })
+    }
+}
+
+impl FromStr for CompositeKey {
+    type Err = ParseCompositeKeyError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut ix: usize = 0;
+        if s.len() != HEX_ENCODED_COMPOSITE_KEY_LENGTH {
+            return Err(ParseCompositeKeyError::NoMatch);
+        };
+        if !s.starts_with(KEY_PREFIX_STR) {
+            return Err(ParseCompositeKeyError::MissingPrefix);
+        }
+        ix += KEY_PREFIX_STR.len();
+        let argument = match Key::from_str(&s[ix..ix + (OID_BYTE_LENGTH * 2)]) {
+            Ok(oid) => oid,
+            Err(_) => return Err(ParseCompositeKeyError::MissingArgument),
+        };
+        ix += OID_BYTE_LENGTH * 2;
+        if &s[ix..ix + 1] != "," {
+            return Err(ParseCompositeKeyError::MissingDelimeter);
+        }
+        ix += 1;
+        let function_id = match Key::from_str(&s[ix..ix + (OID_BYTE_LENGTH * 2)]) {
+            Ok(oid) => oid,
+            Err(_) => return Err(ParseCompositeKeyError::MissingFunctionIdentifier),
+        };
+
+        Ok(CompositeKey {
+            argument,
+            function_id,
         })
     }
 }
@@ -133,8 +182,8 @@ impl Cache for RocksDBCache {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::time::Duration;
+    use std::{path::PathBuf, str::FromStr};
 
     use rocksdb::{Options, DB};
     use tempfile::{tempdir, TempDir};
@@ -142,7 +191,9 @@ mod tests {
     use crate::{local_cache::OID_BYTE_LENGTH, Cache, CompositeKey, Key, RocksDBCache};
 
     static ARG: &str = "12345678912345789ab";
+    static HEX_ARG: &str = "e7bc546316d2d0ec13a2d3117b13468f5e939f95";
     static FN_ID: &str = "abcd5abcd5abcd5abcd5";
+    static HEX_FN_ID: &str = "f572d396fae9206628714fb2ce00f72e94f2258f";
     static BAD_OID: &str = "deadbeefdeadbeefdead";
 
     #[test]
@@ -242,5 +293,16 @@ mod tests {
     #[test]
     fn test_oid_invariants() {
         assert_eq!(OID_BYTE_LENGTH, Key::zero().as_bytes().len());
+    }
+
+    #[test]
+    fn test_compositekey_from_str() {
+        assert_eq!(
+            CompositeKey::from_str(format!("oid{},{}", HEX_ARG, HEX_FN_ID).as_str()).unwrap(),
+            CompositeKey {
+                argument: Key::from_str(HEX_ARG).unwrap(),
+                function_id: Key::from_str(HEX_FN_ID).unwrap(),
+            }
+        );
     }
 }
