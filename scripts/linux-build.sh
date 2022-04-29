@@ -1,10 +1,16 @@
 #!/bin/bash -e
 # fetch and extract the rust toolchain
 
+
+function die() {
+    echo "$@" > /dev/stderr
+    exit 1
+}
+
 ##
 ## Preconditions
 ##
-which clang || echo "Please run this build with an LLVM toolchain present (e.g. under scl)" 1>&2
+which clang || die "Please run this build with an LLVM toolchain present (e.g. under scl)"
 
 rm -rf toolchain
 echo "Fetching toolchain..."
