@@ -54,7 +54,7 @@ test -d release && rm -r release
 mkdir release
 pushd release
 mkdir bin
-cp ../focus/target/release/focus
+cp ../focus/target/release/focus bin/focus
 tar jcf ../focus.tar.bz2 .
 clusters=("smf1" "atla" "pdxa")
 for cluster in ${clusters[@]}; do
