@@ -20,6 +20,8 @@ packer fetch --use-tfe --cluster=smf1 io-perf rust-dev live
 tar xzf rust-dev.tgz
 popd
 
+
+cargo_target=x86_64-unknown-linux-gnu
 export PATH=${PATH}:${PWD}/toolchain/rust-dev/bin
 rm -rf focus
 git clone --single-branch -b main --depth 1 http://git.twitter.biz/ro/focus
@@ -41,9 +43,7 @@ rustc --version
 cargo --version
 # build
 echo "Building..."
-cargo build --release --target x86_64-unknown-linux-gnu
-# copy build artifacts to common location
-cp -rpv target/x86_64-unknown-linux-gnu/release/focus target/focus
+cargo build --release --target $cargo_target
 popd
 
 ##
@@ -54,7 +54,7 @@ test -d release && rm -r release
 mkdir release
 pushd release
 mkdir bin
-cp ../focus/target/release/focus bin/focus
+cp ../focus/$cargo_target/release/focus bin/focus
 tar jcf ../focus.tar.bz2 .
 clusters=("smf1" "atla" "pdxa")
 for cluster in ${clusters[@]}; do
