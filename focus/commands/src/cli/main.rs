@@ -31,7 +31,7 @@ use focus_internals::{
     tracker::Tracker,
 };
 use strum::VariantNames;
-use tracing::{debug, info, info_span, warn};
+use tracing::{debug, info, debug_span};
 
 #[derive(Parser, Debug)]
 enum Subcommand {
@@ -535,13 +535,12 @@ fn hold_lock_file(repo: &Path) -> Result<LockFile> {
     LockFile::new(&path)
 }
 
-#[tracing::instrument]
 fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
     let feature_name = feature_name_for(&options.cmd);
     ti_client.get_context().set_tool_feature_name(&feature_name);
-    let span = info_span!("Running subcommand", ?feature_name);
+    let span = debug_span!("Running subcommand", ?feature_name);
     let _guard = span.enter();
 
     match options.cmd {
@@ -1025,7 +1024,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
         log_dir: Some(sandbox_dir.to_owned()),
     })?;
 
-    info!(?sandbox_dir, "sandbox path");
+    info!(path = ?sandbox_dir, "Created sandbox");
 
     ensure_directories_exist().context("Failed to create necessary directories")?;
     setup_maintenance_scheduler(&options).context("Failed to setup maintenance scheduler")?;
