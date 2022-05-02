@@ -1,33 +1,37 @@
-use crate::{Cache, CompositeKey};
+use crate::{ArgKey, Cache, CompositeKey, Kind};
 use anyhow::{Context, Result};
 use core::fmt;
 use focus_util::{app::App, git_helper::fetch_ref, git_helper::push_ref};
 use git2::Oid;
 use git2::{Commit, Repository};
+use std::fmt::Debug;
 use std::{collections::HashSet, path::PathBuf, str::FromStr, sync::Arc};
 use tracing::{instrument, warn};
+
+pub type Keyset = HashSet<(Kind, ArgKey)>;
+pub type KeysetID = Oid;
 
 const COMMIT_USER_NAME: &str = "focus";
 const COMMIT_USER_EMAIL: &str = "source-eng-team@twitter.com";
 
-pub fn refspec_fmt(oid: Oid) -> String {
-    return format!("+refs/tags/focus/{}:refs/tags/focus/{}", oid, oid);
+pub fn refspec_fmt(ksid: KeysetID) -> String {
+    return format!("+refs/tags/focus/{}:refs/tags/focus/{}", ksid, ksid);
 }
 
-pub fn tag_fmt(oid: Oid) -> String {
-    return format!("refs/tags/focus/{}", oid);
+pub fn tag_fmt(ksid: KeysetID) -> String {
+    return format!("refs/tags/focus/{}", ksid);
 }
 
-pub trait CacheSynchronizer {
-    fn fetch(&self, keyset_id: Oid) -> Result<()>;
-    fn populate(&self, keyset_id: Oid, dest_cache: &dyn Cache) -> Result<()>;
-    fn get_and_populate(&self, keyset_id: Oid, dest_cache: &dyn Cache) -> Result<()>;
+pub trait CacheSynchronizer: Debug {
+    fn fetch(&self, keyset_id: KeysetID) -> Result<()>;
+    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()>;
+    fn get_and_populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()>;
     fn share(
         &self,
-        keyset_id: Oid,
-        keyset: &HashSet<(Oid, Oid)>,
+        keyset_id: KeysetID,
+        keyset: &Keyset,
         cache: &dyn Cache,
-        previous_keyset_id: Option<Oid>,
+        previous_keyset_id: Option<KeysetID>,
     ) -> Result<()>;
 }
 
@@ -61,7 +65,7 @@ impl GitBackedCacheSynchronizer {
 
 impl CacheSynchronizer for GitBackedCacheSynchronizer {
     #[instrument]
-    fn fetch(&self, keyset_id: Oid) -> Result<()> {
+    fn fetch(&self, keyset_id: KeysetID) -> Result<()> {
         let refspecs = refspec_fmt(keyset_id);
         fetch_ref(
             self.path.as_path(),
@@ -74,7 +78,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
     }
 
     #[instrument]
-    fn populate(&self, keyset_id: Oid, dest_cache: &dyn Cache) -> Result<()> {
+    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()> {
         let reference = self
             .repo
             .find_reference(&tag_fmt(keyset_id)[..])
@@ -116,11 +120,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                     continue;
                 }
             };
-            match dest_cache.put(
-                composite_key.function_id,
-                composite_key.argument,
-                blob.content(),
-            ) {
+            match dest_cache.put(composite_key.kind, composite_key.argument, blob.content()) {
                 Ok(_) => continue,
                 Err(_) => {
                     warn!(?object, "Failed to insert key into Cache");
@@ -131,7 +131,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
         Ok(())
     }
 
-    fn get_and_populate(&self, keyset_id: Oid, dest_cache: &dyn Cache) -> Result<()> {
+    fn get_and_populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()> {
         self.fetch(keyset_id)?;
         self.populate(keyset_id, dest_cache)
     }
@@ -139,10 +139,10 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
     #[instrument]
     fn share(
         &self,
-        keyset_id: Oid,
-        keyset: &HashSet<(Oid, Oid)>,
+        keyset_id: KeysetID,
+        keyset: &Keyset,
         cache: &dyn Cache,
-        previous_keyset_id: Option<Oid>,
+        previous_keyset_id: Option<KeysetID>,
     ) -> Result<()> {
         let mut kv_tree = self
             .repo
@@ -159,7 +159,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
             kv_tree
                 .insert(
                     CompositeKey {
-                        function_id: *fn_id,
+                        kind: *fn_id,
                         argument: *arg_id,
                     }
                     .to_string(),
@@ -220,12 +220,21 @@ mod tests {
 
     use anyhow::{Context, Result};
 
-    use crate::CacheSynchronizer;
     use crate::{tag_fmt, Cache, CompositeKey, RocksDBCache};
+    use crate::{ArgKey, CacheSynchronizer, Keyset, Kind};
     use focus_util::app::App;
 
-    const FN_ID: &str = "abcd1abcd1abcd1abcd1";
-    const FN_ID2: &str = "abcd2abcd2abcd2abcd2";
+    fn keyset_id_1() -> Oid {
+        Oid::from_str("abcd1abcd1abcd1abcd1").unwrap()
+    }
+
+    fn keyset_id_2() -> Oid {
+        Oid::from_str("abcd2abcd2abcd2abcd2").unwrap()
+    }
+
+    fn kind_id() -> [u8; 2] {
+        hex::decode("f5b3").unwrap().try_into().unwrap()
+    }
 
     use super::GitBackedCacheSynchronizer;
     fn setup_server_repo_locally() -> Result<(TempDir, PathBuf)> {
@@ -269,18 +278,18 @@ mod tests {
         (tmp_dir, cache)
     }
 
-    fn generate_random_key_values() -> (git2::Oid, Vec<u8>) {
+    fn generate_random_key_values() -> (ArgKey, Vec<u8>) {
         let mut rng = rand::thread_rng();
         let mut bytes: [u8; 20] = [0; 20];
         rng.fill(&mut bytes);
-        let oid = Oid::from_bytes(&bytes[..]);
+        let ksid = Oid::from_bytes(&bytes[..]);
         let mut value: [u8; 1024] = [0; 1024];
         rng.fill(&mut value);
-        (oid.unwrap(), value.to_vec())
+        (ksid.unwrap(), value.to_vec())
     }
 
-    fn populate_demo_hashset(memo_cache: &dyn Cache, fn_id: Oid) -> HashSet<(Oid, Oid)> {
-        let mut pairs: HashSet<(Oid, Oid)> = HashSet::new();
+    fn populate_demo_hashset(memo_cache: &dyn Cache, fn_id: Kind) -> Keyset {
+        let mut pairs: Keyset = HashSet::new();
         for _x in 1..100 {
             let (a, v) = generate_random_key_values();
             memo_cache.put(fn_id, a, &v[..]).unwrap();
@@ -289,18 +298,14 @@ mod tests {
         pairs
     }
 
-    fn assert_caches_match(
-        commit_keys: HashSet<(Oid, Oid)>,
-        cache1: &dyn Cache,
-        cache2: &dyn Cache,
-    ) {
+    fn assert_caches_match(commit_keys: Keyset, cache1: &dyn Cache, cache2: &dyn Cache) {
         for (f, a) in commit_keys.iter() {
             assert_eq!(
                 cache1.get(*f, *a).unwrap(),
                 cache2.get(*f, *a).unwrap(),
                 "key {}",
                 CompositeKey {
-                    function_id: *f,
+                    kind: *f,
                     argument: *a
                 }
                 .to_string()
@@ -308,7 +313,7 @@ mod tests {
         }
     }
 
-    fn assert_cache_doesnt_contain(commit_keys: HashSet<(Oid, Oid)>, cache1: &dyn Cache) {
+    fn assert_cache_doesnt_contain(commit_keys: Keyset, cache1: &dyn Cache) {
         for (f, a) in commit_keys.iter() {
             assert!(cache1.get(*f, *a).unwrap().is_none());
         }
@@ -325,10 +330,10 @@ mod tests {
         let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("focus-rocks1");
         let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("focus-rocks2");
 
-        let keyset_id = Oid::from_str(FN_ID).unwrap();
-        let fn_id = Oid::from_str(FN_ID).unwrap();
+        let keyset_id = keyset_id_1();
+        let fn_id = kind_id();
         // Tests that only the specified keys are pushed up.
-        populate_demo_hashset(&memo_cache_1, keyset_id);
+        populate_demo_hashset(&memo_cache_1, fn_id);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, fn_id);
         memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None)?;
@@ -358,12 +363,12 @@ mod tests {
         let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("focus-rocks1");
         let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("focus-rocks2");
 
-        let fn_id = Oid::from_str(FN_ID).unwrap();
-        let keyset_id1 = Oid::from_str(FN_ID).unwrap();
+        let fn_id = kind_id();
+        let keyset_id1 = keyset_id_1();
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, fn_id);
         memo_cache_sync_1.share(keyset_id1, &commit_1_keys, &memo_cache_1, None)?;
 
-        let keyset_id2 = Oid::from_str(FN_ID2).unwrap();
+        let keyset_id2 = keyset_id_2();
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, fn_id);
         memo_cache_sync_1.share(keyset_id2, &commit_2_keys, &memo_cache_1, Some(keyset_id1))?;
 
@@ -395,10 +400,10 @@ mod tests {
         let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("focus-rocks1");
         let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("focus-rocks2");
 
-        let keyset_id = Oid::from_str(FN_ID).unwrap();
-        let fn_id = Oid::from_str(FN_ID).unwrap();
+        let keyset_id = keyset_id_1();
+        let fn_id = kind_id();
         // Tests that only the specified keys are pushed up.
-        populate_demo_hashset(&memo_cache_1, keyset_id);
+        populate_demo_hashset(&memo_cache_1, fn_id);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, fn_id);
         memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None)?;
