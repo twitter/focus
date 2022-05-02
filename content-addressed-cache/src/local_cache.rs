@@ -7,11 +7,12 @@ use anyhow::{self, Context};
 use rocksdb::{Options, DB};
 use std::path::{Path, PathBuf};
 
-pub type Key = git2::Oid;
+pub type ArgKey = git2::Oid;
+pub type Kind = [u8; 2];
 
 pub trait Cache: Debug {
-    fn put(&self, function_id: Key, argument: Key, value: &[u8]) -> anyhow::Result<()>;
-    fn get(&self, function_id: Key, argument: Key) -> anyhow::Result<Option<Vec<u8>>>;
+    fn put(&self, kind: Kind, argument: ArgKey, value: &[u8]) -> anyhow::Result<()>;
+    fn get(&self, kind: Kind, argument: ArgKey) -> anyhow::Result<Option<Vec<u8>>>;
     fn clear(&self) -> anyhow::Result<()>;
 }
 
@@ -21,16 +22,10 @@ pub struct RocksDBCache {
     ttl: Duration,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct CompositeKey {
-    pub argument: Key,
-    pub function_id: Key,
-}
-
-impl PartialEq for CompositeKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.argument == other.argument && self.function_id == other.function_id
-    }
+    pub argument: ArgKey,
+    pub kind: Kind,
 }
 
 #[derive(Debug, Clone)]
@@ -39,53 +34,42 @@ pub enum ParseCompositeKeyError {
     MissingPrefix,
     MissingFunctionIdentifier,
     MissingArgument,
-    MissingDelimeter,
+    MissingDelimiter,
 }
 
 impl ToString for CompositeKey {
     fn to_string(&self) -> String {
-        format!("oid{},{}", self.argument, self.function_id)
+        format!("{}{}{}", hex::encode(self.kind), DELIMITER, self.argument)
     }
 }
 
-const KEY_PREFIX_LENGTH: usize = 3;
-const KEY_PREFIX: &[u8; KEY_PREFIX_LENGTH] = b"oid";
-const KEY_PREFIX_STR: &str = "oid";
-const OID_BYTE_LENGTH: usize = 20;
-const COMPOSITE_KEY_LENGTH: usize = KEY_PREFIX_LENGTH + OID_BYTE_LENGTH + OID_BYTE_LENGTH;
+const KIND_BYTE_LENGTH: usize = 2;
+const ARG_BYTE_LENGTH: usize = 20;
+pub const DELIMITER: &str = ":";
+const COMPOSITE_KEY_LENGTH: usize =  KIND_BYTE_LENGTH + ARG_BYTE_LENGTH;
 const HEX_ENCODED_COMPOSITE_KEY_LENGTH: usize =
-    KEY_PREFIX_LENGTH + (OID_BYTE_LENGTH * 2) + 1 /* DELIMITER ',' */ + (OID_BYTE_LENGTH * 2);
+    (KIND_BYTE_LENGTH * 2) + DELIMITER.len() + (ARG_BYTE_LENGTH * 2);
 type CompositeKeyBytes = [u8; COMPOSITE_KEY_LENGTH];
 
 impl CompositeKey {
     pub fn to_bytes(&self) -> CompositeKeyBytes {
         let mut c: [u8; COMPOSITE_KEY_LENGTH] = [0; COMPOSITE_KEY_LENGTH];
-        c[..KEY_PREFIX_LENGTH].clone_from_slice(KEY_PREFIX);
-        c[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]
-            .clone_from_slice(self.function_id.as_bytes());
-        c[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]
+        c[.. KIND_BYTE_LENGTH].clone_from_slice(&self.kind);
+        c[KIND_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]
             .clone_from_slice(self.argument.as_bytes());
         c
     }
 
     pub fn from_bytes(s: &[u8; COMPOSITE_KEY_LENGTH]) -> Result<Self, ParseCompositeKeyError> {
-        if !s.starts_with(KEY_PREFIX) {
-            return Err(ParseCompositeKeyError::MissingPrefix);
-        }
-        let function_id =
-            match Key::from_bytes(&s[KEY_PREFIX_LENGTH..KEY_PREFIX_LENGTH + OID_BYTE_LENGTH]) {
-                Ok(oid) => oid,
-                Err(_) => return Err(ParseCompositeKeyError::MissingFunctionIdentifier),
-            };
-        let argument =
-            match Key::from_bytes(&s[KEY_PREFIX_LENGTH + OID_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
-                Ok(oid) => oid,
-                Err(_) => return Err(ParseCompositeKeyError::MissingArgument),
-            };
-        Ok(CompositeKey {
-            function_id,
-            argument,
-        })
+        let mut kind = [0; 2];
+        kind.clone_from_slice(&s[.. KIND_BYTE_LENGTH]);
+        let argument = match ArgKey::from_bytes(
+            &s[KIND_BYTE_LENGTH..COMPOSITE_KEY_LENGTH],
+        ) {
+            Ok(oid) => oid,
+            Err(_) => return Err(ParseCompositeKeyError::MissingArgument),
+        };
+        Ok(CompositeKey { kind, argument })
     }
 }
 
@@ -96,28 +80,22 @@ impl FromStr for CompositeKey {
         if s.len() != HEX_ENCODED_COMPOSITE_KEY_LENGTH {
             return Err(ParseCompositeKeyError::NoMatch);
         };
-        if !s.starts_with(KEY_PREFIX_STR) {
-            return Err(ParseCompositeKeyError::MissingPrefix);
-        }
-        ix += KEY_PREFIX_STR.len();
-        let argument = match Key::from_str(&s[ix..ix + (OID_BYTE_LENGTH * 2)]) {
-            Ok(oid) => oid,
-            Err(_) => return Err(ParseCompositeKeyError::MissingArgument),
-        };
-        ix += OID_BYTE_LENGTH * 2;
-        if &s[ix..ix + 1] != "," {
-            return Err(ParseCompositeKeyError::MissingDelimeter);
-        }
-        ix += 1;
-        let function_id = match Key::from_str(&s[ix..ix + (OID_BYTE_LENGTH * 2)]) {
+        let kind_vec = match hex::decode(&s[ix..ix + (KIND_BYTE_LENGTH * 2)]) {
             Ok(oid) => oid,
             Err(_) => return Err(ParseCompositeKeyError::MissingFunctionIdentifier),
         };
-
-        Ok(CompositeKey {
-            argument,
-            function_id,
-        })
+        ix += KIND_BYTE_LENGTH * 2;
+        if &s[ix..ix + 1] != DELIMITER {
+            return Err(ParseCompositeKeyError::MissingDelimiter);
+        }
+        ix += 1;
+        let argument = match ArgKey::from_str(&s[ix..ix + (ARG_BYTE_LENGTH * 2)]) {
+            Ok(oid) => oid,
+            Err(_) => return Err(ParseCompositeKeyError::MissingArgument),
+        };
+        let mut kind = [0; 2];
+        kind.copy_from_slice(&kind_vec[..2]);
+        Ok(CompositeKey { argument, kind })
     }
 }
 
@@ -140,12 +118,8 @@ impl RocksDBCache {
 }
 
 impl Cache for RocksDBCache {
-    fn put(&self, function_id: Key, argument: Key, value: &[u8]) -> anyhow::Result<()> {
-        let key: &[u8] = &CompositeKey {
-            function_id,
-            argument,
-        }
-        .to_bytes()[..];
+    fn put(&self, kind: Kind, argument: ArgKey, value: &[u8]) -> anyhow::Result<()> {
+        let key: &[u8] = &CompositeKey { kind, argument }.to_bytes()[..];
         self.db
             .borrow()
             .as_ref()
@@ -154,12 +128,8 @@ impl Cache for RocksDBCache {
             .with_context(|| format!("Putting {:?} failed", key))
     }
 
-    fn get(&self, function_id: Key, argument: Key) -> anyhow::Result<Option<Vec<u8>>> {
-        let key: &[u8] = &CompositeKey {
-            function_id,
-            argument,
-        }
-        .to_bytes()[..];
+    fn get(&self, kind: Kind, argument: ArgKey) -> anyhow::Result<Option<Vec<u8>>> {
+        let key: &[u8] = &CompositeKey { kind, argument }.to_bytes()[..];
         self.db
             .borrow()
             .as_ref()
@@ -188,13 +158,19 @@ mod tests {
     use rocksdb::{Options, DB};
     use tempfile::{tempdir, TempDir};
 
-    use crate::{local_cache::OID_BYTE_LENGTH, Cache, CompositeKey, Key, RocksDBCache};
+    use crate::local_cache::DELIMITER;
+    use crate::{local_cache::ARG_BYTE_LENGTH, ArgKey, Cache, CompositeKey, RocksDBCache};
 
     static ARG: &str = "12345678912345789ab";
     static HEX_ARG: &str = "e7bc546316d2d0ec13a2d3117b13468f5e939f95";
-    static FN_ID: &str = "abcd5abcd5abcd5abcd5";
-    static HEX_FN_ID: &str = "f572d396fae9206628714fb2ce00f72e94f2258f";
     static BAD_OID: &str = "deadbeefdeadbeefdead";
+
+    fn kind_id() -> [u8; 2] {
+        hex::decode("f5b7").unwrap().try_into().unwrap()
+    }
+    fn bad_kind_id() -> [u8; 2] {
+        hex::decode("b5f9").unwrap().try_into().unwrap()
+    }
 
     #[test]
     fn test_rocks_ttl_0() {
@@ -228,11 +204,7 @@ mod tests {
         {
             let cache = RocksDBCache::open(file_path.clone());
             cache
-                .put(
-                    Key::from_str(FN_ID).unwrap(),
-                    Key::from_str(ARG).unwrap(),
-                    b"abcd",
-                )
+                .put(kind_id(), ArgKey::from_str(ARG).unwrap(), b"abcd")
                 .unwrap();
         }
         (tmp_dir, file_path)
@@ -243,7 +215,7 @@ mod tests {
         let (_temp_dir, file_path) = create_test_repo();
         let cache = RocksDBCache::open(file_path);
         std::thread::sleep(Duration::from_secs(2));
-        let value = cache.get(Key::from_str(FN_ID).unwrap(), Key::from_str(ARG).unwrap());
+        let value = cache.get(kind_id(), ArgKey::from_str(ARG).unwrap());
         assert_eq!(value?.unwrap(), b"abcd".to_vec());
         Ok(())
     }
@@ -252,7 +224,7 @@ mod tests {
     fn test_key_insert_get_ttl() -> anyhow::Result<()> {
         let (_temp_dir, file_path) = create_test_repo();
         let cache = RocksDBCache::open_with_ttl(file_path, Duration::from_secs(3600));
-        let value = cache.get(Key::from_str(FN_ID).unwrap(), Key::from_str(ARG).unwrap());
+        let value = cache.get(kind_id(), ArgKey::from_str(ARG).unwrap());
         assert_eq!(value?.unwrap(), b"abcd".to_vec());
         Ok(())
     }
@@ -261,10 +233,7 @@ mod tests {
     fn test_arg_missing() -> anyhow::Result<()> {
         let (_temp_dir, file_path) = create_test_repo();
         let cache = RocksDBCache::open(file_path);
-        let value = cache.get(
-            Key::from_str(FN_ID).unwrap(),
-            Key::from_str(BAD_OID).unwrap(),
-        );
+        let value = cache.get(kind_id(), ArgKey::from_str(BAD_OID).unwrap());
         assert_eq!(value?, None);
         Ok(())
     }
@@ -273,7 +242,7 @@ mod tests {
     fn test_function_missing() -> anyhow::Result<()> {
         let (_temp_dir, file_path) = create_test_repo();
         let cache = RocksDBCache::open(file_path);
-        let value = cache.get(Key::from_str(BAD_OID).unwrap(), Key::from_str(ARG).unwrap());
+        let value = cache.get(bad_kind_id(), ArgKey::from_str(ARG).unwrap());
         assert_eq!(value?, None);
         Ok(())
     }
@@ -281,27 +250,28 @@ mod tests {
     #[test]
     fn test_compositekey() {
         let oid_bytes = CompositeKey {
-            argument: Key::from_str(ARG).unwrap(),
-            function_id: Key::from_str(FN_ID).unwrap(),
+            argument: ArgKey::from_str(ARG).unwrap(),
+            kind: kind_id(),
         }
         .to_bytes();
         let inflated_oid = CompositeKey::from_bytes(&oid_bytes).unwrap();
-        assert_eq!(inflated_oid.argument, Key::from_str(ARG).unwrap());
-        assert_eq!(inflated_oid.function_id, Key::from_str(FN_ID).unwrap());
+        assert_eq!(inflated_oid.argument, ArgKey::from_str(ARG).unwrap());
+        assert_eq!(inflated_oid.kind, kind_id());
     }
 
     #[test]
     fn test_oid_invariants() {
-        assert_eq!(OID_BYTE_LENGTH, Key::zero().as_bytes().len());
+        assert_eq!(ARG_BYTE_LENGTH, ArgKey::zero().as_bytes().len());
     }
 
     #[test]
     fn test_compositekey_from_str() {
         assert_eq!(
-            CompositeKey::from_str(format!("oid{},{}", HEX_ARG, HEX_FN_ID).as_str()).unwrap(),
+            CompositeKey::from_str(format!("{}{}{}", hex::encode(kind_id()), DELIMITER, HEX_ARG).as_str())
+                .unwrap(),
             CompositeKey {
-                argument: Key::from_str(HEX_ARG).unwrap(),
-                function_id: Key::from_str(HEX_FN_ID).unwrap(),
+                argument: ArgKey::from_str(HEX_ARG).unwrap(),
+                kind: kind_id(),
             }
         );
     }
