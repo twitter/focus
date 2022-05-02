@@ -17,7 +17,7 @@
 //! - As a result of `#[serde(default)]` and the lack of `deny_unknown_fields`,
 //! the nesting structure of `struct`s in this file is significant. It's
 //! possible to get a successful parse but with no data if you're missing a
-//! layer of nesting.
+//! project of nesting.
 
 use serde::Deserialize;
 

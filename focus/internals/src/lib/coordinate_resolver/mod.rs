@@ -6,7 +6,7 @@ mod pants_resolver;
 use focus_util::app::App;
 
 use crate::{
-    coordinate::{Coordinate, CoordinateSet},
+    target::{Target, TargetSet},
     index::{DependencyKey, DependencyValue},
 };
 use anyhow::{Context, Result};
@@ -21,20 +21,20 @@ pub(crate) use self::{
     pants_resolver::PantsResolver,
 };
 
-/// A request to resolve coordinates in a particular repository.
+/// A request to resolve targets in a particular repository.
 #[derive(Clone, Debug)]
 pub struct ResolutionRequest {
     pub repo: PathBuf,
-    pub coordinate_set: CoordinateSet,
+    pub coordinate_set: TargetSet,
 }
 
-/// Result of resolving a set of coordinates; namely a set of paths.
+/// Result of resolving a set of targets; namely a set of paths.
 #[derive(Debug, Default)]
 pub struct ResolutionResult {
     /// The set of files/directories which must be materialized.
     pub paths: BTreeSet<PathBuf>,
 
-    /// The set of coordinates which were resolved as part of this request and
+    /// The set of targets which were resolved as part of this request and
     /// the dependencies they had.
     pub package_deps: BTreeMap<DependencyKey, DependencyValue>,
 }
@@ -127,16 +127,16 @@ impl Resolver for RoutingResolver {
             let mut bazel_coordinates = HashSet::new();
             let mut directory_coordinates = HashSet::new();
             let mut pants_coordinates = HashSet::new();
-            for coordinate in request.coordinate_set.underlying().iter().cloned() {
-                match coordinate {
-                    coordinate @ Coordinate::Bazel(_) => {
-                        bazel_coordinates.insert(coordinate);
+            for target in request.coordinate_set.underlying().iter().cloned() {
+                match target {
+                    target @ Target::Bazel(_) => {
+                        bazel_coordinates.insert(target);
                     }
-                    coordinate @ Coordinate::Directory(_) => {
-                        directory_coordinates.insert(coordinate);
+                    target @ Target::Directory(_) => {
+                        directory_coordinates.insert(target);
                     }
-                    coordinate @ Coordinate::Pants(_) => {
-                        pants_coordinates.insert(coordinate);
+                    target @ Target::Pants(_) => {
+                        pants_coordinates.insert(target);
                     }
                 }
             }
@@ -163,15 +163,15 @@ impl Resolver for RoutingResolver {
 
                 debug_assert!(subrequest.coordinate_set.is_uniform());
                 match subrequest.coordinate_set.underlying().iter().next() {
-                    Some(Coordinate::Bazel(_)) => {
+                    Some(Target::Bazel(_)) => {
                         self.bazel_resolver
                             .resolve(subrequest, cache_options, app_clone)
                     }
-                    Some(Coordinate::Directory(_)) => {
+                    Some(Target::Directory(_)) => {
                         self.directory_resolver
                             .resolve(subrequest, cache_options, app_clone)
                     }
-                    Some(Coordinate::Pants(_)) => {
+                    Some(Target::Pants(_)) => {
                         self.pants_resolver
                             .resolve(subrequest, cache_options, app_clone)
                     }
@@ -182,6 +182,6 @@ impl Resolver for RoutingResolver {
                 acc.merge(result);
                 Ok(acc)
             })
-            .context("Resolving coordinates failed")
+            .context("Resolving targets failed")
     }
 }

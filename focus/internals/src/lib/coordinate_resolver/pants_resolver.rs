@@ -11,7 +11,7 @@ use focus_util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
 
 use super::*;
 
-/// Resolves Pants coordinates to paths using the `filedeps` goal.
+/// Resolves Pants targets to paths using the `filedeps` goal.
 pub struct PantsResolver {
     #[allow(dead_code)]
     cache_root: PathBuf,
@@ -55,10 +55,10 @@ impl Resolver for PantsResolver {
             .coordinate_set
             .underlying()
             .iter()
-            .filter_map(|coordinate| {
+            .filter_map(|target| {
                 // TODO: Consider parameterizing depth
-                match coordinate {
-                    Coordinate::Pants(inner) => Some(inner.to_owned()),
+                match target {
+                    Target::Pants(inner) => Some(inner.to_owned()),
                     _ => unreachable!(),
                 }
             })

@@ -26,8 +26,8 @@ impl Resolver for DirectoryResolver {
     ) -> Result<ResolutionResult> {
         let paths =
             BTreeSet::<PathBuf>::from_iter(request.coordinate_set.underlying().iter().filter_map(
-                |coordinate| match coordinate {
-                    Coordinate::Directory(inner) => Some(PathBuf::from(inner)),
+                |target| match target {
+                    Target::Directory(inner) => Some(PathBuf::from(inner)),
                     _ => unreachable!(),
                 },
             ));
@@ -35,16 +35,16 @@ impl Resolver for DirectoryResolver {
             .coordinate_set
             .underlying()
             .iter()
-            .map(|coordinate| match &coordinate {
-                Coordinate::Directory(directory) => (
+            .map(|target| match &target {
+                Target::Directory(directory) => (
                     DependencyKey::Path(directory.into()),
                     DependencyValue::Path {
                         path: directory.into(),
                     },
                 ),
                 _ => unreachable!(
-                    "Bad coordinate type (expected directory): {:?}",
-                    &coordinate
+                    "Bad target type (expected directory): {:?}",
+                    &target
                 ),
             })
             .collect();

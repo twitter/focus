@@ -1,7 +1,7 @@
-use crate::coordinate::CoordinateSet;
+use crate::target::TargetSet;
 use crate::index::RocksDBMemoizationCacheExt;
-use crate::model::layering::Layer;
-use crate::model::layering::LayerSets;
+use crate::model::project::Project;
+use crate::model::project::ProjectSets;
 use crate::model::repo::Repo;
 use crate::operation::util::perform;
 use content_addressed_cache::RocksDBCache;
@@ -27,40 +27,40 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
 
     let backed_up_sparse_profile = BackedUpFile::new(&sparse_profile_path)?;
 
-    // Figure out all of the coordinates we will be resolving
-    let coordinates = perform("Enumerating coordinates", || {
-        let mut coordinates = Vec::<String>::new();
-        let mut merge_coordinates_from_layer = |layer: &Layer| {
-            let coordinates_in_layer: Vec<String> = layer
-                .coordinates()
+    // Figure out all of the targets we will be resolving
+    let targets = perform("Enumerating targets", || {
+        let mut targets = Vec::<String>::new();
+        let mut merge_coordinates_from_layer = |project: &Project| {
+            let coordinates_in_layer: Vec<String> = project
+                .targets()
                 .iter()
                 .map(|coord| coord.to_owned())
                 .collect::<_>();
-            coordinates.extend(coordinates_in_layer);
+            targets.extend(coordinates_in_layer);
         };
 
         // Add mandatory layers
-        let sets = LayerSets::new(sparse_repo);
+        let sets = ProjectSets::new(sparse_repo);
         let layer_set = sets
-            .computed_layers()
+            .computed_projects()
             .context("Failed resolving applied layers")?;
-        for layer in layer_set.layers() {
-            merge_coordinates_from_layer(layer);
+        for project in layer_set.projects() {
+            merge_coordinates_from_layer(project);
         }
 
-        Ok(coordinates)
+        Ok(targets)
     })?;
 
-    // Add coordinate/layer to TI data.
+    // Add target/project to TI data.
     let app_for_ti_client = app.clone();
     let ti_client = app_for_ti_client.tool_insights_client();
     ti_client.get_context().add_to_custom_map(
         "coordinates_and_layers_count",
-        coordinates.len().to_string(),
+        targets.len().to_string(),
     );
 
     let coordinate_set =
-        CoordinateSet::try_from(coordinates.as_ref()).context("constructing coordinate set")?;
+        TargetSet::try_from(targets.as_ref()).context("constructing target set")?;
 
     let pattern_count = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
@@ -147,7 +147,7 @@ It isn't just one of your holiday games
         let x_dir = fixture.sparse_repo_path.join("x");
         assert!(!x_dir.is_dir());
 
-        // Add as an ad-hoc coordinate
+        // Add as an ad-hoc target
         operation::adhoc::push(
             fixture.sparse_repo_path.clone(),
             vec![String::from("bazel://x/...")],
@@ -176,7 +176,7 @@ It isn't just one of your holiday games
         let profile_path = path.join(".git").join("info").join("sparse-checkout");
 
         {
-            let selected_names = operation::layer::selected_layer_names(&path)?;
+            let selected_names = operation::project::selected_layer_names(&path)?;
             debug!(?selected_names);
             assert_eq!(selected_names.len(), 0);
         }
@@ -184,9 +184,9 @@ It isn't just one of your holiday games
 
         assert!(!library_b_dir.is_dir());
         assert!(!project_b_dir.is_dir());
-        operation::layer::push(&path, vec![String::from("team_zissou/project_b")])?;
+        operation::project::push(&path, vec![String::from("team_zissou/project_b")])?;
         {
-            let selected_names = operation::layer::selected_layer_names(&path)?;
+            let selected_names = operation::project::selected_layer_names(&path)?;
             debug!(?selected_names);
             assert!(selected_names.contains("team_zissou/project_b"));
             assert_eq!(selected_names.len(), 1);
@@ -199,9 +199,9 @@ It isn't just one of your holiday games
 
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
-        operation::layer::push(&path, vec![String::from("team_banzai/project_a")])?;
+        operation::project::push(&path, vec![String::from("team_banzai/project_a")])?;
         {
-            let selected_names = operation::layer::selected_layer_names(&path)?;
+            let selected_names = operation::project::selected_layer_names(&path)?;
             debug!(?selected_names);
             assert!(selected_names.contains("team_banzai/project_a"));
             assert!(selected_names.contains("team_zissou/project_b"));
@@ -212,9 +212,9 @@ It isn't just one of your holiday games
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
 
-        operation::layer::pop(&path, 1)?;
+        operation::project::pop(&path, 1)?;
         {
-            let selected_names = operation::layer::selected_layer_names(&path)?;
+            let selected_names = operation::project::selected_layer_names(&path)?;
             debug!(?selected_names);
             assert!(selected_names.contains("team_zissou/project_b"));
             assert_eq!(selected_names.len(), 1);
@@ -224,9 +224,9 @@ It isn't just one of your holiday games
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
 
-        operation::layer::pop(&path, 1)?;
+        operation::project::pop(&path, 1)?;
         {
-            let selected_names = operation::layer::selected_layer_names(&path)?;
+            let selected_names = operation::project::selected_layer_names(&path)?;
             debug!(?selected_names);
             assert_eq!(selected_names.len(), 0);
         }

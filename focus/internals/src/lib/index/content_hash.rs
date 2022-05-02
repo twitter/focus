@@ -14,8 +14,8 @@ use regex::Regex;
 use tracing::debug;
 use tracing::warn;
 
-use crate::coordinate::Label;
-use crate::coordinate::TargetName;
+use crate::target::Label;
+use crate::target::TargetName;
 use focus_util::paths::is_relevant_to_build_graph;
 
 use super::DependencyKey;

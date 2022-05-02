@@ -1,8 +1,8 @@
 use crate::{
-    coordinate::CoordinateSet,
+    target::TargetSet,
     index::testing::HashMapOdb,
     model::{
-        layering::{Layer, LayerSet, LayerSets, RichLayerSet},
+        project::{Project, ProjectSet, ProjectSets, RichProjectSet},
         repo::Repo,
     },
     tracker::Tracker,
@@ -13,7 +13,6 @@ use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutp
 use git2::Repository;
 use tracing::{debug, error, info, info_span, warn};
 use url::Url;
-
 use std::{
     ffi::OsString,
     fs::File,
@@ -51,7 +50,7 @@ pub fn run(
     origin: Origin,
     sparse_repo_path: PathBuf,
     branch: String,
-    coordinates: Vec<String>,
+    targets: Vec<String>,
     layers: Vec<String>,
     copy_branches: bool,
     days_of_history: u64,
@@ -75,7 +74,7 @@ pub fn run(
         ),
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, layers, coordinates, app)
+    set_up_sparse_repo(&sparse_repo_path, layers, targets, app)
 }
 
 /// Clone from a local path on disk.
@@ -200,7 +199,7 @@ fn clone_remote(
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
     layers: Vec<String>,
-    coordinates: Vec<String>,
+    targets: Vec<String>,
     app: Arc<App>,
 ) -> Result<()> {
     {
@@ -226,7 +225,7 @@ fn set_up_sparse_repo(
             outlining_tree_underlying.path(),
             working_tree.path(),
             layers,
-            coordinates,
+            targets,
         )?
     };
 
@@ -249,73 +248,73 @@ fn set_up_sparse_repo(
     Ok(())
 }
 
-pub(crate) fn named_layers_from_repo(repo: &Path, layer_names: &[String]) -> Result<LayerSet> {
-    let layer_sets = LayerSets::new(repo);
-    let rich_layer_set = RichLayerSet::new(
-        layer_sets
-            .available_layers()
+pub(crate) fn named_projects_from_repo(repo: &Path, project_names: &[String]) -> Result<ProjectSet> {
+    let project_sets = ProjectSets::new(repo);
+    let rich_layer_set = RichProjectSet::new(
+        project_sets
+            .available_projects()
             .context("getting available layers")?,
     )?;
 
-    let mut layers = Vec::<Layer>::new();
-    for layer_name in layer_names {
-        if let Some(layer) = rich_layer_set.get(layer_name) {
-            layers.push(layer.clone());
+    let mut projects = Vec::<Project>::new();
+    for project_name in project_names {
+        if let Some(project) = rich_layer_set.get(project_name) {
+            projects.push(project.clone());
         } else {
-            bail!("Layer named '{}' not found", &layer_name)
+            bail!("Project named '{}' not found", &project_name)
         }
     }
 
-    Ok(LayerSet::new(layers.into_iter().collect()))
+    Ok(ProjectSet::new(projects.into_iter().collect()))
 }
 
 fn compute_and_store_initial_selection(
     outlining_tree_path: &Path,
     working_tree_path: &Path,
     layers: Vec<String>,
-    coordinates: Vec<String>,
-) -> Result<CoordinateSet> {
-    let working_tree_layers = LayerSets::new(working_tree_path);
+    targets: Vec<String>,
+) -> Result<TargetSet> {
+    let working_tree_layers = ProjectSets::new(working_tree_path);
 
-    let mut layer_set = working_tree_layers
-        .mandatory_layers()
+    let mut project_set = working_tree_layers
+        .mandatory_projects()
         .context("Failed to resolve mandatory layers")?;
 
-    let adhoc_set = LayerSet::new(vec![Layer::new(
+    let adhoc_set = ProjectSet::new(vec![Project::new(
         "adhoc",
-        "Ad-hoc layer",
+        "Ad-hoc project",
         false,
-        coordinates,
+        targets,
     )]);
 
-    let layers_from_outlining_tree = named_layers_from_repo(outlining_tree_path, &layers)
+    let layers_from_outlining_tree = named_projects_from_repo(outlining_tree_path, &layers)
         .context("resolving user-selected layers")?;
-    layer_set.extend(adhoc_set.clone());
-    layer_set.extend(layers_from_outlining_tree.clone());
-    layer_set.validate().context("Failed to merged layer set")?;
-    let coordinates: Vec<String> = layer_set
-        .layers()
+    project_set.extend(adhoc_set.clone());
+    project_set.extend(layers_from_outlining_tree.clone());
+    project_set.validate().context("Failed to merged project set")?;
+    let targets: Vec<String> = project_set
+        .projects()
         .iter()
-        .flat_map(|layer| layer.coordinates())
+        .flat_map(|project| project.targets())
         .cloned()
         .collect();
 
     // Write the ad-hoc set into the working tree
-    info!("Writing ad-hoc layer set");
-    working_tree_layers.store_adhoc_layers(&adhoc_set)?;
+    info!("Writing ad-hoc project set");
+    working_tree_layers.storae_adhoc_project_set(&adhoc_set)?;
 
-    info!("Writing selected layer set");
-    let selected_layer_names: Vec<String> = layers_from_outlining_tree
-        .layers()
+    info!("Writing selected project set");
+    let selected_project_names: Vec<String> = layers_from_outlining_tree
+        .projects()
         .iter()
-        .map(|layer| layer.name().to_owned())
+        .map(|project| project.name().to_owned())
         .collect();
     working_tree_layers
-        .push_as_selection(selected_layer_names)
-        .context("Failed to write the selected layer set to the sparse repo")?;
+        .push_as_selection(selected_project_names)
+        .context("Failed to write the selected project set to the sparse repo")?;
 
     let coordinate_set =
-        CoordinateSet::try_from(coordinates.as_slice()).context("Failed to parse coordinates")?;
+        TargetSet::try_from(targets.as_slice()).context("Failed to parse targets")?;
 
     Ok(coordinate_set)
 }
@@ -592,7 +591,7 @@ mod test {
 
         let mut fixture = RepoPairFixture::new()?;
         let library_a_coord = String::from("bazel://library_a/...");
-        fixture.coordinates.push(library_a_coord);
+        fixture.targets.push(library_a_coord);
         let project_b_layer_label = String::from("team_zissou/project_b");
         fixture.layers.push(project_b_layer_label);
 
@@ -603,15 +602,15 @@ mod test {
         let layer_sets = working_tree.layer_sets()?;
 
         {
-            let ad_hoc_layers = layer_sets.adhoc_layers().unwrap().unwrap();
-            let layers = ad_hoc_layers.layers();
+            let ad_hoc_layers = layer_sets.adhoc_projects().unwrap().unwrap();
+            let layers = ad_hoc_layers.projects();
             insta::assert_debug_snapshot!(layers, @r###"
             [
-                Layer {
+                Project {
                     name: "adhoc",
-                    description: "Ad-hoc layer",
+                    description: "Ad-hoc project",
                     mandatory: false,
-                    coordinates: [
+                    targets: [
                         "bazel://library_a/...",
                     ],
                 },
@@ -620,17 +619,17 @@ mod test {
         }
         {
             let selected_layers = layer_sets
-                .selected_layers()
+                .selected_projects()
                 .unwrap()
                 .expect("Should have had some layers");
-            let layers = selected_layers.layers();
+            let layers = selected_layers.projects();
             insta::assert_debug_snapshot!(layers, @r###"
             [
-                Layer {
+                Project {
                     name: "team_zissou/project_b",
                     description: "Stuff relating to project B",
                     mandatory: false,
-                    coordinates: [
+                    targets: [
                         "bazel://project_b/...",
                     ],
                 },
@@ -773,7 +772,7 @@ mod test {
                 })
                 .collect();
 
-            // N.B. Only the mandatory layer is checked out
+            // N.B. Only the mandatory project is checked out
             assert!(working_tree_paths.contains(Path::new("focus")));
             assert!(working_tree_paths.contains(Path::new("mandatory_z")));
             assert!(working_tree_paths.contains(Path::new("mandatory_z/BUILD")));

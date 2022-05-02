@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 
-use crate::model::layering::{Layer, LayerSet, LayerSets};
+use crate::model::project::{Project, ProjectSet, ProjectSets};
 use tracing::{info, warn};
 
 struct Adhoc {
@@ -21,57 +21,57 @@ impl Adhoc {
     where
         F: FnOnce(&mut Vec<String>) -> Result<()>,
     {
-        let sets = LayerSets::new(&self.repo_path);
-        let adhoc_layers = sets.adhoc_layers();
+        let sets = ProjectSets::new(&self.repo_path);
+        let adhoc_layers = sets.adhoc_projects();
         if let Err(e) = adhoc_layers {
-            bail!("Loading the ad-hoc layer set failed: {}", e);
+            bail!("Loading the ad-hoc project set failed: {}", e);
         };
 
-        let coordinates = match sets.adhoc_layers().context("loading selected layers")? {
+        let targets = match sets.adhoc_projects().context("loading selected layers")? {
             Some(adhoc) => extract_coordinates(&adhoc),
             None => Default::default(),
         };
 
-        let mut mutated_coordinates = coordinates.clone();
+        let mut mutated_coordinates = targets.clone();
         visitor_fn(&mut mutated_coordinates)
-            .context("Visitor function failed while mutating coordinates")?;
+            .context("Visitor function failed while mutating targets")?;
 
-        if mutated_coordinates != coordinates {
-            let layer = Layer::new(
+        if mutated_coordinates != targets {
+            let project = Project::new(
                 "adhoc",
-                "Ad-hoc coordinate stack",
+                "Ad-hoc target stack",
                 false,
                 mutated_coordinates,
             );
-            let updated_set = LayerSet::new(vec![layer]);
-            info!("Saving ad-hoc coordinate stack");
-            sets.store_adhoc_layers(&updated_set)
-                .context("Failed storing the ad-hoc coordinate stack layer set")?;
+            let updated_set = ProjectSet::new(vec![project]);
+            info!("Saving ad-hoc target stack");
+            sets.storae_adhoc_project_set(&updated_set)
+                .context("Failed storing the ad-hoc target stack project set")?;
             Ok(true)
         } else {
-            info!("Skipped saving unchanged ad-hoc coordinate stack",);
+            info!("Skipped saving unchanged ad-hoc target stack",);
             Ok(false)
         }
     }
 }
 
-fn extract_coordinates(set: &LayerSet) -> Vec<String> {
+fn extract_coordinates(set: &ProjectSet) -> Vec<String> {
     let mut results = Vec::<String>::new();
-    for layer in set.layers() {
-        for coordinate in layer.coordinates() {
-            results.push(coordinate.into());
+    for project in set.projects() {
+        for target in project.targets() {
+            results.push(target.into());
         }
     }
     results
 }
 
 pub fn list(repo: PathBuf) -> Result<bool> {
-    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
-        if coordinates.is_empty() {
-            eprintln!("The ad-hoc coordinate stack is empty!");
+    Adhoc::new(repo)?.with_mut_coordinates(|targets| {
+        if targets.is_empty() {
+            eprintln!("The ad-hoc target stack is empty!");
         } else {
-            for (index, coordinate) in coordinates.iter().enumerate() {
-                println!("{}: {}", index, coordinate);
+            for (index, target) in targets.iter().enumerate() {
+                println!("{}: {}", index, target);
             }
         }
 
@@ -80,18 +80,18 @@ pub fn list(repo: PathBuf) -> Result<bool> {
 }
 
 pub fn push(repo: PathBuf, names: Vec<String>) -> Result<bool> {
-    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
-        let mut set = HashSet::<String>::with_capacity(coordinates.len());
-        set.extend(coordinates.clone());
+    Adhoc::new(repo)?.with_mut_coordinates(|targets| {
+        let mut set = HashSet::<String>::with_capacity(targets.len());
+        set.extend(targets.clone());
 
         for name in &names {
             if set.contains(name) {
                 warn!(
                     ?name,
-                    "Skipping layer since it is already present in the stack",
+                    "Skipping project since it is already present in the stack",
                 )
             } else {
-                coordinates.push(name.to_owned());
+                targets.push(name.to_owned());
             }
         }
 
@@ -100,10 +100,10 @@ pub fn push(repo: PathBuf, names: Vec<String>) -> Result<bool> {
 }
 
 pub fn pop(repo: PathBuf, count: usize) -> Result<bool> {
-    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
+    Adhoc::new(repo)?.with_mut_coordinates(|targets| {
         for i in 0..count {
-            if coordinates.pop().is_none() {
-                warn!("There were only {} coordinates to pop off the stack", i);
+            if targets.pop().is_none() {
+                warn!("There were only {} targets to pop off the stack", i);
                 break;
             }
         }
@@ -113,20 +113,20 @@ pub fn pop(repo: PathBuf, count: usize) -> Result<bool> {
 }
 
 pub fn remove(repo: PathBuf, names: Vec<String>) -> Result<bool> {
-    Adhoc::new(repo)?.with_mut_coordinates(|coordinates| {
+    Adhoc::new(repo)?.with_mut_coordinates(|targets| {
         let mut coordinate_index: HashMap<String, usize> = HashMap::new();
-        for (index, coordinate) in coordinates.iter().enumerate() {
-            coordinate_index.insert(coordinate.to_owned(), index);
+        for (index, target) in targets.iter().enumerate() {
+            coordinate_index.insert(target.to_owned(), index);
         }
 
         // names.map { coordinate_index.get(k)}
         for name in &names {
             if let Some(index) = coordinate_index.get(name) {
-                coordinates.remove(*index);
+                targets.remove(*index);
             } else {
                 warn!(
                     ?name,
-                    "Skipped coordinate since it was missing from the stack",
+                    "Skipped target since it was missing from the stack",
                 );
             }
         }

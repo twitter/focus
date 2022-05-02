@@ -2,12 +2,12 @@ use std::path::PathBuf;
 
 use content_addressed_cache::RocksDBCache;
 use criterion::{criterion_group, criterion_main, Criterion};
-use focus_internals::coordinate::Coordinate;
+use focus_internals::target::Target;
 use focus_internals::index::{
     content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue, HashContext,
     ObjectDatabase, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
-use focus_internals::model::layering::LayerSets;
+use focus_internals::model::project::ProjectSets;
 
 fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -> Vec<ContentHash> {
     dep_keys
@@ -26,15 +26,15 @@ pub fn bench_content_hash(c: &mut Criterion) {
     let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
     let head_tree = head_commit.tree().unwrap();
 
-    let mandatory_layers = LayerSets::new(&repo_path).mandatory_layers().unwrap();
+    let mandatory_layers = ProjectSets::new(&repo_path).mandatory_projects().unwrap();
     let dep_keys: Vec<DependencyKey> = mandatory_layers
-        .layers()
+        .projects()
         .iter()
-        .flat_map(|layer| {
-            layer
-                .coordinates()
+        .flat_map(|project| {
+            project
+                .targets()
                 .iter()
-                .map(|coordinate| Coordinate::try_from(coordinate.as_str()).unwrap())
+                .map(|target| Target::try_from(target.as_str()).unwrap())
                 .map(DependencyKey::from)
         })
         .collect();

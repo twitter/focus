@@ -3,9 +3,9 @@
 
 $repo/
     focus/
-        mandatory.layers.json
+        mandatory.projects.json
         project/
-            <name>.layers.json
+            <name>.projects.json
         
     .focus/
         user.selection.json

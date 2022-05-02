@@ -1,9 +1,9 @@
 {
-    "layers": [
+    "projects": [
         {
             "name": "team_banzai/project_a",
             "description": "Stuff relating to project A",
-            "coordinates": [
+            "targets": [
                 "bazel://project_a/..."
             ]
         }

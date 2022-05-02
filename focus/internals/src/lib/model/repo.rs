@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    coordinate::CoordinateSet,
+    target::TargetSet,
     coordinate_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
     },
@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    layering::LayerSets,
+    project::ProjectSets,
     outlining::{PatternSet, PatternSetWriter, BUILD_FILE_PATTERNS, SOURCE_BASELINE_PATTERNS},
 };
 
@@ -262,8 +262,8 @@ impl WorkingTree {
     }
 
     /// Retrieve the LayerSets model
-    pub fn layer_sets(&self) -> Result<LayerSets> {
-        Ok(LayerSets::new(&self.path))
+    pub fn layer_sets(&self) -> Result<ProjectSets> {
+        Ok(ProjectSets::new(&self.path))
     }
 
     pub fn read_uuid(&self) -> Result<Option<Uuid>> {
@@ -326,7 +326,7 @@ impl OutliningTree {
     pub fn outline(
         &self,
         commit_id: git2::Oid,
-        coordinate_set: &CoordinateSet,
+        coordinate_set: &TargetSet,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)> {
         // Switch to the commit
@@ -453,7 +453,7 @@ impl Repo {
     /// Run a sync, returning the number of patterns that were applied.
     pub fn sync(
         &self,
-        coordinates: &CoordinateSet,
+        targets: &TargetSet,
         app: Arc<App>,
         odb: &dyn ObjectDatabase,
     ) -> Result<usize> {
@@ -483,7 +483,7 @@ impl Repo {
             let paths_to_materialize = get_files_to_materialize(
                 &hash_context,
                 odb,
-                coordinates
+                targets
                     .underlying()
                     .iter()
                     .cloned()
@@ -514,7 +514,7 @@ impl Repo {
                     );
                     debug!(?missing_keys, "These are the missing keys");
                     let (outline_patterns, resolution_result) = outlining_tree
-                        .outline(head_commit.id(), coordinates, app.clone())
+                        .outline(head_commit.id(), targets, app.clone())
                         .context("Failed to outline")?;
 
                     debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
