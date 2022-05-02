@@ -219,7 +219,7 @@ pub(in crate::operation) mod integration {
         pub sparse_repo_path: PathBuf,
         pub dense_repo: ScratchGitRepo,
         pub branch: String,
-        pub coordinates: Vec<String>,
+        pub targets: Vec<String>,
         pub layers: Vec<String>,
         pub app: Arc<App>,
         pub preserve: bool,
@@ -237,7 +237,7 @@ pub(in crate::operation) mod integration {
                 &branch,
             )?;
             let sparse_repo_path = dir.path().join("sparse");
-            let coordinates: Vec<String> = vec![];
+            let targets: Vec<String> = vec![];
             let layers: Vec<String> = vec![];
             let app = Arc::new(App::new(false)?);
 
@@ -247,7 +247,7 @@ pub(in crate::operation) mod integration {
                 sparse_repo_path,
                 dense_repo,
                 branch,
-                coordinates,
+                targets,
                 layers,
                 app,
                 preserve: false,
@@ -273,7 +273,7 @@ pub(in crate::operation) mod integration {
                 operation::clone::Origin::Local(self.dense_repo_path.clone()),
                 self.sparse_repo_path.clone(),
                 self.branch.clone(),
-                self.coordinates.clone(),
+                self.targets.clone(),
                 self.layers.clone(),
                 true,
                 90,

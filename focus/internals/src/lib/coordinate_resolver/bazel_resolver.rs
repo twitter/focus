@@ -10,11 +10,11 @@ use anyhow::{bail, Result};
 use focus_util::sandbox_command::{SandboxCommand, SandboxCommandOutput};
 use tracing::{debug, info};
 
-use crate::coordinate::{Label, TargetName};
+use crate::target::{Label, TargetName};
 
 use super::*;
 
-/// Resolves Bazel coordinates to paths
+/// Resolves Bazel targets to paths
 pub struct BazelResolver {
     #[allow(dead_code)]
     cache_root: PathBuf,
@@ -59,10 +59,10 @@ impl Resolver for BazelResolver {
             .coordinate_set
             .underlying()
             .iter()
-            .filter_map(|coordinate| {
+            .filter_map(|target| {
                 // TODO: Consider parameterizing depth
-                match coordinate {
-                    Coordinate::Bazel(label) => Some(label),
+                match target {
+                    Target::Bazel(label) => Some(label),
                     _ => unreachable!(),
                 }
             })

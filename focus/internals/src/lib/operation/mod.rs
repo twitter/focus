@@ -4,7 +4,7 @@ pub mod detect_build_graph_changes;
 pub mod ensure_clean;
 pub mod index;
 pub mod init;
-pub mod layer;
+pub mod project;
 pub mod maintenance;
 pub mod refs;
 pub mod repo;

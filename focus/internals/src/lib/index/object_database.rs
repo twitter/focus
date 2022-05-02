@@ -281,7 +281,7 @@ mod tests {
 
     use focus_testing::scratch_git_repo::ScratchGitRepo;
 
-    use crate::coordinate::{Label, TargetName};
+    use crate::target::{Label, TargetName};
 
     use super::*;
 

@@ -22,8 +22,8 @@ use focus_util::{
 };
 
 use focus_internals::{
-    coordinate::Coordinate,
-    model::layering::LayerSets,
+    target::Target,
+    model::project::ProjectSets,
     operation::{
         self,
         maintenance::{self, ScheduleOpts},
@@ -35,7 +35,7 @@ use tracing::{debug, info, info_span, warn};
 
 #[derive(Parser, Debug)]
 enum Subcommand {
-    /// Create a sparse clone from named layers or ad-hoc build coordinates
+    /// Create a sparse clone from named layers or ad-hoc build targets
     Clone {
         /// Path to the repository to clone.
         #[clap(long, default_value = "~/workspace/source")]
@@ -57,8 +57,8 @@ enum Subcommand {
         #[clap(parse(try_from_str), default_value = "true")]
         copy_branches: bool,
 
-        /// Named layers and ad-hoc coordinates to include in the clone. Named layers are loaded from the dense repo's `focus/projects` directory.
-        coordinates_and_layers: Vec<String>,
+        /// Named layers and ad-hoc targets to include in the clone. Named layers are loaded from the dense repo's `focus/projects` directory.
+        targets_and_projects: Vec<String>,
     },
 
     /// Update the sparse checkout to reflect changes to the build graph.
@@ -74,17 +74,17 @@ enum Subcommand {
         subcommand: RepoSubcommand,
     },
 
-    /// Interact with the stack of selected layers. Run `focus layer help` for more information.
-    Layer {
+    /// Interact with the stack of selected projects. Run `focus project help` for more information.
+    Project {
         /// Path to the repository.
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
         #[clap(subcommand)]
-        subcommand: LayerSubcommand,
+        subcommand: ProjectSubcommand,
     },
 
-    /// Interact with the ad-hoc coordinate stack. Run `focus adhoc help` for more information.
+    /// Interact with the ad-hoc target stack. Run `focus adhoc help` for more information.
     Adhoc {
         /// Path to the repository.
         #[clap(long, parse(from_os_str), default_value = ".")]
@@ -219,12 +219,12 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             RepoSubcommand::List { .. } => "repo-list",
             RepoSubcommand::Repair { .. } => "repo-repair",
         },
-        Subcommand::Layer { subcommand, .. } => match subcommand {
-            LayerSubcommand::Available { .. } => "layer-available",
-            LayerSubcommand::List { .. } => "layer-list",
-            LayerSubcommand::Push { .. } => "layer-push",
-            LayerSubcommand::Pop { .. } => "layer-pop",
-            LayerSubcommand::Remove { .. } => "layer-remove",
+        Subcommand::Project { subcommand, .. } => match subcommand {
+            ProjectSubcommand::Available { .. } => "project-available",
+            ProjectSubcommand::List { .. } => "project-list",
+            ProjectSubcommand::Push { .. } => "project-push",
+            ProjectSubcommand::Pop { .. } => "project-pop",
+            ProjectSubcommand::Remove { .. } => "project-remove",
         },
         Subcommand::Adhoc { subcommand, .. } => match subcommand {
             AdhocSubcommand::List { .. } => "adhoc-list",
@@ -380,27 +380,27 @@ enum RepoSubcommand {
 }
 
 #[derive(Parser, Debug)]
-enum LayerSubcommand {
+enum ProjectSubcommand {
     /// List all available layers
     Available {},
 
     /// List currently selected layers
     List {},
 
-    /// Push a layer onto the top of the stack of currently selected layers
+    /// Push a project onto the top of the stack of currently selected layers
     Push {
         /// Names of layers to push.
         names: Vec<String>,
     },
 
-    /// Pop one or more layer(s) from the top of the stack of current selected layers
+    /// Pop one or more project(s) from the top of the stack of current selected layers
     Pop {
         /// The number of layers to pop.
         #[clap(long, default_value = "1")]
         count: usize,
     },
 
-    /// Filter out one or more layer(s) from the stack of currently selected layers
+    /// Filter out one or more project(s) from the stack of currently selected layers
     Remove {
         /// Names of the layers to be removed.
         names: Vec<String>,
@@ -409,25 +409,25 @@ enum LayerSubcommand {
 
 #[derive(Parser, Debug)]
 enum AdhocSubcommand {
-    /// List the contents of the ad-hoc coordinate stack
+    /// List the contents of the ad-hoc target stack
     List {},
 
-    /// Push one or more coordinate(s) onto the top of the ad-hoc coordinate stack
+    /// Push one or more target(s) onto the top of the ad-hoc target stack
     Push {
-        /// Names of coordinates to push.
+        /// Names of targets to push.
         names: Vec<String>,
     },
 
-    /// Pop one or more coordinates(s) from the top of the ad-hoc coordinate stack
+    /// Pop one or more targets(s) from the top of the ad-hoc target stack
     Pop {
-        /// The number of coordinates to pop.
+        /// The number of targets to pop.
         #[clap(long, default_value = "1")]
         count: usize,
     },
 
-    /// Filter out one or more coordinate(s) from the ad-hoc coordinate stack
+    /// Filter out one or more target(s) from the ad-hoc target stack
     Remove {
-        /// Names of the coordinates to be removed.
+        /// Names of the targets to be removed.
         names: Vec<String>,
     },
 }
@@ -489,8 +489,8 @@ enum IndexSubcommand {
         sparse_repo: PathBuf,
     },
 
-    /// Resolve the coordinates to their resulting pattern sets.
-    Resolve { coordinates: Vec<String> },
+    /// Resolve the targets to their resulting pattern sets.
+    Resolve { targets: Vec<String> },
 }
 
 #[derive(Parser, Debug)]
@@ -551,7 +551,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             branch,
             days_of_history,
             copy_branches,
-            coordinates_and_layers,
+            targets_and_projects,
         } => {
             let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
@@ -564,21 +564,21 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
             info!("Cloning {:?} into {}", dense_repo, sparse_repo.display());
 
-            let (coordinates, layers): (Vec<String>, Vec<String>) = coordinates_and_layers
+            let (targets, layers): (Vec<String>, Vec<String>) = targets_and_projects
                 .into_iter()
-                .partition(|item| Coordinate::try_from(item.as_str()).is_ok());
+                .partition(|item| Target::try_from(item.as_str()).is_ok());
 
-            // Add coordinates length to TI custom map.
+            // Add targets length to TI custom map.
             ti_client.get_context().add_to_custom_map(
-                "coordinates_and_layers_count",
-                coordinates.len().to_string(),
+                "targets_and_projects_count",
+                targets.len().to_string(),
             );
 
             operation::clone::run(
                 origin,
                 sparse_repo,
                 branch,
-                coordinates,
+                targets,
                 layers,
                 copy_branches,
                 days_of_history,
@@ -677,17 +677,17 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             operation::detect_build_graph_changes::run(&repo, args, app)
         }
 
-        Subcommand::Layer { repo, subcommand } => {
+        Subcommand::Project { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
             let _lock_file = hold_lock_file(&repo)?;
-            ti_client.get_context().set_tool_feature_name("layer");
+            ti_client.get_context().set_tool_feature_name("project");
 
             let should_check_tree_cleanliness = match subcommand {
-                LayerSubcommand::Available {} => false,
-                LayerSubcommand::List {} => false,
-                LayerSubcommand::Push { names: _ } => true,
-                LayerSubcommand::Pop { count: _ } => true,
-                LayerSubcommand::Remove { names: _ } => true,
+                ProjectSubcommand::Available {} => false,
+                ProjectSubcommand::List {} => false,
+                ProjectSubcommand::Push { names: _ } => true,
+                ProjectSubcommand::Pop { count: _ } => true,
+                ProjectSubcommand::Remove { names: _ } => true,
             };
             if should_check_tree_cleanliness {
                 operation::ensure_clean::run(repo.as_path(), app.clone())
@@ -695,10 +695,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
 
             let selected_layer_stack_backup = {
-                let sets = LayerSets::new(&repo);
-                if sets.selected_layer_stack_path().is_file() {
+                let sets = ProjectSets::new(&repo);
+                if sets.selected_project_stack_path().is_file() {
                     Some(BackedUpFile::new(
-                        sets.selected_layer_stack_path().as_path(),
+                        sets.selected_project_stack_path().as_path(),
                     )?)
                 } else {
                     None
@@ -706,11 +706,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             };
 
             let mutated = match subcommand {
-                LayerSubcommand::Available {} => operation::layer::available(&repo)?,
-                LayerSubcommand::List {} => operation::layer::list(&repo)?,
-                LayerSubcommand::Push { names } => operation::layer::push(&repo, names)?,
-                LayerSubcommand::Pop { count } => operation::layer::pop(&repo, count)?,
-                LayerSubcommand::Remove { names } => operation::layer::remove(&repo, names)?,
+                ProjectSubcommand::Available {} => operation::project::available(&repo)?,
+                ProjectSubcommand::List {} => operation::project::list(&repo)?,
+                ProjectSubcommand::Push { names } => operation::project::push(&repo, names)?,
+                ProjectSubcommand::Pop { count } => operation::project::pop(&repo, count)?,
+                ProjectSubcommand::Remove { names } => operation::project::remove(&repo, names)?,
             };
 
             if mutated {
@@ -743,9 +743,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
 
             let adhoc_layer_set_backup = {
-                let sets = LayerSets::new(&repo);
-                if sets.adhoc_layer_path().is_file() {
-                    Some(BackedUpFile::new(sets.adhoc_layer_path().as_path())?)
+                let sets = ProjectSets::new(&repo);
+                if sets.adhoc_projects_path().is_file() {
+                    Some(BackedUpFile::new(sets.adhoc_projects_path().as_path())?)
                 } else {
                     None
                 }
@@ -764,7 +764,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     .context("Sync failed; changes to the stack will be reverted.")?;
             }
 
-            // Sync (if necessary) succeeded, so skip reverting the ad-hoc coordinate stack.
+            // Sync (if necessary) succeeded, so skip reverting the ad-hoc target stack.
             if let Some(backup) = adhoc_layer_set_backup {
                 backup.set_restore(false);
             }
@@ -939,8 +939,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Resolve { coordinates } => {
-                let exit_code = operation::index::resolve(app, backend, coordinates)?;
+            IndexSubcommand::Resolve { targets } => {
+                let exit_code = operation::index::resolve(app, backend, targets)?;
                 Ok(exit_code)
             }
         },
@@ -980,7 +980,7 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     match opts.cmd {
         Subcommand::Clone { .. }
         | Subcommand::Sync { .. }
-        | Subcommand::Layer { .. }
+        | Subcommand::Project { .. }
         | Subcommand::Adhoc { .. }
         | Subcommand::Init { .. } => {
             operation::maintenance::schedule_enable(ScheduleOpts::default())

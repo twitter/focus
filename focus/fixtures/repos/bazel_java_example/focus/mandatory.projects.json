@@ -1,9 +1,9 @@
 {
-    "layers": [
+    "projects": [
         {
             "name": "mandatory",
             "description": "Mandatory dependencies imposed by the repository",
-            "coordinates": [
+            "targets": [
                 "bazel://mandatory_z/..."
             ]
         }

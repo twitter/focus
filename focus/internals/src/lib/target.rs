@@ -7,13 +7,13 @@ use std::{collections::HashSet, convert::TryFrom, fmt::Display};
 use thiserror::Error;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct CoordinateSet {
-    underlying: HashSet<Coordinate>,
+pub struct TargetSet {
+    underlying: HashSet<Target>,
     uniform: bool,
 }
 
-impl CoordinateSet {
-    pub fn underlying(&self) -> &HashSet<Coordinate> {
+impl TargetSet {
+    pub fn underlying(&self) -> &HashSet<Target> {
         &self.underlying
     }
 
@@ -21,14 +21,14 @@ impl CoordinateSet {
         self.uniform
     }
 
-    pub fn determine_uniformity(set: &HashSet<Coordinate>) -> bool {
+    pub fn determine_uniformity(set: &HashSet<Target>) -> bool {
         let mut count_by_type = [0_usize; 3];
 
-        for coordinate in set {
-            match coordinate {
-                Coordinate::Bazel(_) => count_by_type[0] += 1,
-                Coordinate::Directory(_) => count_by_type[1] += 1,
-                Coordinate::Pants(_) => count_by_type[2] += 1,
+        for target in set {
+            match target {
+                Target::Bazel(_) => count_by_type[0] += 1,
+                Target::Directory(_) => count_by_type[1] += 1,
+                Target::Pants(_) => count_by_type[2] += 1,
             }
         }
 
@@ -37,8 +37,8 @@ impl CoordinateSet {
     }
 }
 
-impl From<HashSet<Coordinate>> for CoordinateSet {
-    fn from(underlying: HashSet<Coordinate>) -> Self {
+impl From<HashSet<Target>> for TargetSet {
+    fn from(underlying: HashSet<Target>) -> Self {
         let uniform = Self::determine_uniformity(&underlying);
         Self {
             underlying,
@@ -47,16 +47,16 @@ impl From<HashSet<Coordinate>> for CoordinateSet {
     }
 }
 
-impl TryFrom<&[String]> for CoordinateSet {
-    type Error = CoordinateError;
+impl TryFrom<&[String]> for TargetSet {
+    type Error = TargetError;
 
-    fn try_from(coordinates: &[String]) -> Result<Self, Self::Error> {
-        let mut underlying = HashSet::<Coordinate>::new();
+    fn try_from(targets: &[String]) -> Result<Self, Self::Error> {
+        let mut underlying = HashSet::<Target>::new();
 
-        for coordinate in coordinates {
-            match Coordinate::try_from(coordinate.as_str()) {
-                Ok(coordinate) => {
-                    underlying.insert(coordinate);
+        for target in targets {
+            match Target::try_from(target.as_str()) {
+                Ok(target) => {
+                    underlying.insert(target);
                 }
                 Err(e) => return Err(e),
             }
@@ -71,7 +71,7 @@ impl TryFrom<&[String]> for CoordinateSet {
 }
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone)]
-pub enum Coordinate {
+pub enum Target {
     /// A Bazel package like `//foo/bar:baz`.
     Bazel(Label),
 
@@ -82,30 +82,30 @@ pub enum Coordinate {
     Pants(String),
 }
 
-impl Display for Coordinate {
+impl Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Coordinate::Bazel(c) => write!(f, "{}", c),
-            Coordinate::Directory(c) => write!(f, "{}", c),
-            Coordinate::Pants(c) => write!(f, "{}", c),
+            Target::Bazel(c) => write!(f, "{}", c),
+            Target::Directory(c) => write!(f, "{}", c),
+            Target::Pants(c) => write!(f, "{}", c),
         }
     }
 }
 
 #[derive(Error, Debug, PartialEq)]
-pub enum CoordinateError {
+pub enum TargetError {
     #[error("Scheme not supported")]
     UnsupportedScheme(String),
 
-    #[error("No coordinate scheme provided")]
+    #[error("No target scheme provided")]
     NoSchemeProvidedError,
 
     #[error("Failed to parse label")]
     LabelError(#[from] LabelParseError),
 }
 
-impl TryFrom<&str> for Coordinate {
-    type Error = CoordinateError;
+impl TryFrom<&str> for Target {
+    type Error = TargetError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value.split_once(':') {
@@ -113,16 +113,16 @@ impl TryFrom<&str> for Coordinate {
                 let rest = rest.to_owned();
                 if prefix.eq_ignore_ascii_case("bazel") {
                     let label: Label = rest.parse()?;
-                    Ok(Coordinate::Bazel(label))
+                    Ok(Target::Bazel(label))
                 } else if prefix.eq_ignore_ascii_case("directory") {
-                    Ok(Coordinate::Directory(rest))
+                    Ok(Target::Directory(rest))
                 } else if prefix.eq_ignore_ascii_case("pants") {
-                    Ok(Coordinate::Pants(rest))
+                    Ok(Target::Pants(rest))
                 } else {
-                    Err(CoordinateError::UnsupportedScheme(prefix.to_owned()))
+                    Err(TargetError::UnsupportedScheme(prefix.to_owned()))
                 }
             }
-            None => Err(CoordinateError::NoSchemeProvidedError),
+            None => Err(TargetError::NoSchemeProvidedError),
         }
     }
 }
@@ -251,40 +251,40 @@ mod tests {
     #[test]
     pub fn coordinate_parsing() -> Result<()> {
         assert_eq!(
-            Coordinate::try_from("bazel://a:b")?,
-            Coordinate::Bazel(Label {
+            Target::try_from("bazel://a:b")?,
+            Target::Bazel(Label {
                 external_repository: None,
                 path_components: vec!["a".to_string()],
                 target_name: TargetName::Name("b".to_string()),
             })
         );
         assert_eq!(
-            Coordinate::try_from("bazel://foo"),
-            Ok(Coordinate::Bazel(Label {
+            Target::try_from("bazel://foo"),
+            Ok(Target::Bazel(Label {
                 external_repository: None,
                 path_components: vec!["foo".to_string()],
                 target_name: TargetName::Name("foo".to_string())
             }))
         );
         assert_eq!(
-            Coordinate::try_from("bazel://foo/bar/..."),
-            Ok(Coordinate::Bazel(Label {
+            Target::try_from("bazel://foo/bar/..."),
+            Ok(Target::Bazel(Label {
                 external_repository: None,
                 path_components: vec!["foo".to_string(), "bar".to_string()],
                 target_name: TargetName::Ellipsis,
             }))
         );
         assert_eq!(
-            Coordinate::try_from("bazel:@foo//bar:qux"),
-            Ok(Coordinate::Bazel(Label {
+            Target::try_from("bazel:@foo//bar:qux"),
+            Ok(Target::Bazel(Label {
                 external_repository: Some("@foo".to_string()),
                 path_components: vec!["bar".to_string()],
                 target_name: TargetName::Name("qux".to_string()),
             }))
         );
         assert_eq!(
-            Coordinate::try_from("bazel://foo/bar:baz/qux.py"),
-            Ok(Coordinate::Bazel(Label {
+            Target::try_from("bazel://foo/bar:baz/qux.py"),
+            Ok(Target::Bazel(Label {
                 external_repository: None,
                 path_components: vec!["foo".to_string(), "bar".to_string()],
                 target_name: TargetName::Name("baz/qux.py".to_string()),
@@ -292,16 +292,16 @@ mod tests {
         );
 
         assert_eq!(
-            Coordinate::try_from("bogus:whatever").unwrap_err(),
-            CoordinateError::UnsupportedScheme("bogus".to_owned())
+            Target::try_from("bogus:whatever").unwrap_err(),
+            TargetError::UnsupportedScheme("bogus".to_owned())
         );
         assert_eq!(
-            Coordinate::try_from("okay").unwrap_err(),
-            CoordinateError::NoSchemeProvidedError
+            Target::try_from("okay").unwrap_err(),
+            TargetError::NoSchemeProvidedError
         );
         assert_eq!(
-            Coordinate::try_from("bazel://").unwrap_err(),
-            CoordinateError::LabelError(LabelParseError::EmptyLabel),
+            Target::try_from("bazel://").unwrap_err(),
+            TargetError::LabelError(LabelParseError::EmptyLabel),
         );
 
         Ok(())
@@ -309,28 +309,28 @@ mod tests {
 
     #[test]
     pub fn sets_from_strings_of_coordinates() -> Result<()> {
-        let coordinates = vec![String::from("bazel://a:b"), String::from("bazel://x/y:z")];
+        let targets = vec![String::from("bazel://a:b"), String::from("bazel://x/y:z")];
 
-        let set = CoordinateSet::try_from(coordinates.as_slice());
+        let set = TargetSet::try_from(targets.as_slice());
         let set = set.unwrap();
         assert_eq!(set.underlying().len(), 2);
         assert!(set.is_uniform());
         Ok(())
     }
 
-    // TODO: Enable this again when there are more coordinate types.
+    // TODO: Enable this again when there are more target types.
     // #[cfg(disabled_test)]
     #[test]
     pub fn non_uniform_sets() -> Result<()> {
-        // Sets containing different coordinate types are non-uniform
-        assert!(!CoordinateSet::try_from(&[
+        // Sets containing different target types are non-uniform
+        assert!(!TargetSet::try_from(&[
             String::from("bazel://a:b"),
             String::from("directory:/foo"),
         ] as &[String])?
         .is_uniform());
 
         // Empty sets are uniform
-        assert!(CoordinateSet::try_from(&[] as &[String])?.is_uniform());
+        assert!(TargetSet::try_from(&[] as &[String])?.is_uniform());
 
         Ok(())
     }
@@ -338,12 +338,12 @@ mod tests {
     #[test]
     pub fn failed_conversion_of_sets() -> Result<()> {
         assert_eq!(
-            CoordinateSet::try_from(&[String::from("whatever")] as &[String]).unwrap_err(),
-            CoordinateError::NoSchemeProvidedError
+            TargetSet::try_from(&[String::from("whatever")] as &[String]).unwrap_err(),
+            TargetError::NoSchemeProvidedError
         );
         assert_eq!(
-            CoordinateSet::try_from(&[String::from("foo:bar")] as &[String]).unwrap_err(),
-            CoordinateError::UnsupportedScheme("foo".to_owned())
+            TargetSet::try_from(&[String::from("foo:bar")] as &[String]).unwrap_err(),
+            TargetError::UnsupportedScheme("foo".to_owned())
         );
 
         Ok(())

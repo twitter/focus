@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use crate::coordinate::{Coordinate, Label, TargetName};
+use crate::target::{Target, Label, TargetName};
 use crate::coordinate_resolver::ResolutionResult;
 
 use super::content_hash::HashContext;
@@ -76,12 +76,12 @@ pub enum DependencyKey {
     DummyForTesting(Box<DependencyKey>),
 }
 
-impl From<Coordinate> for DependencyKey {
-    fn from(coordinate: Coordinate) -> Self {
-        match coordinate {
-            Coordinate::Bazel(label) => Self::BazelPackage(label),
-            Coordinate::Directory(path) => Self::Path(PathBuf::from(path)),
-            Coordinate::Pants(label) => unimplemented!(
+impl From<Target> for DependencyKey {
+    fn from(target: Target) -> Self {
+        match target {
+            Target::Bazel(label) => Self::BazelPackage(label),
+            Target::Directory(path) => Self::Path(PathBuf::from(path)),
+            Target::Pants(label) => unimplemented!(
                 "DependencyKey from Pants label not supported (label: {})",
                 label
             ),
@@ -324,7 +324,7 @@ mod tests {
 
     use maplit::hashset;
 
-    use crate::coordinate::{Coordinate, CoordinateSet};
+    use crate::target::{Target, TargetSet};
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
@@ -347,8 +347,8 @@ mod tests {
     }
 
     fn parse_label(label: &str) -> anyhow::Result<DependencyKey> {
-        let coordinate = Coordinate::try_from(format!("bazel:{}", label).as_str())?;
-        let dep_key = DependencyKey::from(coordinate);
+        let target = Target::try_from(format!("bazel:{}", label).as_str())?;
+        let dep_key = DependencyKey::from(target);
         Ok(dep_key)
     }
 
@@ -421,7 +421,7 @@ sh_binary(
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = CoordinateSet::from(
+        let coordinate_set = TargetSet::from(
             hashset! {"bazel://package1:foo".try_into()?, "bazel://package2:bar".try_into()?},
         );
         let request = ResolutionRequest {
@@ -547,7 +547,7 @@ New contents
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = CoordinateSet::from(hashset! {"bazel://package1:foo".try_into()? });
+        let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()? });
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             coordinate_set,
@@ -692,7 +692,7 @@ def some_macro():
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = CoordinateSet::from(hashset! {"bazel://package1:foo".try_into()?});
+        let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()?});
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             coordinate_set,
@@ -796,7 +796,7 @@ def some_macro():
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = CoordinateSet::from(hashset! {"bazel://package1:foo".try_into()?});
+        let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()?});
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             coordinate_set,
@@ -854,7 +854,7 @@ sh_binary(
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = CoordinateSet::from(hashset! {
+        let coordinate_set = TargetSet::from(hashset! {
             // Note that `//package1` itself is not a package, but
             // `//package1/...` expands to some number of subpackages anyways.
             "bazel://package1/...".try_into()?

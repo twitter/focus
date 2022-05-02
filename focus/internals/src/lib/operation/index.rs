@@ -8,12 +8,12 @@ use focus_util::app::{App, ExitCode};
 use focus_util::paths::assert_focused_repo;
 use tracing::{debug, info};
 
-use crate::coordinate::{Coordinate, CoordinateSet};
+use crate::target::{Target, TargetSet};
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
-use crate::model::layering::{LayerSets, RichLayerSet};
+use crate::model::project::{ProjectSets, RichProjectSet};
 use crate::model::repo::Repo;
 
 #[derive(
@@ -59,21 +59,21 @@ fn dep_key_to_coordinate(dep_key: &DependencyKey) -> String {
 
         DependencyKey::DummyForTesting(inner_dep_key) => {
             panic!(
-                "Cannot convert dummy testing key into coordinate: {:?}",
+                "Cannot convert dummy testing key into target: {:?}",
                 inner_dep_key
             );
         }
     }
 }
 
-fn resolve_coordinates(
+fn resolve_targets(
     app: Arc<App>,
     backend: Backend,
-    coordinates: HashSet<Coordinate>,
+    targets: HashSet<Target>,
 ) -> anyhow::Result<ExitCode> {
-    let dep_keys: HashSet<DependencyKey> = coordinates
+    let dep_keys: HashSet<DependencyKey> = targets
         .iter()
-        .map(|coordinate| DependencyKey::from(coordinate.clone()))
+        .map(|target| DependencyKey::from(target.clone()))
         .collect();
 
     let repo = git2::Repository::open(".").context("opening sparse repo")?;
@@ -105,7 +105,7 @@ fn resolve_coordinates(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let coordinate_set = CoordinateSet::from(coordinates);
+            let coordinate_set = TargetSet::from(targets);
             let num_applied_patterns = repo.sync(&coordinate_set, app, odb.borrow())?;
             println!("Applied patterns: {}", num_applied_patterns);
 
@@ -127,41 +127,41 @@ fn resolve_coordinates(
 pub fn resolve(
     app: Arc<App>,
     backend: Backend,
-    coordinates_or_layers: Vec<String>,
+    targets_or_projects: Vec<String>,
 ) -> anyhow::Result<ExitCode> {
     let sparse_repo = Path::new(".");
     assert_focused_repo(sparse_repo)?;
 
-    let all_layers = LayerSets::new(sparse_repo);
-    let all_layers = all_layers.available_layers()?;
-    let all_layers = RichLayerSet::new(all_layers)?;
-    let coordinates: HashSet<Coordinate> = coordinates_or_layers
+    let all_projects = ProjectSets::new(sparse_repo);
+    let all_projects = all_projects.available_projects()?;
+    let all_projects = RichProjectSet::new(all_projects)?;
+    let targets: HashSet<Target> = targets_or_projects
         .into_iter()
-        .flat_map(|coordinate| match all_layers.get(&coordinate) {
-            Some(layer) => {
-                let coordinates = layer.coordinates();
+        .flat_map(|target| match all_projects.get(&target) {
+            Some(project) => {
+                let targets = project.targets();
                 info!(
-                    num_coordinates = ?coordinates.len(),
-                    layer = ?layer.name(),
-                    "Num expanded coordinates for layer"
+                    num_coordinates = ?targets.len(),
+                    project = ?project.name(),
+                    "Num expanded targets for project"
                 );
-                debug!(?coordinates, layer = ?layer.name(), "Expanded coordinates for layer");
-                coordinates.to_vec()
+                debug!(?targets, project = ?project.name(), "Expanded targets for project");
+                targets.to_vec()
             }
-            None => vec![coordinate],
+            None => vec![target],
         })
-        .map(|coordinate| Coordinate::try_from(coordinate.as_str()))
+        .map(|target| Target::try_from(target.as_str()))
         .collect::<Result<_, _>>()?;
-    resolve_coordinates(app, backend, coordinates)
+    resolve_targets(app, backend, targets)
 }
 
 pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
-    let all_layers = LayerSets::new(&sparse_repo).available_layers()?;
-    let all_coordinates: HashSet<Coordinate> = all_layers
-        .layers()
+    let all_projects = ProjectSets::new(&sparse_repo).available_projects()?;
+    let all_targets: HashSet<Target> = all_projects
+        .projects()
         .iter()
-        .flat_map(|layer| layer.coordinates())
-        .map(|coordinate| Coordinate::try_from(coordinate.as_str()))
+        .flat_map(|project| project.targets())
+        .map(|target| Target::try_from(target.as_str()))
         .collect::<Result<_, _>>()?;
-    resolve_coordinates(app, backend, all_coordinates)
+    resolve_targets(app, backend, all_targets)
 }
