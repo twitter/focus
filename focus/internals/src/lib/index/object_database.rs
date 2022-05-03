@@ -4,7 +4,6 @@ use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 use anyhow::Context;
 use content_addressed_cache::Cache;
-use lazy_static::lazy_static;
 use tracing::{debug, info, warn};
 
 pub use content_addressed_cache::RocksDBCache;
@@ -31,10 +30,8 @@ pub trait ObjectDatabase {
     fn clear(&self) -> anyhow::Result<()>;
 }
 
-lazy_static! {
-    static ref FUNCTION_ID: git2::Oid =
-        git2::Oid::hash_object(git2::ObjectType::Blob, b"odb").unwrap();
-}
+/// Cache key for object database.
+const FUNCTION_ID: &[u8; 2] = b"ob";
 
 impl<T: Cache> ObjectDatabase for T {
     fn get(
@@ -43,7 +40,7 @@ impl<T: Cache> ObjectDatabase for T {
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
         let hash = content_hash_dependency_key(ctx, key)?;
-        let result = match self.get(hash.0, *FUNCTION_ID)? {
+        let result = match self.get(*FUNCTION_ID, hash.0)? {
             Some(content) => serde_json::from_slice(&content[..])
                 .context("deserializing DependencyValue as JSON")?,
             None => None,
@@ -60,7 +57,7 @@ impl<T: Cache> ObjectDatabase for T {
         let hash = content_hash_dependency_key(ctx, key)?;
         debug!(?hash, ?value, "Inserting entry into object database");
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
-        self.put(hash.0, *FUNCTION_ID, &payload[..])?;
+        self.put(*FUNCTION_ID, hash.0, &payload[..])?;
         Ok(())
     }
 
