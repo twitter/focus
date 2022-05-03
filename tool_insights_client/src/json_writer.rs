@@ -1,6 +1,9 @@
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use libc::{S_IFREG, S_IRGRP, S_IROTH, S_IRUSR, S_IWUSR};
 use tempfile::NamedTempFile;
 
 use crate::message::Message;
@@ -40,7 +43,18 @@ impl JsonWriter {
         for message in data {
             let temporary_file = NamedTempFile::new_in(self.write_location.as_path())
                 .context("Failed to create temporary file")?;
+            let temporary_file_path = temporary_file.as_ref().to_path_buf();
             let (file, _) = temporary_file.keep()?;
+            // temporarily files are created with mode 0o100600, that makes the tool insights daemon
+            // fail while trying to process the log because the tool insights daemon is run by
+            // the MDE user. We're making the file readable to all to make sure the logs being
+            // written can be processed by the tool insights daemon.
+            fs::set_permissions(
+                temporary_file_path,
+                fs::Permissions::from_mode(
+                    (S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) as u32,
+                ),
+            )?;
             serde_json::to_writer(file, message).context("Could not write message to file")?;
         }
         Ok(())
@@ -57,6 +71,7 @@ impl Writer for JsonWriter {
 mod tests {
     use super::*;
     use maplit::hashmap;
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn ti_json_writer_writes_to_specified_write_location() -> anyhow::Result<()> {
@@ -70,10 +85,15 @@ mod tests {
         writer.write_data(&[data])?;
 
         let mut entries = std::fs::read_dir(&temp_dir)?;
+        let ti_log = entries.next().unwrap()?.path();
+        assert_eq!(std::fs::read_to_string(ti_log.as_path())?, serialized_data);
+
+        let permissions = ti_log.metadata()?.permissions();
         assert_eq!(
-            std::fs::read_to_string(entries.next().unwrap()?.path())?,
-            serialized_data
+            permissions.mode(),
+            (S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) as u32
         );
+
         assert!(entries.next().is_none());
 
         temp_dir.close()?;
