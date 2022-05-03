@@ -20,6 +20,10 @@ use focus_util::paths::is_relevant_to_build_graph;
 
 use super::DependencyKey;
 
+/// This value is mixed into all content hashes. Update this value when
+/// content-hashing changes in a backward-incompatible way.
+const VERSION: usize = 1;
+
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContentHash(pub(super) git2::Oid);
@@ -122,7 +126,7 @@ pub fn content_hash_dependency_key(
     }
 
     let mut buf = String::new();
-    buf.push_str("DependencyKey");
+    buf.push_str(&format!("DependencyKeyV{VERSION}"));
 
     match key {
         DependencyKey::BazelPackage(
@@ -250,7 +254,7 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<Cont
     }
 
     let mut buf = String::new();
-    buf.push_str("PathBuf(");
+    buf.push_str(&format!("PathBufV{VERSION}("));
     buf.push_str(&get_tree_path_id(ctx.head_tree, path)?.to_string());
     buf.push(')');
 
