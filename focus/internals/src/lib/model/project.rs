@@ -412,7 +412,10 @@ impl ProjectSets {
         let mut projects = self
             .mandatory_projects()
             .context("loading mandatory projects")?;
-        if let Some(adhoc_project_set) = self.adhoc_projects().context("loading ad hoc project set")? {
+        if let Some(adhoc_project_set) = self
+            .adhoc_projects()
+            .context("loading ad hoc project set")?
+        {
             projects.extend(adhoc_project_set);
         }
         if let Some(selected_project_set) = self
