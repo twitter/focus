@@ -381,10 +381,8 @@ pub(in crate::operation) mod integration {
         fn drop(&mut self) {
             self.stop_bazel();
             if self.preserve {
-                match self.preserve_dirs() {
-                    Ok(_) => (),
-                    Err(_) => (),
-                }
+                // Ignore return value.
+                self.preserve_dirs().ok();
             }
         }
     }

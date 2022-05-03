@@ -235,20 +235,15 @@ mod tests {
         Ok((tmp_dir, file_path))
     }
 
-    fn setup_local_sync_cache(
-        name: &str,
-        remote_repo: &str,
-    ) -> (TempDir, Box<dyn CacheSynchronizer>) {
+    fn setup_local_sync_cache(name: &str, remote_repo: &str) -> (TempDir, impl CacheSynchronizer) {
         let tmp_dir = tempdir().unwrap();
         let file_path = tmp_dir.path().join(name);
-        let memocache = Box::new(
-            GitBackedCacheSynchronizer::create(
-                file_path,
-                remote_repo.to_string(),
-                Arc::new(App::new(false).unwrap()),
-            )
-            .unwrap(),
-        );
+        let memocache = GitBackedCacheSynchronizer::create(
+            file_path,
+            remote_repo.to_string(),
+            Arc::new(App::new(false).unwrap()),
+        )
+        .unwrap();
         (tmp_dir, memocache)
     }
 
@@ -267,11 +262,11 @@ mod tests {
         (tmp_dir, memocache)
     }
 
-    fn setup_rocks_db(name: &str) -> (TempDir, Box<dyn Cache>) {
+    fn setup_rocks_db(name: &str) -> (TempDir, impl Cache) {
         let tmp_dir = tempdir().unwrap();
         let file_path = tmp_dir.path().join(name);
-        let cache = RocksDBCache::open(file_path.clone());
-        (tmp_dir, Box::new(cache))
+        let cache = RocksDBCache::open(file_path);
+        (tmp_dir, cache)
     }
 
     fn generate_random_key_values() -> (git2::Oid, Vec<u8>) {
@@ -284,7 +279,7 @@ mod tests {
         (oid.unwrap(), value.to_vec())
     }
 
-    fn populate_demo_hashset(memo_cache: &Box<dyn Cache>, fn_id: Oid) -> HashSet<(Oid, Oid)> {
+    fn populate_demo_hashset(memo_cache: &dyn Cache, fn_id: Oid) -> HashSet<(Oid, Oid)> {
         let mut pairs: HashSet<(Oid, Oid)> = HashSet::new();
         for _x in 1..100 {
             let (a, v) = generate_random_key_values();
@@ -336,19 +331,19 @@ mod tests {
         populate_demo_hashset(&memo_cache_1, keyset_id);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, fn_id);
-        memo_cache_sync_1.share(keyset_id, &commit_1_keys, &*memo_cache_1, None)?;
+        memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None)?;
         memo_cache_sync_2.fetch(keyset_id).unwrap();
 
         //Test overwriting an index (force push+pull)
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, fn_id);
-        memo_cache_sync_1.share(keyset_id, &commit_2_keys, &*memo_cache_1, None)?;
+        memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None)?;
 
         memo_cache_sync_2
-            .get_and_populate(keyset_id, &*memo_cache_2)
+            .get_and_populate(keyset_id, &memo_cache_2)
             .unwrap();
 
-        assert_caches_match(commit_2_keys, &*memo_cache_1, &*memo_cache_2);
-        assert_cache_doesnt_contain(commit_1_keys, &*memo_cache_2);
+        assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
+        assert_cache_doesnt_contain(commit_1_keys, &memo_cache_2);
         Ok(())
     }
 
@@ -366,14 +361,14 @@ mod tests {
         let fn_id = Oid::from_str(FN_ID).unwrap();
         let keyset_id1 = Oid::from_str(FN_ID).unwrap();
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, fn_id);
-        memo_cache_sync_1.share(keyset_id1, &commit_1_keys, &*memo_cache_1, None)?;
+        memo_cache_sync_1.share(keyset_id1, &commit_1_keys, &memo_cache_1, None)?;
 
         let keyset_id2 = Oid::from_str(FN_ID2).unwrap();
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, fn_id);
-        memo_cache_sync_1.share(keyset_id2, &commit_2_keys, &*memo_cache_1, Some(keyset_id1))?;
+        memo_cache_sync_1.share(keyset_id2, &commit_2_keys, &memo_cache_1, Some(keyset_id1))?;
 
         memo_cache_sync_2
-            .get_and_populate(keyset_id2, &*memo_cache_2)
+            .get_and_populate(keyset_id2, &memo_cache_2)
             .unwrap();
 
         let commit = memo_cache_sync_2
@@ -384,7 +379,7 @@ mod tests {
             .unwrap();
         assert!(commit.parent_count() == 1);
 
-        assert_caches_match(commit_2_keys, &*memo_cache_1, &*memo_cache_2);
+        assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
         Ok(())
     }
 
@@ -406,19 +401,19 @@ mod tests {
         populate_demo_hashset(&memo_cache_1, keyset_id);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, fn_id);
-        memo_cache_sync_1.share(keyset_id, &commit_1_keys, &*memo_cache_1, None)?;
+        memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None)?;
         memo_cache_sync_2.fetch(keyset_id).unwrap();
 
         //Test overwriting an index (force push+pull)
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, fn_id);
-        memo_cache_sync_1.share(keyset_id, &commit_2_keys, &*memo_cache_1, None)?;
+        memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None)?;
 
         memo_cache_sync_2
-            .get_and_populate(keyset_id, &*memo_cache_2)
+            .get_and_populate(keyset_id, &memo_cache_2)
             .unwrap();
 
-        assert_cache_doesnt_contain(commit_1_keys, &*memo_cache_2);
-        assert_caches_match(commit_2_keys, &*memo_cache_1, &*memo_cache_2);
+        assert_cache_doesnt_contain(commit_1_keys, &memo_cache_2);
+        assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
         Ok(())
     }
 }
