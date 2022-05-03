@@ -1808,6 +1808,7 @@ name = "tool-insights-client"
 version = "0.4.1"
 dependencies = [
  "anyhow",
+ "libc",
  "maplit",
  "serde",
  "serde_json",
