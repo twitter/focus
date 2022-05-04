@@ -1,0 +1,13 @@
+---
+source: focus/internals/src/lib/operation/sync.rs
+expression: "std::fs::read_to_string(&profile_path)?"
+---
+/*
+!/*/
+/mandatory_z/
+/3rdparty/
+/focus/
+/pants-internal/
+/pants-support/
+/tools/
+

@@ -8,13 +8,13 @@ use focus_util::app::{App, ExitCode};
 use focus_util::paths::assert_focused_repo;
 use tracing::{debug, info};
 
-use crate::target::{Target, TargetSet};
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
-use crate::model::project::{ProjectSets, RichProjectSet};
 use crate::model::repo::Repo;
+use crate::model::selection::{Disposition, Operation, Selections};
+use crate::target::{Target, TargetSet};
 
 #[derive(
     Clone,
@@ -127,41 +127,28 @@ fn resolve_targets(
 pub fn resolve(
     app: Arc<App>,
     backend: Backend,
-    targets_or_projects: Vec<String>,
+    projects_and_targets: Vec<String>,
 ) -> anyhow::Result<ExitCode> {
     let sparse_repo = Path::new(".");
     assert_focused_repo(sparse_repo)?;
-
-    let all_projects = ProjectSets::new(sparse_repo);
-    let all_projects = all_projects.available_projects()?;
-    let all_projects = RichProjectSet::new(all_projects)?;
-    let targets: HashSet<Target> = targets_or_projects
-        .into_iter()
-        .flat_map(|target| match all_projects.get(&target) {
-            Some(project) => {
-                let targets = project.targets();
-                info!(
-                    num_coordinates = ?targets.len(),
-                    project = ?project.name(),
-                    "Num expanded targets for project"
-                );
-                debug!(?targets, project = ?project.name(), "Expanded targets for project");
-                targets.to_vec()
-            }
-            None => vec![target],
-        })
-        .map(|target| Target::try_from(target.as_str()))
-        .collect::<Result<_, _>>()?;
+    let repo = Repo::open(sparse_repo, app.clone())?;
+    let selection = {
+        let mut selections = Selections::try_from(&repo)?;
+        selections.mutate(Disposition::Add, &projects_and_targets)?;
+        selections.computed_selection()
+    }?;
+    let targets = TargetSet::try_from(&selection)?;
     resolve_targets(app, backend, targets)
 }
 
 pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
-    let all_projects = ProjectSets::new(&sparse_repo).available_projects()?;
-    let all_targets: HashSet<Target> = all_projects
-        .projects()
-        .iter()
-        .flat_map(|project| project.targets())
-        .map(|target| Target::try_from(target.as_str()))
-        .collect::<Result<_, _>>()?;
-    resolve_targets(app, backend, all_targets)
+    let repo = Repo::open(&sparse_repo, app.clone())?;
+    let selections = Selections::try_from(&repo)?;
+    let targets = {
+        let mut targets = TargetSet::try_from(&selections.mandatory_projects)?;
+        targets.extend(TargetSet::try_from(&selections.optional_projects)?);
+        targets
+    };
+
+    resolve_targets(app, backend, targets)
 }

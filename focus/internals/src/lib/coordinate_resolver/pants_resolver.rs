@@ -52,8 +52,7 @@ impl Resolver for PantsResolver {
 
         let mut directories = BTreeSet::<PathBuf>::new();
         let addresses: Vec<String> = request
-            .coordinate_set
-            .underlying()
+            .targets
             .iter()
             .filter_map(|target| {
                 // TODO: Consider parameterizing depth

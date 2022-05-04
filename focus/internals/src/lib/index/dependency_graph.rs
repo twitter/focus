@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use crate::target::{Target, Label, TargetName};
 use crate::coordinate_resolver::ResolutionResult;
+use crate::target::{Label, Target, TargetName};
 
 use super::content_hash::HashContext;
 use super::{ContentHash, ObjectDatabase};
@@ -324,12 +324,12 @@ mod tests {
 
     use maplit::hashset;
 
-    use crate::target::{Target, TargetSet};
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
+    use crate::target::{Target, TargetSet};
     use focus_testing::init_logging;
-    use focus_testing::scratch_git_repo::ScratchGitRepo;
+    use focus_testing::ScratchGitRepo;
     use focus_util::app::App;
 
     use super::*;
@@ -426,7 +426,7 @@ sh_binary(
         );
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
-            coordinate_set,
+            targets: coordinate_set,
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
@@ -550,7 +550,7 @@ New contents
         let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()? });
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
-            coordinate_set,
+            targets: coordinate_set,
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
@@ -695,7 +695,7 @@ def some_macro():
         let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()?});
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
-            coordinate_set,
+            targets: coordinate_set,
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
@@ -799,7 +799,7 @@ def some_macro():
         let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()?});
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
-            coordinate_set,
+            targets: coordinate_set,
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
@@ -861,7 +861,7 @@ sh_binary(
         });
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
-            coordinate_set,
+            targets: coordinate_set,
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;

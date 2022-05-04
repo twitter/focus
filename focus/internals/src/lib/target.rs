@@ -6,69 +6,7 @@ use std::{collections::HashSet, convert::TryFrom, fmt::Display};
 
 use thiserror::Error;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct TargetSet {
-    underlying: HashSet<Target>,
-    uniform: bool,
-}
-
-impl TargetSet {
-    pub fn underlying(&self) -> &HashSet<Target> {
-        &self.underlying
-    }
-
-    pub fn is_uniform(&self) -> bool {
-        self.uniform
-    }
-
-    pub fn determine_uniformity(set: &HashSet<Target>) -> bool {
-        let mut count_by_type = [0_usize; 3];
-
-        for target in set {
-            match target {
-                Target::Bazel(_) => count_by_type[0] += 1,
-                Target::Directory(_) => count_by_type[1] += 1,
-                Target::Pants(_) => count_by_type[2] += 1,
-            }
-        }
-
-        let distinct_types_in_counts = count_by_type.into_iter().filter(|count| *count > 0).count();
-        distinct_types_in_counts < 2
-    }
-}
-
-impl From<HashSet<Target>> for TargetSet {
-    fn from(underlying: HashSet<Target>) -> Self {
-        let uniform = Self::determine_uniformity(&underlying);
-        Self {
-            underlying,
-            uniform,
-        }
-    }
-}
-
-impl TryFrom<&[String]> for TargetSet {
-    type Error = TargetError;
-
-    fn try_from(targets: &[String]) -> Result<Self, Self::Error> {
-        let mut underlying = HashSet::<Target>::new();
-
-        for target in targets {
-            match Target::try_from(target.as_str()) {
-                Ok(target) => {
-                    underlying.insert(target);
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        let uniform = Self::determine_uniformity(&underlying);
-        Ok(Self {
-            underlying,
-            uniform,
-        })
-    }
-}
+pub type TargetSet = HashSet<Target>;
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone)]
 pub enum Target {
@@ -123,6 +61,16 @@ impl TryFrom<&str> for Target {
                 }
             }
             None => Err(TargetError::NoSchemeProvidedError),
+        }
+    }
+}
+
+impl From<&Target> for String {
+    fn from(val: &Target) -> Self {
+        match val {
+            Target::Bazel(spec) => format!("bazel:{}", spec),
+            Target::Directory(spec) => format!("directory:{}", spec),
+            Target::Pants(spec) => format!("pants:{}", spec),
         }
     }
 }
@@ -302,48 +250,6 @@ mod tests {
         assert_eq!(
             Target::try_from("bazel://").unwrap_err(),
             TargetError::LabelError(LabelParseError::EmptyLabel),
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    pub fn sets_from_strings_of_coordinates() -> Result<()> {
-        let targets = vec![String::from("bazel://a:b"), String::from("bazel://x/y:z")];
-
-        let set = TargetSet::try_from(targets.as_slice());
-        let set = set.unwrap();
-        assert_eq!(set.underlying().len(), 2);
-        assert!(set.is_uniform());
-        Ok(())
-    }
-
-    // TODO: Enable this again when there are more target types.
-    // #[cfg(disabled_test)]
-    #[test]
-    pub fn non_uniform_sets() -> Result<()> {
-        // Sets containing different target types are non-uniform
-        assert!(!TargetSet::try_from(&[
-            String::from("bazel://a:b"),
-            String::from("directory:/foo"),
-        ] as &[String])?
-        .is_uniform());
-
-        // Empty sets are uniform
-        assert!(TargetSet::try_from(&[] as &[String])?.is_uniform());
-
-        Ok(())
-    }
-
-    #[test]
-    pub fn failed_conversion_of_sets() -> Result<()> {
-        assert_eq!(
-            TargetSet::try_from(&[String::from("whatever")] as &[String]).unwrap_err(),
-            TargetError::NoSchemeProvidedError
-        );
-        assert_eq!(
-            TargetSet::try_from(&[String::from("foo:bar")] as &[String]).unwrap_err(),
-            TargetError::UnsupportedScheme("foo".to_owned())
         );
 
         Ok(())
