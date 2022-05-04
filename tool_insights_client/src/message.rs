@@ -6,11 +6,16 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::client::Context;
-use crate::util::{duration_in_seconds, get_cwd, merge_maps, seconds_since_time};
+use crate::util::{
+    decode_zipkin_compatible_id, duration_in_seconds, encode_zipkin_compatible_id, get_cwd,
+    get_zipkin_compatible_id, merge_maps, seconds_since_time,
+};
 
 const SCHEMA_VERSION: u32 = 1;
 const TOOL_INSIGHTS_NESTING_LEVEL_ENV_VAR: &str = "TOOL_INSIGHTS_NESTING_LEVEL";
 const TOOL_INSIGHTS_SESSION_ID_ENV_VAR: &str = "TOOL_INSIGHTS_SESSION_ID";
+const GITSTATS_TRACE_ID: &str = "X_B3_TRACEID";
+const GITSTATS_SPAN_ID: &str = "X_B3_SPANID";
 
 // Even though there is a provision to have more than one message here, I'm only
 // seeing a single message for every record so that's how we will use it.
@@ -87,6 +92,7 @@ impl CoreData {
     fn new(ti_context: &Context, map: Option<&HashMap<String, String>>) -> CoreData {
         let final_map: Option<HashMap<String, String>> =
             merge_maps(map.cloned(), ti_context.get_custom_map().cloned());
+
         let core_data = CoreData {
             tool_name: ti_context.get_tool_name().to_string(),
             tool_version: ti_context.get_tool_version().to_string(),
@@ -138,6 +144,39 @@ impl ToString for MessageKind {
 pub fn get_session_id() -> String {
     // return value from environment variable, if set, otherwise a new uuid
     env::var(TOOL_INSIGHTS_SESSION_ID_ENV_VAR).unwrap_or_else(|_| Uuid::new_v4().to_string())
+}
+
+pub fn get_trace_id() -> u64 {
+    // If the trace id env var is set, use that value, otherwise generate new
+    match env::var(GITSTATS_TRACE_ID) {
+        Ok(id_str) => decode_zipkin_compatible_id(id_str),
+        Err(_) => get_zipkin_compatible_id(),
+    }
+}
+
+pub fn get_span_id(trace_id: u64) -> u64 {
+    // If the span id env var is set, then generate a new span id, otherwise use trace id
+    match env::var(GITSTATS_SPAN_ID) {
+        Ok(_) => {
+            // span id is set, create a new span id for this process
+            get_zipkin_compatible_id()
+        }
+        Err(_) => {
+            //span id is not set, use trace id
+            trace_id
+        }
+    }
+}
+
+pub fn set_trace_env_vars(trace_id: u64, span_id: u64) {
+    env::set_var(
+        GITSTATS_TRACE_ID,
+        encode_zipkin_compatible_id(trace_id, false),
+    );
+    env::set_var(
+        GITSTATS_SPAN_ID,
+        encode_zipkin_compatible_id(span_id, false),
+    );
 }
 
 pub fn get_nesting_level() -> u32 {

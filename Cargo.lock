@@ -1817,6 +1817,7 @@ dependencies = [
  "anyhow",
  "libc",
  "maplit",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "shellexpand",
