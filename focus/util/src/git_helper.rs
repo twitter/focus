@@ -95,16 +95,20 @@ pub fn fetch_ref<P: AsRef<Path>>(
     let description = format!("Fetching {} from {}", &refspec, &remote);
     let (mut cmd, scmd) = git_command(description, app)?;
     cmd.current_dir(repo_path)
-        .arg("fetch")
-        .arg(remote)
-        .arg(refspec);
-
+            .arg("fetch")
+            .arg(remote)
+            .arg(refspec);
+    
     if let Some(d) = depth {
         cmd.arg(format!("--depth={}", d));
     }
 
-    scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr, "git fetch refspec")
-        .map(|_| ())
+    scmd.ensure_success_or_log(
+        &mut cmd,
+        SandboxCommandOutput::Stderr,
+        "git fetch refspec",
+    )
+    .map(|_| ())
 }
 
 pub fn push_ref<P: AsRef<Path>>(
@@ -125,6 +129,7 @@ pub fn push_ref<P: AsRef<Path>>(
     )
     .map(|_| ())
 }
+
 
 pub fn write_config<P: AsRef<Path>>(
     repo_path: P,

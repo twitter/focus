@@ -56,8 +56,7 @@ impl Resolver for BazelResolver {
         let mut directories = BTreeSet::<PathBuf>::new();
         let mut package_deps = BTreeMap::new();
         let labels: HashSet<&Label> = request
-            .coordinate_set
-            .underlying()
+            .targets
             .iter()
             .filter_map(|target| {
                 // TODO: Consider parameterizing depth

@@ -25,7 +25,7 @@ pub(crate) use self::{
 #[derive(Clone, Debug)]
 pub struct ResolutionRequest {
     pub repo: PathBuf,
-    pub coordinate_set: TargetSet,
+    pub targets: TargetSet,
 }
 
 /// Result of resolving a set of targets; namely a set of paths.
@@ -127,7 +127,7 @@ impl Resolver for RoutingResolver {
             let mut bazel_coordinates = HashSet::new();
             let mut directory_coordinates = HashSet::new();
             let mut pants_coordinates = HashSet::new();
-            for target in request.coordinate_set.underlying().iter().cloned() {
+            for target in request.targets.iter().cloned() {
                 match target {
                     target @ Target::Bazel(_) => {
                         bazel_coordinates.insert(target);
@@ -142,15 +142,15 @@ impl Resolver for RoutingResolver {
             }
 
             let bazel_subrequest = ResolutionRequest {
-                coordinate_set: bazel_coordinates.into(),
+                targets: bazel_coordinates.into(),
                 ..request.clone()
             };
             let directory_subrequest = ResolutionRequest {
-                coordinate_set: directory_coordinates.into(),
+                targets: directory_coordinates.into(),
                 ..request.clone()
             };
             let pants_subrequest = ResolutionRequest {
-                coordinate_set: pants_coordinates.into(),
+                targets: pants_coordinates.into(),
                 ..request.clone()
             };
             vec![bazel_subrequest, directory_subrequest, pants_subrequest]
@@ -161,8 +161,7 @@ impl Resolver for RoutingResolver {
             .map(|subrequest| {
                 let app_clone = app.clone();
 
-                debug_assert!(subrequest.coordinate_set.is_uniform());
-                match subrequest.coordinate_set.underlying().iter().next() {
+                match subrequest.targets.iter().next() {
                     Some(Target::Bazel(_)) => {
                         self.bazel_resolver
                             .resolve(subrequest, cache_options, app_clone)
