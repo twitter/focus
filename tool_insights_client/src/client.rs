@@ -38,11 +38,13 @@ use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::SystemTime;
 
+use crate::{get_span_id, get_trace_id, set_trace_env_vars};
 use anyhow::Result;
 use tracing::error;
 
 use crate::json_writer::JsonWriter;
 use crate::message::{Message, MessageKind};
+use crate::util::encode_zipkin_compatible_id;
 use crate::writer::Writer;
 
 #[derive(Clone)]
@@ -184,17 +186,34 @@ pub struct Context {
     start_time: SystemTime,
     custom_map: Option<HashMap<String, String>>,
     exit_code: Option<i32>,
+    span_id: u64,
+    trace_id: u64,
 }
 
 impl Context {
     fn new(tool_name: String, tool_version: String, start_time: SystemTime) -> Context {
+        let mut custom_map: HashMap<String, String> = HashMap::new();
+        let trace_id = get_trace_id();
+        let span_id = get_span_id(trace_id);
+        custom_map.insert(
+            "trace_id".to_string(),
+            encode_zipkin_compatible_id(trace_id, true),
+        );
+        custom_map.insert(
+            "span_id".to_string(),
+            encode_zipkin_compatible_id(span_id, true),
+        );
+        set_trace_env_vars(trace_id, span_id);
+
         Context {
             tool_name,
             tool_version,
             tool_feature_name: None,
             start_time,
-            custom_map: None,
+            custom_map: Some(custom_map),
             exit_code: None,
+            span_id,
+            trace_id,
         }
     }
 
@@ -242,5 +261,13 @@ impl Context {
 
     pub fn get_start_time(&self) -> SystemTime {
         self.start_time
+    }
+
+    pub fn get_trace_id(&self) -> u64 {
+        self.trace_id
+    }
+
+    pub fn get_span_id(&self) -> u64 {
+        self.span_id
     }
 }
