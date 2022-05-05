@@ -270,53 +270,7 @@ fn compute_and_store_initial_selection(
     targets: Vec<String>,
 ) -> Result<TargetSet> {
     let selections = Selections::try_from(repo)?;
-    // let working_tree_layers = ProjectSets::new(working_tree_path);
-
-
-    // let mut project_set = working_tree_layers
-    //     .mandatory_projects()
-    //     .context("Failed to resolve mandatory layers")?;
-
-    // let adhoc_set = ProjectSet::new(vec![Project{
-    //     "adhoc",
-    //     "Ad-hoc project",
-    //     false,
-    //     targets,
-    // )]);
-
-    // let layers_from_outlining_tree = named_projects_from_repo(outlining_tree_path, &projects)
-    //     .context("resolving user-selected layers")?;
-    // project_set.extend(adhoc_set.clone());
-    // project_set.extend(layers_from_outlining_tree.clone());
-    // project_set
-    //     .validate()
-    //     .context("Failed to merged project set")?;
-    // let targets: Vec<String> = project_set
-    //     .projects()
-    //     .iter()
-    //     .flat_map(|project| project.targets())
-    //     .cloned()
-    //     .collect();
-
-    // // Write the ad-hoc set into the working tree
-    // info!("Writing ad-hoc project set");
-    // working_tree_layers.storae_adhoc_project_set(&adhoc_set)?;
-
-    // info!("Writing selected project set");
-    // let selected_project_names: Vec<String> = layers_from_outlining_tree
-    //     .projects()
-    //     .iter()
-    //     .map(|project| project.name().to_owned())
-    //     .collect();
-    // working_tree_layers
-    //     .push_as_selection(selected_project_names)
-    //     .context("Failed to write the selected project set to the sparse repo")?;
-
-    
-    let coordinate_set =
-        TargetSet::try_from(targets.as_slice()).context("Failed to parse targets")?;
-
-    Ok(coordinate_set)
+    Ok(TargetSet::try_from(targets.as_slice()).context("Failed to parse targets")?)
 }
 
 fn clone_shallow(
