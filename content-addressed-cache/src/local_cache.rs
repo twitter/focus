@@ -46,7 +46,7 @@ impl ToString for CompositeKey {
 const KIND_BYTE_LENGTH: usize = 2;
 const ARG_BYTE_LENGTH: usize = 20;
 pub const DELIMITER: &str = ":";
-const COMPOSITE_KEY_LENGTH: usize =  KIND_BYTE_LENGTH + ARG_BYTE_LENGTH;
+const COMPOSITE_KEY_LENGTH: usize = KIND_BYTE_LENGTH + ARG_BYTE_LENGTH;
 const HEX_ENCODED_COMPOSITE_KEY_LENGTH: usize =
     (KIND_BYTE_LENGTH * 2) + DELIMITER.len() + (ARG_BYTE_LENGTH * 2);
 type CompositeKeyBytes = [u8; COMPOSITE_KEY_LENGTH];
@@ -54,18 +54,15 @@ type CompositeKeyBytes = [u8; COMPOSITE_KEY_LENGTH];
 impl CompositeKey {
     pub fn to_bytes(&self) -> CompositeKeyBytes {
         let mut c: [u8; COMPOSITE_KEY_LENGTH] = [0; COMPOSITE_KEY_LENGTH];
-        c[.. KIND_BYTE_LENGTH].clone_from_slice(&self.kind);
-        c[KIND_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]
-            .clone_from_slice(self.argument.as_bytes());
+        c[..KIND_BYTE_LENGTH].clone_from_slice(&self.kind);
+        c[KIND_BYTE_LENGTH..COMPOSITE_KEY_LENGTH].clone_from_slice(self.argument.as_bytes());
         c
     }
 
     pub fn from_bytes(s: &[u8; COMPOSITE_KEY_LENGTH]) -> Result<Self, ParseCompositeKeyError> {
         let mut kind = [0; 2];
-        kind.clone_from_slice(&s[.. KIND_BYTE_LENGTH]);
-        let argument = match ArgKey::from_bytes(
-            &s[KIND_BYTE_LENGTH..COMPOSITE_KEY_LENGTH],
-        ) {
+        kind.clone_from_slice(&s[..KIND_BYTE_LENGTH]);
+        let argument = match ArgKey::from_bytes(&s[KIND_BYTE_LENGTH..COMPOSITE_KEY_LENGTH]) {
             Ok(oid) => oid,
             Err(_) => return Err(ParseCompositeKeyError::MissingArgument),
         };
@@ -267,8 +264,10 @@ mod tests {
     #[test]
     fn test_compositekey_from_str() {
         assert_eq!(
-            CompositeKey::from_str(format!("{}{}{}", hex::encode(kind_id()), DELIMITER, HEX_ARG).as_str())
-                .unwrap(),
+            CompositeKey::from_str(
+                format!("{}{}{}", hex::encode(kind_id()), DELIMITER, HEX_ARG).as_str()
+            )
+            .unwrap(),
             CompositeKey {
                 argument: ArgKey::from_str(HEX_ARG).unwrap(),
                 kind: kind_id(),

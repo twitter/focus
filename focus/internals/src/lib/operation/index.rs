@@ -8,13 +8,13 @@ use focus_util::app::{App, ExitCode};
 use focus_util::paths::assert_focused_repo;
 use tracing::{debug, info};
 
-use crate::target::{Target, TargetSet};
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use crate::model::project::{ProjectSets, RichProjectSet};
 use crate::model::repo::Repo;
+use crate::target::{Target, TargetSet};
 
 #[derive(
     Clone,

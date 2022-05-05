@@ -1,9 +1,9 @@
-use crate::target::TargetSet;
 use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::project::Project;
 use crate::model::project::ProjectSets;
 use crate::model::repo::Repo;
 use crate::operation::util::perform;
+use crate::target::TargetSet;
 use content_addressed_cache::RocksDBCache;
 use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;
@@ -54,10 +54,9 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
     let ti_client = app_for_ti_client.tool_insights_client();
-    ti_client.get_context().add_to_custom_map(
-        "coordinates_and_layers_count",
-        targets.len().to_string(),
-    );
+    ti_client
+        .get_context()
+        .add_to_custom_map("coordinates_and_layers_count", targets.len().to_string());
 
     let coordinate_set =
         TargetSet::try_from(targets.as_ref()).context("constructing target set")?;

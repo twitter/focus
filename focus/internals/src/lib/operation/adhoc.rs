@@ -37,12 +37,7 @@ impl Adhoc {
             .context("Visitor function failed while mutating targets")?;
 
         if mutated_coordinates != targets {
-            let project = Project::new(
-                "adhoc",
-                "Ad-hoc target stack",
-                false,
-                mutated_coordinates,
-            );
+            let project = Project::new("adhoc", "Ad-hoc target stack", false, mutated_coordinates);
             let updated_set = ProjectSet::new(vec![project]);
             info!("Saving ad-hoc target stack");
             sets.storae_adhoc_project_set(&updated_set)
@@ -124,10 +119,7 @@ pub fn remove(repo: PathBuf, names: Vec<String>) -> Result<bool> {
             if let Some(index) = coordinate_index.get(name) {
                 targets.remove(*index);
             } else {
-                warn!(
-                    ?name,
-                    "Skipped target since it was missing from the stack",
-                );
+                warn!(?name, "Skipped target since it was missing from the stack",);
             }
         }
         Ok(())
