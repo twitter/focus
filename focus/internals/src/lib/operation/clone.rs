@@ -1,18 +1,16 @@
 use crate::{
-    target::TargetSet,
     index::testing::HashMapOdb,
     model::{
         project::{Project, ProjectSet, ProjectSets, RichProjectSet},
         repo::Repo,
     },
+    target::TargetSet,
     tracker::Tracker,
 };
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
 use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
 use git2::Repository;
-use tracing::{debug, error, info, info_span, warn};
-use url::Url;
 use std::{
     ffi::OsString,
     fs::File,
@@ -20,6 +18,8 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use tracing::{debug, error, info, info_span, warn};
+use url::Url;
 
 #[derive(Debug)]
 pub enum Origin {
@@ -248,7 +248,10 @@ fn set_up_sparse_repo(
     Ok(())
 }
 
-pub(crate) fn named_projects_from_repo(repo: &Path, project_names: &[String]) -> Result<ProjectSet> {
+pub(crate) fn named_projects_from_repo(
+    repo: &Path,
+    project_names: &[String],
+) -> Result<ProjectSet> {
     let project_sets = ProjectSets::new(repo);
     let rich_layer_set = RichProjectSet::new(
         project_sets
@@ -291,7 +294,9 @@ fn compute_and_store_initial_selection(
         .context("resolving user-selected layers")?;
     project_set.extend(adhoc_set.clone());
     project_set.extend(layers_from_outlining_tree.clone());
-    project_set.validate().context("Failed to merged project set")?;
+    project_set
+        .validate()
+        .context("Failed to merged project set")?;
     let targets: Vec<String> = project_set
         .projects()
         .iter()

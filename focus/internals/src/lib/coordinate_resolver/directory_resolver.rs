@@ -42,10 +42,7 @@ impl Resolver for DirectoryResolver {
                         path: directory.into(),
                     },
                 ),
-                _ => unreachable!(
-                    "Bad target type (expected directory): {:?}",
-                    &target
-                ),
+                _ => unreachable!("Bad target type (expected directory): {:?}", &target),
             })
             .collect();
 

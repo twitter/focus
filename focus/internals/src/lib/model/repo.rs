@@ -8,7 +8,6 @@ use std::{
 };
 
 use crate::{
-    target::TargetSet,
     coordinate_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
     },
@@ -17,11 +16,12 @@ use crate::{
         HashContext, ObjectDatabase, PathsToMaterializeResult,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
+    target::TargetSet,
 };
 
 use super::{
-    project::ProjectSets,
     outlining::{PatternSet, PatternSetWriter, BUILD_FILE_PATTERNS, SOURCE_BASELINE_PATTERNS},
+    project::ProjectSets,
 };
 
 use anyhow::{bail, Context, Result};

@@ -6,8 +6,8 @@ mod pants_resolver;
 use focus_util::app::App;
 
 use crate::{
-    target::{Target, TargetSet},
     index::{DependencyKey, DependencyValue},
+    target::{Target, TargetSet},
 };
 use anyhow::{Context, Result};
 use std::{

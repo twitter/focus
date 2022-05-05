@@ -323,10 +323,9 @@ mod tests {
     #[test]
     pub fn non_uniform_sets() -> Result<()> {
         // Sets containing different target types are non-uniform
-        assert!(!TargetSet::try_from(&[
-            String::from("bazel://a:b"),
-            String::from("directory:/foo"),
-        ] as &[String])?
+        assert!(!TargetSet::try_from(
+            &[String::from("bazel://a:b"), String::from("directory:/foo"),] as &[String]
+        )?
         .is_uniform());
 
         // Empty sets are uniform

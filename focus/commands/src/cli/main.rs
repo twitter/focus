@@ -22,12 +22,12 @@ use focus_util::{
 };
 
 use focus_internals::{
-    target::Target,
     model::project::ProjectSets,
     operation::{
         self,
         maintenance::{self, ScheduleOpts},
     },
+    target::Target,
     tracker::Tracker,
 };
 use strum::VariantNames;
@@ -569,10 +569,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 .partition(|item| Target::try_from(item.as_str()).is_ok());
 
             // Add targets length to TI custom map.
-            ti_client.get_context().add_to_custom_map(
-                "targets_and_projects_count",
-                targets.len().to_string(),
-            );
+            ti_client
+                .get_context()
+                .add_to_custom_map("targets_and_projects_count", targets.len().to_string());
 
             operation::clone::run(
                 origin,
