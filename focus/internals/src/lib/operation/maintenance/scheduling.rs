@@ -88,12 +88,25 @@ impl From<ProgramArguments> for PlistValue {
     }
 }
 
+// TODO: this is both a serializable object for outputting a .plist and also
+// used as an input, hence the `every_n_minutes` field that is *not* convertible
+// into a field in a plist. Separate these two concepts so they don't overlap
+// (i.e. input/options struct and data model object)
 #[derive(Debug, Clone, Default)]
 pub struct CalendarInterval {
+    /// Day of month (1-31)
     pub day: Option<u32>,
+    /// Hour of day (0-23)
     pub hour: Option<u32>,
+    /// Minute of hour (0-59)
     pub minute: Option<u32>,
+    /// Weekday 0 and 7 are both Sunday
     pub weekday: Option<u32>,
+    /// When used with Hourly period, will create intervals every
+    /// N minutes, with an offset given by minute. This logic
+    /// isn't terribly sophisticated, so don't try to do
+    /// anything too fancy with it.
+    pub every_n_minutes: Option<u32>,
 }
 
 #[allow(dead_code)]
@@ -104,7 +117,33 @@ fn random_minute() -> u32 {
     rand::random::<u32>() % 60
 }
 
+fn random_offset() -> u32 {
+    rand::random::<u32>() % 10
+}
+
 impl CalendarInterval {
+    fn every_n_minute_interval(n: u32, offset: u32) -> Vec<u32> {
+        assert!(n > 0, "{n} was expected to be > 0");
+        assert!(offset < 10, "offset {offset} must be <10");
+
+        (0..60)
+            .into_iter()
+            .step_by(n.try_into().unwrap())
+            .map(|i| i + offset)
+            .take_while(|i| *i < 60)
+            .collect()
+    }
+
+    fn every_n_minutes(n: u32, offset: u32) -> Vec<CalendarInterval> {
+        Self::every_n_minute_interval(n, offset)
+            .into_iter()
+            .map(|min| CalendarInterval {
+                minute: Some(min),
+                ..Default::default()
+            })
+            .collect()
+    }
+
     fn daily(minute: u32, hour: u32) -> Vec<CalendarInterval> {
         (0..7)
             .into_iter()
@@ -142,13 +181,46 @@ impl CalendarInterval {
         defaults: CalendarInterval,
     ) -> Vec<CalendarInterval> {
         match tp {
-            TimePeriod::Hourly => Self::hourly(defaults.minute.unwrap_or_else(random_minute)),
+            TimePeriod::Hourly => match defaults {
+                CalendarInterval {
+                    day: _,
+                    hour: _,
+                    minute: Some(offset),
+                    weekday: _,
+                    every_n_minutes: Some(n),
+                } => Self::every_n_minutes(n, offset),
+
+                CalendarInterval {
+                    day: _,
+                    hour: _,
+                    minute: None,
+                    weekday: _,
+                    every_n_minutes: Some(n),
+                } => Self::every_n_minutes(n, random_offset()),
+
+                CalendarInterval {
+                    day: _,
+                    hour: _,
+                    minute: Some(min),
+                    weekday: _,
+                    every_n_minutes: None,
+                } => Self::hourly(min),
+
+                CalendarInterval {
+                    day: _,
+                    hour: _,
+                    minute: None,
+                    weekday: _,
+                    every_n_minutes: None,
+                } => Self::hourly(random_minute()),
+            },
             TimePeriod::Daily => {
                 let CalendarInterval {
                     day: _,
                     hour,
                     minute,
                     weekday: _,
+                    every_n_minutes: _,
                 } = defaults;
                 Self::daily(
                     minute.unwrap_or_else(random_minute),
@@ -161,6 +233,7 @@ impl CalendarInterval {
                     hour,
                     minute,
                     weekday,
+                    every_n_minutes: _,
                 } = defaults;
                 Self::weekly(
                     minute.unwrap_or_else(random_minute),
@@ -185,6 +258,7 @@ impl From<&CalendarInterval> for PlistValue {
             hour,
             minute,
             weekday,
+            every_n_minutes: _,
         } = t;
 
         let mut dict = PlistDictionary::new();
