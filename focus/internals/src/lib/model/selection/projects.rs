@@ -20,12 +20,21 @@ pub struct Projects {
 impl Display for Projects {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let sorted_projects = BTreeSet::from_iter(self.underlying.values());
+        let longest_project_name = sorted_projects
+            .iter()
+            .fold(0_usize, |highest, &project| project.name.len().max(highest));
         debug!(?self, ?sorted_projects, "Display");
         for project in sorted_projects {
+            let mut padded_project_name = String::from(&project.name);
+            padded_project_name.extend(
+                " ".chars()
+                    .cycle()
+                    .take(longest_project_name - project.name.len()),
+            );
             writeln!(
                 f,
-                "{:<48} {} ({} targets)",
-                project.name,
+                "{}   {} ({} targets)",
+                padded_project_name,
                 project.description,
                 project.targets.len()
             )?;

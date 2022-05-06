@@ -63,14 +63,25 @@ impl Display for Selection {
                     Some(project.to_owned())
                 }
             }));
+
         if sorted_projects.is_empty() {
             writeln!(f, "None selected.")?;
         } else {
+            let longest_project_name = sorted_projects
+                .iter()
+                .fold(0_usize, |highest, project| project.name.len().max(highest));
             for project in sorted_projects.iter() {
+                let mut padded_project_name = String::from(&project.name);
+                padded_project_name.extend(
+                    " ".chars()
+                        .cycle()
+                        .take(longest_project_name - project.name.len()),
+                );
+
                 writeln!(
                     f,
-                    "{:<48} {} ({} targets)",
-                    project.name,
+                    "{}   {} ({} targets)",
+                    padded_project_name,
                     project.description,
                     project.targets.len()
                 )?;
