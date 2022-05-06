@@ -6,3 +6,4 @@ pub mod operation;
 pub mod target;
 pub mod target_resolver;
 pub mod tracker;
+pub mod hashing;
