@@ -25,7 +25,7 @@ pub(crate) use self::{
 #[derive(Clone, Debug)]
 pub struct ResolutionRequest {
     pub repo: PathBuf,
-    pub targets: TargetSet,
+    pub coordinate_set: TargetSet,
 }
 
 /// Result of resolving a set of targets; namely a set of paths.
@@ -124,33 +124,33 @@ impl Resolver for RoutingResolver {
         use rayon::prelude::*;
 
         let subrequests = {
-            let mut bazel_targets = HashSet::new();
-            let mut directory_targets = HashSet::new();
-            let mut pants_targets = HashSet::new();
-            for target in request.targets.iter().cloned() {
+            let mut bazel_coordinates = HashSet::new();
+            let mut directory_coordinates = HashSet::new();
+            let mut pants_coordinates = HashSet::new();
+            for target in request.coordinate_set.underlying().iter().cloned() {
                 match target {
                     target @ Target::Bazel(_) => {
-                        bazel_targets.insert(target);
+                        bazel_coordinates.insert(target);
                     }
                     target @ Target::Directory(_) => {
-                        directory_targets.insert(target);
+                        directory_coordinates.insert(target);
                     }
                     target @ Target::Pants(_) => {
-                        pants_targets.insert(target);
+                        pants_coordinates.insert(target);
                     }
                 }
             }
 
             let bazel_subrequest = ResolutionRequest {
-                targets: bazel_targets,
+                coordinate_set: bazel_coordinates.into(),
                 ..request.clone()
             };
             let directory_subrequest = ResolutionRequest {
-                targets: directory_targets,
+                coordinate_set: directory_coordinates.into(),
                 ..request.clone()
             };
             let pants_subrequest = ResolutionRequest {
-                targets: pants_targets,
+                coordinate_set: pants_coordinates.into(),
                 ..request.clone()
             };
             vec![bazel_subrequest, directory_subrequest, pants_subrequest]
@@ -161,7 +161,8 @@ impl Resolver for RoutingResolver {
             .map(|subrequest| {
                 let app_clone = app.clone();
 
-                match subrequest.targets.iter().next() {
+                debug_assert!(subrequest.coordinate_set.is_uniform());
+                match subrequest.coordinate_set.underlying().iter().next() {
                     Some(Target::Bazel(_)) => {
                         self.bazel_resolver
                             .resolve(subrequest, cache_options, app_clone)

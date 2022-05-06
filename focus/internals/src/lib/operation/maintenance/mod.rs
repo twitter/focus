@@ -400,7 +400,7 @@ pub fn run(cli: RunOptions, time_period: TimePeriod, app: Arc<App>) -> Result<()
 mod tests {
     use super::*;
     use anyhow::Result;
-    use focus_testing::ScratchGitRepo;
+    use focus_testing::scratch_git_repo::ScratchGitRepo;
     use tempfile::TempDir;
 
     struct ConfigFixture {

@@ -25,14 +25,15 @@ impl Resolver for DirectoryResolver {
         _app: Arc<App>,
     ) -> Result<ResolutionResult> {
         let paths =
-            BTreeSet::<PathBuf>::from_iter(request.targets.iter().filter_map(
+            BTreeSet::<PathBuf>::from_iter(request.coordinate_set.underlying().iter().filter_map(
                 |target| match target {
                     Target::Directory(inner) => Some(PathBuf::from(inner)),
                     _ => unreachable!(),
                 },
             ));
         let package_infos: BTreeMap<_, _> = request
-            .targets
+            .coordinate_set
+            .underlying()
             .iter()
             .map(|target| match &target {
                 Target::Directory(directory) => (

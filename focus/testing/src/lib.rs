@@ -6,8 +6,7 @@ use tracing_error::ErrorLayer;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 
-mod scratch_git_repo;
-pub use scratch_git_repo::ScratchGitRepo;
+pub mod scratch_git_repo;
 
 pub fn init_logging() {
     static START: Once = Once::new();

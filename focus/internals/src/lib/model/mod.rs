@@ -1,4 +1,3 @@
 pub mod outlining;
-mod persistence;
+pub mod project;
 pub mod repo;
-pub mod selection;

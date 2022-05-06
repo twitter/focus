@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    target_resolver::{
+    coordinate_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
     },
     index::{
@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     outlining::{PatternSet, PatternSetWriter, BUILD_FILE_PATTERNS, SOURCE_BASELINE_PATTERNS},
-    selection::Selections,
+    project::ProjectSets,
 };
 
 use anyhow::{bail, Context, Result};
@@ -261,6 +261,11 @@ impl WorkingTree {
         .is_empty())
     }
 
+    /// Retrieve the LayerSets model
+    pub fn layer_sets(&self) -> Result<ProjectSets> {
+        Ok(ProjectSets::new(&self.path))
+    }
+
     pub fn read_uuid(&self) -> Result<Option<Uuid>> {
         let repo = self.git_repo()?;
         let config_snapshot = repo.config()?.snapshot()?;
@@ -321,7 +326,7 @@ impl OutliningTree {
     pub fn outline(
         &self,
         commit_id: git2::Oid,
-        target_set: &TargetSet,
+        coordinate_set: &TargetSet,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)> {
         // Switch to the commit
@@ -335,7 +340,7 @@ impl OutliningTree {
         let cache_options = CacheOptions::default();
         let request = ResolutionRequest {
             repo: repo_path.clone(),
-            targets: target_set.clone(),
+            coordinate_set: coordinate_set.clone(),
         };
         let resolver = self.resolver().context("Failed to create resolver")?;
         let result = resolver.resolve(&request, &cache_options, app)?;
@@ -478,7 +483,12 @@ impl Repo {
             let paths_to_materialize = get_files_to_materialize(
                 &hash_context,
                 odb,
-                targets.iter().cloned().map(DependencyKey::from).collect(),
+                targets
+                    .underlying()
+                    .iter()
+                    .cloned()
+                    .map(DependencyKey::from)
+                    .collect(),
             )?;
 
             match paths_to_materialize {
@@ -601,9 +611,5 @@ impl Repo {
 
         self.repo.config()?.set_bool(GITSTATS_CONFIG_KEY, true)?;
         Ok(())
-    }
-
-    pub fn selections(&self) -> Result<Selections> {
-        Selections::try_from(self)
     }
 }

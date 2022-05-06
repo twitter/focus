@@ -14,6 +14,7 @@ use git2::Repository;
 
 use focus_util::{
     app::{App, ExitCode},
+    backed_up_file::BackedUpFile,
     git_helper,
     lock_file::LockFile,
     paths, sandbox,
@@ -21,12 +22,16 @@ use focus_util::{
 };
 
 use focus_internals::{
-    operation,
-    operation::maintenance::{self, ScheduleOpts},
+    model::project::ProjectSets,
+    operation::{
+        self,
+        maintenance::{self, ScheduleOpts},
+    },
+    target::Target,
     tracker::Tracker,
 };
 use strum::VariantNames;
-use tracing::{debug, debug_span, info, warn};
+use tracing::{debug, info, info_span, warn};
 
 #[derive(Parser, Debug)]
 enum Subcommand {
@@ -52,8 +57,8 @@ enum Subcommand {
         #[clap(parse(try_from_str), default_value = "true")]
         copy_branches: bool,
 
-        /// Initial projects and targets to add to the repo.
-        projects_and_targets: Vec<String>,
+        /// Named layers and ad-hoc targets to include in the clone. Named layers are loaded from the dense repo's `focus/projects` directory.
+        targets_and_projects: Vec<String>,
     },
 
     /// Update the sparse checkout to reflect changes to the build graph.
@@ -69,24 +74,25 @@ enum Subcommand {
         subcommand: RepoSubcommand,
     },
 
-    /// Add projects and targets to the selection.
-    Add {
-        /// Project and targets to add to the selection.
-        projects_and_targets: Vec<String>,
+    /// Interact with the stack of selected projects. Run `focus project help` for more information.
+    Project {
+        /// Path to the repository.
+        #[clap(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+
+        #[clap(subcommand)]
+        subcommand: ProjectSubcommand,
     },
 
-    /// Remove projects and targets from the selection.
-    #[clap(alias("rm"))]
-    Remove {
-        /// Project and targets to remove from the selection
-        projects_and_targets: Vec<String>,
+    /// Interact with the ad-hoc target stack. Run `focus adhoc help` for more information.
+    Adhoc {
+        /// Path to the repository.
+        #[clap(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+
+        #[clap(subcommand)]
+        subcommand: AdhocSubcommand,
     },
-
-    /// Display which projects and targets are selected.
-    Status {},
-
-    /// List available projects.
-    Projects {},
 
     /// Detect whether there are changes to the build graph (used internally)
     DetectBuildGraphChanges {
@@ -201,6 +207,12 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: IndexSubcommand,
     },
+    /// Called by a git hook to trigger certain actions after a git event such as
+    /// merge completion or checkout
+    Event {
+        #[clap(subcommand)]
+        subcommand: EventSubcommand,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -213,10 +225,19 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             RepoSubcommand::List { .. } => "repo-list",
             RepoSubcommand::Repair { .. } => "repo-repair",
         },
-        Subcommand::Add { .. } => "add",
-        Subcommand::Remove { .. } => "remove",
-        Subcommand::Status { .. } => "status",
-        Subcommand::Projects { .. } => "projects",
+        Subcommand::Project { subcommand, .. } => match subcommand {
+            ProjectSubcommand::Available { .. } => "project-available",
+            ProjectSubcommand::List { .. } => "project-list",
+            ProjectSubcommand::Push { .. } => "project-push",
+            ProjectSubcommand::Pop { .. } => "project-pop",
+            ProjectSubcommand::Remove { .. } => "project-remove",
+        },
+        Subcommand::Adhoc { subcommand, .. } => match subcommand {
+            AdhocSubcommand::List { .. } => "adhoc-list",
+            AdhocSubcommand::Push { .. } => "adhoc-push",
+            AdhocSubcommand::Pop { .. } => "adhoc-pop",
+            AdhocSubcommand::Remove { .. } => "adhoc-remove",
+        },
         Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes",
         Subcommand::Refs { subcommand, .. } => match subcommand {
             RefsSubcommand::Delete { .. } => "refs-delete",
@@ -244,6 +265,10 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             IndexSubcommand::Generate { .. } => "index-generate",
             IndexSubcommand::Resolve { .. } => "index-resolve",
         },
+        Subcommand::Event { subcommand } => match subcommand {
+            EventSubcommand::PostCheckout => "event-post-checkout",
+            EventSubcommand::PostMerge => "event-post-merge",
+        }
     };
     subcommand_name.into()
 }
@@ -479,6 +504,12 @@ enum IndexSubcommand {
 }
 
 #[derive(Parser, Debug)]
+enum EventSubcommand {
+    PostCheckout,
+    PostMerge,
+}
+
+#[derive(Parser, Debug)]
 #[clap(about = "Focused Development Tools")]
 struct FocusOpts {
     /// Number of threads to use when performing parallel resolution (where possible).
@@ -526,7 +557,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
     let ti_client = cloned_app.tool_insights_client();
     let feature_name = feature_name_for(&options.cmd);
     ti_client.get_context().set_tool_feature_name(&feature_name);
-    let span = debug_span!("Running subcommand", ?feature_name);
+    let span = info_span!("Running subcommand", ?feature_name);
     let _guard = span.enter();
 
     match options.cmd {
@@ -536,7 +567,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             branch,
             days_of_history,
             copy_branches,
-            projects_and_targets,
+            targets_and_projects,
         } => {
             let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
@@ -549,11 +580,21 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
             info!("Cloning {:?} into {}", dense_repo, sparse_repo.display());
 
+            let (targets, layers): (Vec<String>, Vec<String>) = targets_and_projects
+                .into_iter()
+                .partition(|item| Target::try_from(item.as_str()).is_ok());
+
+            // Add targets length to TI custom map.
+            ti_client
+                .get_context()
+                .add_to_custom_map("targets_and_projects_count", targets.len().to_string());
+
             operation::clone::run(
                 origin,
                 sparse_repo,
                 branch,
-                projects_and_targets,
+                targets,
+                layers,
                 copy_branches,
                 days_of_history,
                 app,
@@ -651,41 +692,98 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             operation::detect_build_graph_changes::run(&repo, args, app)
         }
 
-        Subcommand::Add {
-            projects_and_targets,
-        } => {
-            let sparse_repo = std::env::current_dir()?;
-            paths::assert_focused_repo(&sparse_repo)?;
-            let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::ensure_clean::run(&sparse_repo, app.clone())
-                .context("Ensuring working trees are clean failed")?;
-            operation::selection::add(&sparse_repo, true, projects_and_targets, app)?;
-            Ok(ExitCode(0))
-        }
-
-        Subcommand::Remove {
-            projects_and_targets,
-        } => {
-            let sparse_repo = std::env::current_dir()?;
-            paths::assert_focused_repo(&sparse_repo)?;
-            let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::ensure_clean::run(&sparse_repo, app.clone())
-                .context("Ensuring working trees are clean failed")?;
-            operation::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
-            Ok(ExitCode(0))
-        }
-
-        Subcommand::Status {} => {
-            let sparse_repo = std::env::current_dir()?;
-            paths::assert_focused_repo(&sparse_repo)?;
-            operation::selection::status(&sparse_repo, app)?;
-            Ok(ExitCode(0))
-        }
-
-        Subcommand::Projects {} => {
-            let repo = std::env::current_dir()?;
+        Subcommand::Project { repo, subcommand } => {
             paths::assert_focused_repo(&repo)?;
-            operation::selection::list_projects(&repo, app)?;
+            let _lock_file = hold_lock_file(&repo)?;
+            ti_client.get_context().set_tool_feature_name("project");
+
+            let should_check_tree_cleanliness = match subcommand {
+                ProjectSubcommand::Available {} => false,
+                ProjectSubcommand::List {} => false,
+                ProjectSubcommand::Push { names: _ } => true,
+                ProjectSubcommand::Pop { count: _ } => true,
+                ProjectSubcommand::Remove { names: _ } => true,
+            };
+            if should_check_tree_cleanliness {
+                operation::ensure_clean::run(repo.as_path(), app.clone())
+                    .context("Ensuring working trees are clean failed")?;
+            }
+
+            let selected_layer_stack_backup = {
+                let sets = ProjectSets::new(&repo);
+                if sets.selected_project_stack_path().is_file() {
+                    Some(BackedUpFile::new(
+                        sets.selected_project_stack_path().as_path(),
+                    )?)
+                } else {
+                    None
+                }
+            };
+
+            let mutated = match subcommand {
+                ProjectSubcommand::Available {} => operation::project::available(&repo)?,
+                ProjectSubcommand::List {} => operation::project::list(&repo)?,
+                ProjectSubcommand::Push { names } => operation::project::push(&repo, names)?,
+                ProjectSubcommand::Pop { count } => operation::project::pop(&repo, count)?,
+                ProjectSubcommand::Remove { names } => operation::project::remove(&repo, names)?,
+            };
+
+            if mutated {
+                info!("Syncing focused paths since the selected content has changed");
+                operation::sync::run(repo.as_path(), app)
+                    .context("Sync failed; changes to the stack will be reverted.")?;
+            }
+
+            // If there was a change, the sync succeeded, so we we can discard the backup.
+            if let Some(backup) = selected_layer_stack_backup {
+                backup.set_restore(false);
+            }
+
+            Ok(ExitCode(0))
+        }
+
+        Subcommand::Adhoc { repo, subcommand } => {
+            paths::assert_focused_repo(&repo)?;
+            let _lock_file = hold_lock_file(&repo)?;
+
+            let should_check_tree_cleanliness = match subcommand {
+                AdhocSubcommand::List {} => false,
+                AdhocSubcommand::Push { names: _ } => true,
+                AdhocSubcommand::Pop { count: _ } => true,
+                AdhocSubcommand::Remove { names: _ } => true,
+            };
+            if should_check_tree_cleanliness {
+                operation::ensure_clean::run(repo.as_path(), app.clone())
+                    .context("Ensuring working trees are clean failed")?;
+            }
+
+            let adhoc_layer_set_backup = {
+                let sets = ProjectSets::new(&repo);
+                if sets.adhoc_projects_path().is_file() {
+                    Some(BackedUpFile::new(sets.adhoc_projects_path().as_path())?)
+                } else {
+                    None
+                }
+            };
+
+            let mutated: bool = match subcommand {
+                AdhocSubcommand::List {} => operation::adhoc::list(repo.clone())?,
+                AdhocSubcommand::Push { names } => operation::adhoc::push(repo.clone(), names)?,
+                AdhocSubcommand::Pop { count } => operation::adhoc::pop(repo.clone(), count)?,
+                AdhocSubcommand::Remove { names } => operation::adhoc::remove(repo.clone(), names)?,
+            };
+
+            if mutated {
+                info!("Syncing focused paths since the selected content has changed");
+                operation::sync::run(repo.as_path(), app)
+                    .context("Sync failed; changes to the stack will be reverted.")?;
+            }
+
+            // Sync (if necessary) succeeded, so skip reverting the ad-hoc target stack.
+            if let Some(backup) = adhoc_layer_set_backup {
+                backup.set_restore(false);
+            }
+
             Ok(ExitCode(0))
         }
 
@@ -861,6 +959,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(exit_code)
             }
         },
+
+        Subcommand::Event {
+            subcommand,
+        } => match subcommand {
+            EventSubcommand::PostCheckout => todo!("not implemented"),
+            EventSubcommand::PostMerge => todo!("not implemented"),
+        }
     }
 }
 
@@ -897,8 +1002,8 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     match opts.cmd {
         Subcommand::Clone { .. }
         | Subcommand::Sync { .. }
-        | Subcommand::Add { .. }
-        | Subcommand::Remove { .. }
+        | Subcommand::Project { .. }
+        | Subcommand::Adhoc { .. }
         | Subcommand::Init { .. } => {
             operation::maintenance::schedule_enable(ScheduleOpts::default())
         }

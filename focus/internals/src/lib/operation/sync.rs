@@ -1,6 +1,7 @@
 use crate::index::RocksDBMemoizationCacheExt;
+use crate::model::project::Project;
+use crate::model::project::ProjectSets;
 use crate::model::repo::Repo;
-use crate::model::selection::selections::Selections;
 use crate::operation::util::perform;
 use crate::target::TargetSet;
 use content_addressed_cache::RocksDBCache;
@@ -26,30 +27,48 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
 
     let backed_up_sparse_profile = BackedUpFile::new(&sparse_profile_path)?;
 
-    let selections = Selections::try_from(&repo)?;
-    let selection = selections.computed_selection()?;
-    let targets = TargetSet::try_from(&selection).context("constructing target set")?;
+    // Figure out all of the targets we will be resolving
+    let targets = perform("Enumerating targets", || {
+        let mut targets = Vec::<String>::new();
+        let mut merge_coordinates_from_layer = |project: &Project| {
+            let coordinates_in_layer: Vec<String> = project
+                .targets()
+                .iter()
+                .map(|coord| coord.to_owned())
+                .collect::<_>();
+            targets.extend(coordinates_in_layer);
+        };
+
+        // Add mandatory layers
+        let sets = ProjectSets::new(sparse_repo);
+        let layer_set = sets
+            .computed_projects()
+            .context("Failed resolving applied layers")?;
+        for project in layer_set.projects() {
+            merge_coordinates_from_layer(project);
+        }
+
+        Ok(targets)
+    })?;
 
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
     let ti_client = app_for_ti_client.tool_insights_client();
-    let mut ti_context = ti_client.get_context();
-    ti_context.add_to_custom_map("total_target_count", targets.len().to_string());
-    ti_context.add_to_custom_map(
-        "user_selected_project_count",
-        selection.projects.len().to_string(),
-    );
-    ti_context.add_to_custom_map(
-        "user_selected_target_count",
-        selection.targets.len().to_string(),
-    );
+    ti_client
+        .get_context()
+        .add_to_custom_map("coordinates_and_layers_count", targets.len().to_string());
+
+    let coordinate_set =
+        TargetSet::try_from(targets.as_ref()).context("constructing target set")?;
 
     let pattern_count = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
-        repo.sync(&targets, app.clone(), &odb)
+        repo.sync(&coordinate_set, app.clone(), &odb)
             .context("Sync failed")
     })?;
-    ti_context.add_to_custom_map("pattern_count", pattern_count.to_string());
+    ti_client
+        .get_context()
+        .add_to_custom_map("pattern_count", pattern_count.to_string());
 
     perform("Updating the sync point", || {
         repo.working_tree().unwrap().write_sync_point_ref()
@@ -62,22 +81,18 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
 }
 
 #[cfg(test)]
-mod testing {
-    use std::{collections::HashSet, path::Path};
+mod test {
+    use std::path::Path;
 
     use anyhow::Result;
-    use maplit::hashset;
-    
+    use tracing::debug;
 
     use focus_testing::init_logging;
     use focus_util::app;
 
-    use crate::{
-        model::selection::Disposition,
-        operation::{
-            self,
-            testing::integration::{RepoDisposition, RepoPairFixture},
-        },
+    use crate::operation::{
+        self,
+        testing::integration::{RepoDisposition, RepoPairFixture},
     };
 
     #[test]
@@ -131,12 +146,10 @@ It isn't just one of your holiday games
         let x_dir = fixture.sparse_repo_path.join("x");
         assert!(!x_dir.is_dir());
 
-        // Add as a target
-        operation::selection::add(
-            &fixture.sparse_repo_path,
-            false,
+        // Add as an ad-hoc target
+        operation::adhoc::push(
+            fixture.sparse_repo_path.clone(),
             vec![String::from("bazel://x/...")],
-            fixture.app.clone(),
         )?;
 
         // Sync
@@ -154,26 +167,6 @@ It isn't just one of your holiday games
         let fixture = RepoPairFixture::new()?;
         fixture.perform_clone()?;
 
-        let selected_project_names = || -> Result<HashSet<String>> {
-            Ok(fixture
-                .sparse_repo()?
-                .selections()?
-                .computed_selection()?
-                .projects
-                .iter()
-                .filter_map(|project| {
-                    if project.mandatory {
-                        None
-                    } else {
-                        Some(project.name.to_owned())
-                    }
-                })
-                .collect::<HashSet<String>>())
-        };
-
-        let project_a_label = String::from("team_banzai/project_a");
-        let project_b_label = String::from("team_zissou/project_b");
-
         let path = fixture.sparse_repo_path.clone();
         let library_a_dir = path.join("library_a");
         let project_a_dir = path.join("project_a");
@@ -182,22 +175,20 @@ It isn't just one of your holiday games
         let profile_path = path.join(".git").join("info").join("sparse-checkout");
 
         {
-            let selected_names = selected_project_names()?;
-            assert_eq!(selected_names, hashset! {});
+            let selected_names = operation::project::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert_eq!(selected_names.len(), 0);
         }
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
 
         assert!(!library_b_dir.is_dir());
         assert!(!project_b_dir.is_dir());
-        operation::selection::add(
-            &path,
-            false,
-            vec![project_b_label.clone()],
-            fixture.app.clone(),
-        )?;
+        operation::project::push(&path, vec![String::from("team_zissou/project_b")])?;
         {
-            let selected_names = selected_project_names()?;
-            assert_eq!(selected_names, hashset! { project_b_label.clone() })
+            let selected_names = operation::project::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert!(selected_names.contains("team_zissou/project_b"));
+            assert_eq!(selected_names.len(), 1);
         }
         operation::sync::run(&path, fixture.app.clone())?;
 
@@ -207,48 +198,36 @@ It isn't just one of your holiday games
 
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
-        operation::selection::add(
-            &path,
-            false,
-            vec![project_a_label.clone()],
-            fixture.app.clone(),
-        )?;
+        operation::project::push(&path, vec![String::from("team_banzai/project_a")])?;
         {
-            let selected_names = selected_project_names()?;
-            assert_eq!(
-                selected_names,
-                hashset! { project_a_label.clone(), project_b_label.clone() }
-            )
+            let selected_names = operation::project::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert!(selected_names.contains("team_banzai/project_a"));
+            assert!(selected_names.contains("team_zissou/project_b"));
+            assert_eq!(selected_names.len(), 2);
         }
         operation::sync::run(&path, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
 
-        operation::selection::remove(
-            &path,
-            false,
-            vec![project_a_label],
-            fixture.app.clone(),
-        )?;
+        operation::project::pop(&path, 1)?;
         {
-            let selected_names = selected_project_names()?;
-            assert_eq!(selected_names, hashset! { project_b_label.clone() })
+            let selected_names = operation::project::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert!(selected_names.contains("team_zissou/project_b"));
+            assert_eq!(selected_names.len(), 1);
         }
         operation::sync::run(&path, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
 
-        operation::selection::remove(
-            &path,
-            false,
-            vec![project_b_label],
-            fixture.app.clone(),
-        )?;
+        operation::project::pop(&path, 1)?;
         {
-            let selected_names = selected_project_names()?;
-            assert_eq!(selected_names, hashset! {});
+            let selected_names = operation::project::selected_layer_names(&path)?;
+            debug!(?selected_names);
+            assert_eq!(selected_names.len(), 0);
         }
         operation::sync::run(&path, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
@@ -268,17 +247,15 @@ It isn't just one of your holiday games
 
         let path = fixture.sparse_repo_path.clone();
         let library_b_dir = path.join("library_b");
-        let targets = vec![String::from("bazel://library_b/...")];
-        let mut selections = fixture.sparse_repo()?.selections()?;
 
-        assert!(selections.mutate(Disposition::Add, &targets)?);
-        selections.save()?;
+        operation::adhoc::push(
+            fixture.sparse_repo_path.clone(),
+            vec![String::from("bazel://library_b/...")],
+        )?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(library_b_dir.is_dir());
 
-        // operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
-        assert!(selections.mutate(Disposition::Remove, &targets)?);
-        selections.save()?;
+        operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(!library_b_dir.is_dir());
 

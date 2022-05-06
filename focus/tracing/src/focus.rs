@@ -73,7 +73,7 @@ pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
                 .with_targets(vec![
                     ("serde_xml_rs", LevelFilter::INFO),
                     (
-                        "focus_internals::target_resolver::bazel_resolver",
+                        "focus_internals::coordinate_resolver::bazel_resolver",
                         LevelFilter::INFO,
                     ),
                 ])
