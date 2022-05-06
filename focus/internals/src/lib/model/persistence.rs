@@ -84,7 +84,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
         match std::fs::read_dir(directory) {
             Ok(dir) => {
                 let mut underlying = HashMap::<String, T>::new();
-                for entry in dir.into_iter() {
+                for entry in dir {
                     match entry {
                         Ok(entry) => {
                             let path = entry.path();
@@ -119,11 +119,13 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
         }
     }
 
+    #[allow(dead_code)]
     fn make_path(&self, name: &str) -> PathBuf {
         self.directory.join(name).with_extension(&self.extension)
     }
 
     /// Add an entity to the collection with the given name. In addition to caching the entity in `underlying`, this serializes the representation to disk immediately.
+    #[allow(dead_code)]
     pub fn insert(&mut self, name: &str, entity: &T) -> Result<()>
     where
         T: Clone + Serialize,
@@ -137,6 +139,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     }
 
     /// Remove an entity by name from the `underlying` cache and erase it from disk.
+    #[allow(dead_code)]
     pub fn remove(&mut self, name: &str) -> Result<()> {
         let path = self.make_path(name);
         self.underlying.borrow_mut().remove(name);
@@ -150,6 +153,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     }
 
     /// Replace the contents of the cache by loading all entities in the directory from disk.
+    #[allow(dead_code)]
     pub fn revert(&self) -> Result<()>
     where
         T: Default + DeserializeOwned,
@@ -165,13 +169,14 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     }
 
     /// Save all cached entities to disk.
+    #[allow(dead_code)]
     pub fn save(&self) -> Result<()>
     where
         T: Default + DeserializeOwned,
     {
         let underlying = self.underlying.borrow();
         for (name, entity) in underlying.iter() {
-            let path = self.make_path(&name);
+            let path = self.make_path(name);
             FileBackedModel::store(&path.as_path(), entity)
                 .with_context(|| format!("Storing entity to {}", path.display()))?
         }
@@ -208,7 +213,7 @@ mod tests {
 
         let name = "jeff";
         collection.insert(
-            &name,
+            name,
             &Person {
                 name: String::from("Jeff Lebowski"),
             },
@@ -224,7 +229,7 @@ mod tests {
         assert!(alternate_collection.underlying.borrow().contains_key(name));
 
         // Remove from first collection
-        collection.remove(&name)?;
+        collection.remove(name)?;
         assert_eq!(collection.underlying.borrow().contains_key(name), false);
         assert_eq!(dir.path().join("jeff.person.json").is_file(), false);
         alternate_collection.revert()?;
@@ -245,7 +250,7 @@ mod tests {
             let mut collection = make_collection(&dir.path())?;
 
             collection.insert(
-                &name,
+                name,
                 &Person {
                     name: String::from("Jeff Lebowski"),
                 },
@@ -258,7 +263,7 @@ mod tests {
             }
 
             collection.insert(
-                &name,
+                name,
                 &Person {
                     name: String::from("Maude Lebowski"),
                 },

@@ -14,7 +14,6 @@ use git2::Repository;
 
 use focus_util::{
     app::{App, ExitCode},
-    backed_up_file::BackedUpFile,
     git_helper,
     lock_file::LockFile,
     paths, sandbox,
@@ -27,7 +26,7 @@ use focus_internals::{
     tracker::Tracker,
 };
 use strum::VariantNames;
-use tracing::{debug, debug_span, info, info_span, warn};
+use tracing::{debug, debug_span, info, warn};
 
 #[derive(Parser, Debug)]
 enum Subcommand {

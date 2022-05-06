@@ -327,7 +327,7 @@ mod tests {
     use crate::coordinate_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
-    use crate::target::{Target, TargetSet};
+    use crate::target::Target;
     use focus_testing::init_logging;
     use focus_testing::ScratchGitRepo;
     use focus_util::app::App;
@@ -421,9 +421,7 @@ sh_binary(
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = TargetSet::from(
-            hashset! {"bazel://package1:foo".try_into()?, "bazel://package2:bar".try_into()?},
-        );
+        let coordinate_set = hashset! {"bazel://package1:foo".try_into()?, "bazel://package2:bar".try_into()?};
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: coordinate_set,
@@ -547,7 +545,7 @@ New contents
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()? });
+        let coordinate_set = hashset! {"bazel://package1:foo".try_into()? };
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: coordinate_set,
@@ -692,7 +690,7 @@ def some_macro():
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()?});
+        let coordinate_set = hashset! {"bazel://package1:foo".try_into()?};
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: coordinate_set,
@@ -796,7 +794,7 @@ def some_macro():
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = TargetSet::from(hashset! {"bazel://package1:foo".try_into()?});
+        let coordinate_set = hashset! {"bazel://package1:foo".try_into()?};
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: coordinate_set,
@@ -854,11 +852,11 @@ sh_binary(
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let coordinate_set = TargetSet::from(hashset! {
+        let coordinate_set = hashset! {
             // Note that `//package1` itself is not a package, but
             // `//package1/...` expands to some number of subpackages anyways.
             "bazel://package1/...".try_into()?
-        });
+        };
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: coordinate_set,

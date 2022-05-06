@@ -1,6 +1,4 @@
 use std::{
-    fmt::{Debug, Formatter},
-    io::Write,
     path::Path,
     sync::Arc,
 };
@@ -24,7 +22,7 @@ fn mutate(
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
-            super::sync::run(sparse_repo.as_ref(), app.clone())?;
+            super::sync::run(sparse_repo.as_ref(), app)?;
         }
     }
 
@@ -62,7 +60,7 @@ pub fn remove(
 }
 
 pub fn status(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
-    let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
+    let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = Selections::try_from(&repo)?;
     let selection = selections.computed_selection()?;
     println!("{}", selection);
@@ -70,7 +68,7 @@ pub fn status(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
 }
 
 pub fn list_projects(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
-    let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
+    let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = Selections::try_from(&repo)?;
     println!("{}", selections.optional_projects);
     Ok(())
