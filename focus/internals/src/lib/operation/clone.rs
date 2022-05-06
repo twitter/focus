@@ -207,10 +207,10 @@ fn set_up_sparse_repo(
 
     // N.B. we must re-open the repo because otherwise it has no trees...
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
-    let coordinate_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
+    let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
 
     let odb = HashMapOdb::new();
-    repo.sync(&coordinate_set, app.clone(), &odb)
+    repo.sync(&target_set, app.clone(), &odb)
         .context("Sync failed")?;
 
     repo.working_tree().unwrap().write_sync_point_ref()?;

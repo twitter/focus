@@ -49,7 +49,7 @@ pub fn clear(backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn dep_key_to_coordinate(dep_key: &DependencyKey) -> String {
+fn dep_key_to_target(dep_key: &DependencyKey) -> String {
     match dep_key {
         DependencyKey::BazelPackage(label) | DependencyKey::BazelBuildFile(label) => {
             format!("bazel:{}", label)
@@ -101,12 +101,12 @@ fn resolve_targets(
         PathsToMaterializeResult::MissingKeys { keys } => {
             println!("Missing keys:");
             for (key, hash) in keys {
-                println!("{} {}", hash, dep_key_to_coordinate(&key));
+                println!("{} {}", hash, dep_key_to_target(&key));
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let coordinate_set = targets;
-            let num_applied_patterns = repo.sync(&coordinate_set, app, odb.borrow())?;
+            let target_set = targets;
+            let num_applied_patterns = repo.sync(&target_set, app, odb.borrow())?;
             println!("Applied patterns: {}", num_applied_patterns);
 
             match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {
@@ -115,7 +115,7 @@ fn resolve_targets(
                 PathsToMaterializeResult::MissingKeys { keys } => {
                     println!("Keys STILL missing, this is a bug:");
                     for (key, hash) in keys {
-                        println!("{} {}", hash, dep_key_to_coordinate(&key));
+                        println!("{} {}", hash, dep_key_to_target(&key));
                     }
                     Ok(ExitCode(1))
                 }

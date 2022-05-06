@@ -197,7 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn coordinate_parsing() -> Result<()> {
+    pub fn target_parsing() -> Result<()> {
         assert_eq!(
             Target::try_from("bazel://a:b")?,
             Target::Bazel(Label {
