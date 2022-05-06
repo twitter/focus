@@ -207,6 +207,12 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: IndexSubcommand,
     },
+    /// Called by a git hook to trigger certain actions after a git event such as
+    /// merge completion or checkout
+    Event {
+        #[clap(subcommand)]
+        subcommand: EventSubcommand,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -259,6 +265,10 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             IndexSubcommand::Generate { .. } => "index-generate",
             IndexSubcommand::Resolve { .. } => "index-resolve",
         },
+        Subcommand::Event { subcommand } => match subcommand {
+            EventSubcommand::PostCheckout => "event-post-checkout",
+            EventSubcommand::PostMerge => "event-post-merge",
+        }
     };
     subcommand_name.into()
 }
@@ -491,6 +501,12 @@ enum IndexSubcommand {
 
     /// Resolve the targets to their resulting pattern sets.
     Resolve { targets: Vec<String> },
+}
+
+#[derive(Parser, Debug)]
+enum EventSubcommand {
+    PostCheckout,
+    PostMerge,
 }
 
 #[derive(Parser, Debug)]
@@ -943,6 +959,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(exit_code)
             }
         },
+
+        Subcommand::Event {
+            subcommand,
+        } => match subcommand {
+            EventSubcommand::PostCheckout => todo!("not implemented"),
+            EventSubcommand::PostMerge => todo!("not implemented"),
+        }
     }
 }
 
