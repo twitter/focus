@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    coordinate_resolver::{
+    target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
     },
     index::{
@@ -321,7 +321,7 @@ impl OutliningTree {
     pub fn outline(
         &self,
         commit_id: git2::Oid,
-        coordinate_set: &TargetSet,
+        target_set: &TargetSet,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)> {
         // Switch to the commit
@@ -335,7 +335,7 @@ impl OutliningTree {
         let cache_options = CacheOptions::default();
         let request = ResolutionRequest {
             repo: repo_path.clone(),
-            targets: coordinate_set.clone(),
+            targets: target_set.clone(),
         };
         let resolver = self.resolver().context("Failed to create resolver")?;
         let result = resolver.resolve(&request, &cache_options, app)?;

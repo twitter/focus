@@ -124,33 +124,33 @@ impl Resolver for RoutingResolver {
         use rayon::prelude::*;
 
         let subrequests = {
-            let mut bazel_coordinates = HashSet::new();
-            let mut directory_coordinates = HashSet::new();
-            let mut pants_coordinates = HashSet::new();
+            let mut bazel_targets = HashSet::new();
+            let mut directory_targets = HashSet::new();
+            let mut pants_targets = HashSet::new();
             for target in request.targets.iter().cloned() {
                 match target {
                     target @ Target::Bazel(_) => {
-                        bazel_coordinates.insert(target);
+                        bazel_targets.insert(target);
                     }
                     target @ Target::Directory(_) => {
-                        directory_coordinates.insert(target);
+                        directory_targets.insert(target);
                     }
                     target @ Target::Pants(_) => {
-                        pants_coordinates.insert(target);
+                        pants_targets.insert(target);
                     }
                 }
             }
 
             let bazel_subrequest = ResolutionRequest {
-                targets: bazel_coordinates,
+                targets: bazel_targets,
                 ..request.clone()
             };
             let directory_subrequest = ResolutionRequest {
-                targets: directory_coordinates,
+                targets: directory_targets,
                 ..request.clone()
             };
             let pants_subrequest = ResolutionRequest {
-                targets: pants_coordinates,
+                targets: pants_targets,
                 ..request.clone()
             };
             vec![bazel_subrequest, directory_subrequest, pants_subrequest]
