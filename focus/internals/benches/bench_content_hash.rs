@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use content_addressed_cache::RocksDBCache;
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -6,8 +7,9 @@ use focus_internals::index::{
     content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue, HashContext,
     ObjectDatabase, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
-use focus_internals::model::project::ProjectSets;
-use focus_internals::target::Target;
+use focus_internals::model::repo::Repo;
+use focus_internals::target::TargetSet;
+use focus_util::app::App;
 
 fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -> Vec<ContentHash> {
     dep_keys
@@ -20,30 +22,30 @@ fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -
 }
 
 pub fn bench_content_hash(c: &mut Criterion) {
-    let repo_path = std::env::var_os("REPO").expect("Must set env var REPO=/path/to/repo");
+    let app = Arc::new(App::new(false).unwrap());
+    let repo_path = std::env::var_os("REPO")
+        .map(|path| PathBuf::from(path))
+        .expect("Must set env var REPO=/path/to/repo");
     let repo_path = PathBuf::from(repo_path);
-    let repo = git2::Repository::open(&repo_path).unwrap();
-    let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
-    let head_tree = head_commit.tree().unwrap();
 
-    let mandatory_layers = ProjectSets::new(&repo_path).mandatory_projects().unwrap();
-    let dep_keys: Vec<DependencyKey> = mandatory_layers
-        .projects()
+    let repo = Repo::open(&repo_path, app).unwrap();
+    let git_repo = repo.underlying();
+    let head_commit = git_repo.head().unwrap().peel_to_commit().unwrap();
+    let head_tree = head_commit.tree().unwrap();
+    let selections = repo.selections().unwrap();
+    let selection = selections.computed_selection().unwrap();
+    let dep_keys = TargetSet::try_from(&selection)
+        .unwrap()
         .iter()
-        .flat_map(|project| {
-            project
-                .targets()
-                .iter()
-                .map(|target| Target::try_from(target.as_str()).unwrap())
-                .map(DependencyKey::from)
-        })
-        .collect();
+        .map(|target| target.to_owned())
+        .map(DependencyKey::from)
+        .collect::<Vec<DependencyKey>>();
     println!("Dependency keys: {:?}", &dep_keys);
 
     c.bench_function("content_hash_mandatory_layers", |b| {
         b.iter(|| {
             let hash_context = HashContext {
-                repo: &repo,
+                repo: &git_repo,
                 head_tree: &head_tree,
                 caches: Default::default(),
             };
@@ -52,13 +54,13 @@ pub fn bench_content_hash(c: &mut Criterion) {
     });
 
     {
-        let odb = SimpleGitOdb::new(&repo);
+        let odb = SimpleGitOdb::new(&git_repo);
         c.bench_function("content_hash_insert_simple_git_odb", |b| {
             b.iter_batched(
                 || {
                     odb.clear().unwrap();
                     HashContext {
-                        repo: &repo,
+                        repo: &git_repo,
                         head_tree: &head_tree,
                         caches: Default::default(),
                     }
@@ -80,13 +82,13 @@ pub fn bench_content_hash(c: &mut Criterion) {
     }
 
     {
-        let odb = RocksDBCache::new(&repo);
+        let odb = RocksDBCache::new(&git_repo);
         c.bench_function("content_hash_insert_rocks_db", |b| {
             b.iter_batched(
                 || {
                     odb.clear().unwrap();
                     HashContext {
-                        repo: &repo,
+                        repo: &git_repo,
                         head_tree: &head_tree,
                         caches: Default::default(),
                     }
