@@ -33,10 +33,15 @@ impl Display for Projects {
             );
             writeln!(
                 f,
-                "{}   {} ({} targets)",
+                "{}   {} ({} {})",
                 padded_project_name,
                 project.description,
-                project.targets.len()
+                project.targets.len(),
+                if project.targets.len() == 1 {
+                    "target"
+                } else {
+                    "targets"
+                }
             )?;
         }
         Ok(())
