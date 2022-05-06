@@ -6,14 +6,14 @@ use std::sync::Arc;
 use anyhow::Context;
 use focus_util::app::{App, ExitCode};
 use focus_util::paths::assert_focused_repo;
-use tracing::{debug, info};
+
 
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use crate::model::repo::Repo;
-use crate::model::selection::{Disposition, Operation, Selections};
+use crate::model::selection::{Disposition, Selections};
 use crate::target::{Target, TargetSet};
 
 #[derive(
@@ -105,7 +105,7 @@ fn resolve_targets(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let coordinate_set = TargetSet::from(targets);
+            let coordinate_set = targets;
             let num_applied_patterns = repo.sync(&coordinate_set, app, odb.borrow())?;
             println!("Applied patterns: {}", num_applied_patterns);
 

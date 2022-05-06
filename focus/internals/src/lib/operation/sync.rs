@@ -67,7 +67,7 @@ mod testing {
 
     use anyhow::Result;
     use maplit::hashset;
-    use tracing::debug;
+    
 
     use focus_testing::init_logging;
     use focus_util::app;
@@ -228,7 +228,7 @@ It isn't just one of your holiday games
         operation::selection::remove(
             &path,
             false,
-            vec![project_a_label.clone()],
+            vec![project_a_label],
             fixture.app.clone(),
         )?;
         {
@@ -243,7 +243,7 @@ It isn't just one of your holiday games
         operation::selection::remove(
             &path,
             false,
-            vec![project_b_label.clone()],
+            vec![project_b_label],
             fixture.app.clone(),
         )?;
         {

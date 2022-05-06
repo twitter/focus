@@ -142,15 +142,15 @@ impl Resolver for RoutingResolver {
             }
 
             let bazel_subrequest = ResolutionRequest {
-                targets: bazel_coordinates.into(),
+                targets: bazel_coordinates,
                 ..request.clone()
             };
             let directory_subrequest = ResolutionRequest {
-                targets: directory_coordinates.into(),
+                targets: directory_coordinates,
                 ..request.clone()
             };
             let pants_subrequest = ResolutionRequest {
-                targets: pants_coordinates.into(),
+                targets: pants_coordinates,
                 ..request.clone()
             };
             vec![bazel_subrequest, directory_subrequest, pants_subrequest]

@@ -106,13 +106,13 @@ fn modifying_and_saving_the_selection() -> Result<()> {
         // Remove the target
         selections.process(&vec![Operation {
             disposition: Disposition::Remove,
-            underlying: Underlying::Target(target.clone()),
+            underlying: Underlying::Target(target),
         }])?;
         selections.save()?;
         let computed_selection = selections.computed_selection()?;
         assert_eq!(
             project_names(&computed_selection),
-            hashset! {String::from("mandatory"), project_name.clone()}
+            hashset! {String::from("mandatory"), project_name}
         );
         assert!(computed_selection.targets.is_empty());
     }
@@ -179,7 +179,7 @@ fn duplicate_projects_are_ignored() -> Result<()> {
         underlying: project_b.clone(),
     }])?;
     assert_eq!(result.is_success(), true);
-    assert_eq!(result.ignored, hashset! {project_b.clone()});
+    assert_eq!(result.ignored, hashset! {project_b});
 
     Ok(())
 }

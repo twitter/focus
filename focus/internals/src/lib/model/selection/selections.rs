@@ -38,7 +38,7 @@ impl Selections {
                 let mut selection: selection::Selection = Default::default();
                 let mut processor = SelectionOperationProcessor {
                     selection: &mut selection,
-                    projects: projects,
+                    projects,
                 };
                 processor.reify(persisted_selection)?;
                 Ok(selection)
@@ -75,8 +75,7 @@ impl Selections {
         let mandatory_projects = self
             .mandatory_projects
             .underlying
-            .values()
-            .map(|project| project.clone())
+            .values().cloned()
             .collect::<Vec<Project>>();
         debug!(mandatory = ?mandatory_projects, "Mandatory projects");
         selection.projects.extend(mandatory_projects);

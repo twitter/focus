@@ -26,7 +26,7 @@ impl From<&Selection> for PersistedSelection {
         let targets = selection
             .targets
             .iter()
-            .map(|target| String::from(target))
+            .map(String::from)
             .collect::<HashSet<String>>();
         Self { projects, targets }
     }

@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::Display,
-    io::BufWriter,
 };
 
 use super::*;
@@ -49,7 +48,7 @@ impl Display for Selection {
                 )?;
             }
         }
-        writeln!(f, "")?;
+        writeln!(f)?;
 
         writeln!(f, "--- Targets ---")?;
         let sorted_targets =

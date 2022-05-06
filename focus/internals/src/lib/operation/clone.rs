@@ -1,4 +1,4 @@
-use crate::model::selection::{Disposition, Operation, Selections, Underlying};
+use crate::model::selection::{Disposition, Operation, Selections};
 use crate::{index::testing::HashMapOdb, model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
@@ -540,7 +540,7 @@ mod test {
             .unwrap();
 
         assert!(selection.targets.contains(&library_a_target));
-        assert!(selection.projects.contains(&project_b));
+        assert!(selection.projects.contains(project_b));
 
         Ok(())
     }
