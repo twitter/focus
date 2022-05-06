@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::{
+    hashing,
     index::{
         get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
         HashContext, ObjectDatabase, PathsToMaterializeResult,
@@ -62,7 +63,7 @@ impl WorkingTree {
         patterns: &PatternSet,
         cone: bool,
         app: Arc<App>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         // Write the patterns
         let info_dir = self.info_dir();
         std::fs::create_dir_all(&info_dir)
@@ -71,11 +72,27 @@ impl WorkingTree {
 
         // Make sure Git doesn't try to do something cute with the sparse profile like merge existing contents.
         let sparse_profile_path = self.sparse_checkout_path();
+        let candidate_sparse_profile_path = self
+            .sparse_checkout_path()
+            .with_extension(Path::new("candidate"));
+        let new_content_hash = patterns.write_to_file(&candidate_sparse_profile_path)?;
+
         if sparse_profile_path.is_file() {
+            let existing_content_hash = hashing::hash_file_lines(&sparse_profile_path)
+                .context("Hashing contents of existing sparse profile failed")?;
+            if !existing_content_hash.is_empty() && existing_content_hash == new_content_hash {
+                // We wrote the exact same thing. Skip everything.
+                info!("Skipping application of the sparse profile because it has not changed");
+                std::fs::remove_file(&candidate_sparse_profile_path)
+                    .context("Removing candidate sparse profile")?;
+                return Ok(false);
+            }
+
             std::fs::remove_file(&sparse_profile_path)
                 .context("Could not remove existing sparse profile")?;
         }
-        patterns.write_to_file(&sparse_profile_path)?;
+        std::fs::rename(candidate_sparse_profile_path, sparse_profile_path)
+            .context("Moving candidate sparse profile into place")?;
 
         // Update the working tree to match
         info!(count = %patterns.len(), "Applying patterns");
@@ -111,7 +128,7 @@ impl WorkingTree {
             .context("git checkout failed")?;
         }
 
-        Ok(())
+        Ok(true)
     }
 
     /// Switch to the given commit in this working tree.
@@ -202,7 +219,7 @@ impl WorkingTree {
         Ok(results)
     }
 
-    fn apply_working_tree_patterns(&self, app: Arc<App>) -> Result<()> {
+    fn apply_working_tree_patterns(&self, app: Arc<App>) -> Result<bool> {
         let patterns = self.default_working_tree_patterns()?;
         self.apply_sparse_patterns(&patterns, true, app)
             .context("Failed to apply root-only patterns")
@@ -303,7 +320,7 @@ impl OutliningTree {
         Ok(pattern_set)
     }
 
-    pub fn apply_build_file_patterns(&self, app: Arc<App>) -> Result<()> {
+    pub fn apply_build_file_patterns(&self, app: Arc<App>) -> Result<bool> {
         let patterns = self.build_file_patterns()?;
         self.underlying
             .apply_sparse_patterns(&patterns, false, app)
@@ -445,13 +462,13 @@ impl Repo {
         Self::focus_git_dir_path(git_dir).join(OUTLINING_TREE_NAME)
     }
 
-    /// Run a sync, returning the number of patterns that were applied.
+    /// Run a sync, returning the number of patterns that were applied and whether a checkout occured as a result of the profile changing.
     pub fn sync(
         &self,
         targets: &TargetSet,
         app: Arc<App>,
         odb: &dyn ObjectDatabase,
-    ) -> Result<usize> {
+    ) -> Result<(usize, bool)> {
         let head_commit = self
             .repo
             .head()
@@ -516,10 +533,10 @@ impl Repo {
 
         trace!(?outline_patterns);
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
-        working_tree
+        let checked_out = working_tree
             .apply_sparse_patterns(&outline_patterns, true, app)
             .context("Failed to apply outlined patterns to working tree")?;
-        Ok(outline_patterns.len())
+        Ok((outline_patterns.len(), checked_out))
     }
 
     /// Creates an outlining tree for the repository.
@@ -551,7 +568,8 @@ impl Repo {
         let work_tree_gitdir = self.working_tree_git_dir();
         // Apply the correct sparse patterns
         let outlining_tree = OutliningTree::new(Arc::new(WorkingTree::new(path, work_tree_gitdir)));
-        outlining_tree.apply_build_file_patterns(self.app.clone())
+        outlining_tree.apply_build_file_patterns(self.app.clone())?;
+        Ok(())
     }
 
     fn working_tree_git_dir(&self) -> PathBuf {
@@ -574,7 +592,8 @@ impl Repo {
         let working_tree = WorkingTree::new(path, self.git_dir.to_owned());
         working_tree
             .apply_working_tree_patterns(self.app.clone())
-            .context("Failed to apply top-level patterns")
+            .context("Failed to apply top-level patterns")?;
+        Ok(())
     }
 
     /// Get a reference to the repo's outlining tree.

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use sha2::{Sha256, Digest};
 
 use std::{
     cell::RefCell,
@@ -171,8 +172,8 @@ pub trait PatternSetReader {
 }
 
 pub trait PatternSetWriter {
-    /// Write the Patterns from a PatternSet to a file indicated by the given path.
-    fn write_to_file(&self, path: &Path) -> Result<()>;
+    /// Write the Patterns from a PatternSet to a file indicated by the given path, returning a hash digest of the written content.
+    fn write_to_file(&self, path: &Path) -> Result<Vec<u8>>;
 }
 
 pub trait LeadingPatternInserter {
@@ -180,7 +181,7 @@ pub trait LeadingPatternInserter {
 }
 
 impl PatternSetWriter for PatternSet {
-    fn write_to_file(&self, path: &Path) -> Result<()> {
+    fn write_to_file(&self, path: &Path) -> Result<Vec<u8>> {
         static ENDLINE: &[u8] = b"\n";
 
         let mut written_productions = HashSet::<OsString>::new();
@@ -191,6 +192,7 @@ impl PatternSetWriter for PatternSet {
             .open(path)
             .with_context(|| format!("failed opening '{}' for write", path.display()))?;
 
+        let mut digest = Sha256::new();
         for pattern in self.iter() {
             let lines: Vec<OsString> = pattern.clone().into();
             for line in lines {
@@ -203,13 +205,15 @@ impl PatternSetWriter for PatternSet {
                     continue;
                 }
 
-                file.write_all(line.as_bytes())
+                let line_bytes = line.as_bytes();
+                digest.update(line_bytes);
+                file.write_all(line_bytes)
                     .context("Writing pattern failed")?;
                 file.write_all(ENDLINE).context("Writing endline failed")?;
             }
         }
 
-        Ok(())
+        Ok(digest.finalize().to_vec())
     }
 }
 

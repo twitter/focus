@@ -104,8 +104,7 @@ fn resolve_targets(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let target_set = targets;
-            let num_applied_patterns = repo.sync(&target_set, app, odb.borrow())?;
+            let (num_applied_patterns, _checked_out) = repo.sync(&targets, app, odb.borrow())?;
             println!("Applied patterns: {}", num_applied_patterns);
 
             match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {

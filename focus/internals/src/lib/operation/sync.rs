@@ -15,7 +15,8 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
-pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
+/// Synchronize the sparse repo's contents with the build graph. Returns whether a checkout actually occured.
+pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
     if !sparse_profile_path.is_file() {
@@ -44,7 +45,7 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
         selection.targets.len().to_string(),
     );
 
-    let pattern_count = perform("Computing the new sparse profile", || {
+    let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
         repo.sync(&targets, app.clone(), &odb)
             .context("Sync failed")
@@ -58,7 +59,7 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     // The profile was successfully applied, so do not restore the backup.
     backed_up_sparse_profile.set_restore(false);
 
-    Ok(())
+    Ok(checked_out)
 }
 
 #[cfg(test)]
@@ -298,6 +299,27 @@ It isn't just one of your holiday games
         insta::assert_snapshot!(&profile);
 
         assert!(top_level_bazelisk_rc.is_file());
+
+        Ok(())
+    }
+
+    #[test]
+    fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let path = fixture.sparse_repo_path.clone();
+        let targets = vec![String::from("bazel://library_b/...")];
+        let mut selections = fixture.sparse_repo()?.selections()?;
+
+        assert!(selections.mutate(Disposition::Add, &targets)?);
+        selections.save()?;
+        assert_eq!(operation::sync::run(&path, fixture.app.clone())?, true);
+
+        // Subsequent sync does not perform a checkout.
+        assert_eq!(operation::sync::run(&path, fixture.app.clone())?, false);
 
         Ok(())
     }
