@@ -314,7 +314,7 @@ It isn't just one of your holiday games
         let targets = vec![String::from("bazel://library_b/...")];
         let mut selections = fixture.sparse_repo()?.selections()?;
 
-        assert!(selections.mutate(Disposition::Add, &targets)?);
+        assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
         assert_eq!(operation::sync::run(&path, fixture.app.clone())?, true);
 
