@@ -51,7 +51,7 @@ fn repo_with_no_selections_returns_mandatory_projects_in_computed_selection() ->
     let fixture = Fixture::new()?;
     let repo = fixture.repo()?;
 
-    let selections = Selections::try_from(&repo)?;
+    let selections = repo.selections()?;
     let computed_selection = selections.computed_selection()?;
     assert_eq!(
         project_names(&computed_selection),
@@ -73,7 +73,7 @@ fn modifying_and_saving_the_selection() -> Result<()> {
     let target = Target::try_from("bazel://library_b/...")?;
 
     {
-        let mut selections = Selections::try_from(&repo)?;
+        let mut selections = repo.selections()?;
         selections.process(&vec![
             Operation {
                 action: OperationAction::Add,
@@ -95,7 +95,7 @@ fn modifying_and_saving_the_selection() -> Result<()> {
 
     {
         // Ensure that after loading from disk in a new instance, the selection is the same.
-        let mut selections = Selections::try_from(&repo)?;
+        let mut selections = repo.selections()?;
         let computed_selection = selections.computed_selection()?;
         assert_eq!(
             project_names(&computed_selection),
@@ -128,7 +128,7 @@ fn adding_an_unknown_project() -> Result<()> {
     let repo = fixture.repo()?;
 
     let nonexistent_project = Underlying::Project(String::from("blofeld/moonbase"));
-    let mut selections = Selections::try_from(&repo)?;
+    let mut selections = repo.selections()?;
     let result = selections.process(&vec![Operation {
         action: OperationAction::Add,
         underlying: nonexistent_project.clone(),
@@ -147,7 +147,7 @@ fn mandatory_projects_cannot_be_selected() -> Result<()> {
     let repo = fixture.repo()?;
 
     let mandatory_project = Underlying::Project(String::from("mandatory"));
-    let mut selections = Selections::try_from(&repo)?;
+    let mut selections = repo.selections()?;
     let result = selections.process(&vec![Operation {
         action: OperationAction::Add,
         underlying: mandatory_project.clone(),
@@ -166,7 +166,7 @@ fn duplicate_projects_are_ignored() -> Result<()> {
     let repo = fixture.repo()?;
 
     let project_b = Underlying::Project(String::from("team_zissou/project_b"));
-    let mut selections = Selections::try_from(&repo)?;
+    let mut selections = repo.selections()?;
     let result = selections.process(&vec![Operation {
         action: OperationAction::Add,
         underlying: project_b.clone(),

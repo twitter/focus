@@ -232,7 +232,7 @@ fn compute_and_store_initial_selection(
     repo: &Repo,
     projects_and_targets: Vec<String>,
 ) -> Result<TargetSet> {
-    let mut selections = Selections::try_from(repo)?;
+    let mut selections = repo.selections()?;
     let operations = projects_and_targets
         .iter()
         .map(|value| Operation::new(OperationAction::Add, value))

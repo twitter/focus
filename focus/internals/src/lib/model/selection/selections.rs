@@ -16,7 +16,23 @@ pub struct Selections {
 }
 
 impl Selections {
-    pub fn new(
+    pub fn from_repo(repo: &Repo) -> Result<Self> {
+        let working_tree = repo
+            .working_tree()
+            .ok_or_else(|| anyhow::anyhow!("The repo must have a working tree"))?;
+
+        let paths = DataPaths::from_working_tree(working_tree)?;
+        let optional_projects = Projects::new(
+            ProjectSets::new(&paths.project_dir).context("Loading optional projects")?,
+        )?;
+        let mandatory_projects = Projects::new(
+            ProjectSets::new(&paths.focus_dir).context("Loading mandatory projects")?,
+        )?;
+
+        Self::new(&paths.selection_file, optional_projects, mandatory_projects)
+    }
+
+    fn new(
         selection_path: &dyn AsRef<Path>,
         optional_projects: Projects,
         mandatory_projects: Projects,
@@ -74,7 +90,6 @@ impl Selections {
         action: OperationAction,
         projects_and_targets: &Vec<String>,
     ) -> Result<bool> {
-        // let action = action.copy();
         let operations = projects_and_targets
             .iter()
             .map(|value| Operation::new(action, value.clone()))
@@ -102,27 +117,6 @@ impl Selections {
                 Ok(result)
             }
             Err(e) => Err(e),
-        }
-    }
-}
-
-impl TryFrom<&Repo> for Selections {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Repo) -> Result<Self, Self::Error> {
-        match value.working_tree() {
-            Some(working_tree) => {
-                let paths = DataPaths::from_working_tree(working_tree)?;
-                let optional_projects = Projects::new(
-                    ProjectSets::new(&paths.project_dir).context("Loading optional projects")?,
-                )?;
-                let mandatory_projects = Projects::new(
-                    ProjectSets::new(&paths.focus_dir).context("Loading mandatory projects")?,
-                )?;
-
-                Self::new(&paths.selection_file, optional_projects, mandatory_projects)
-            }
-            None => bail!("The repo must have a working tree"),
         }
     }
 }

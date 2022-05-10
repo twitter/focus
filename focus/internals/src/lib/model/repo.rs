@@ -604,6 +604,6 @@ impl Repo {
     }
 
     pub fn selections(&self) -> Result<Selections> {
-        Selections::try_from(self)
+        Selections::from_repo(self)
     }
 }
