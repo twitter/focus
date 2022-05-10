@@ -232,11 +232,10 @@ fn compute_and_store_initial_selection(
     repo: &Repo,
     projects_and_targets: Vec<String>,
 ) -> Result<TargetSet> {
-    use crate::model::selection::OperationProcessor;
     let mut selections = Selections::try_from(repo)?;
     let operations = projects_and_targets
         .iter()
-        .map(|value| Operation::from((OperationAction::Add, value.to_owned())))
+        .map(|value| Operation::new(OperationAction::Add, value))
         .collect::<Vec<Operation>>();
     let result = selections.process(&operations)?;
     if !result.is_success() {
