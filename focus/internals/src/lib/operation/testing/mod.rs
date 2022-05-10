@@ -201,7 +201,7 @@ pub(in crate::operation) mod integration {
 
     use tracing::{info, warn};
 
-    use focus_testing::scratch_git_repo::ScratchGitRepo;
+    use focus_testing::ScratchGitRepo;
     use focus_util::app::App;
 
     use crate::{model::repo::Repo, operation};
@@ -219,8 +219,7 @@ pub(in crate::operation) mod integration {
         pub sparse_repo_path: PathBuf,
         pub dense_repo: ScratchGitRepo,
         pub branch: String,
-        pub targets: Vec<String>,
-        pub layers: Vec<String>,
+        pub projects_and_targets: Vec<String>,
         pub app: Arc<App>,
         pub preserve: bool,
     }
@@ -237,8 +236,7 @@ pub(in crate::operation) mod integration {
                 &branch,
             )?;
             let sparse_repo_path = dir.path().join("sparse");
-            let targets: Vec<String> = vec![];
-            let layers: Vec<String> = vec![];
+            let projects_and_targets: Vec<String> = vec![];
             let app = Arc::new(App::new(false)?);
 
             Ok(Self {
@@ -247,8 +245,7 @@ pub(in crate::operation) mod integration {
                 sparse_repo_path,
                 dense_repo,
                 branch,
-                targets,
-                layers,
+                projects_and_targets,
                 app,
                 preserve: false,
             })
@@ -273,8 +270,7 @@ pub(in crate::operation) mod integration {
                 operation::clone::Origin::Local(self.dense_repo_path.clone()),
                 self.sparse_repo_path.clone(),
                 self.branch.clone(),
-                self.targets.clone(),
-                self.layers.clone(),
+                self.projects_and_targets.clone(),
                 true,
                 90,
                 self.app.clone(),

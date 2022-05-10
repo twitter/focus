@@ -1,0 +1,15 @@
+---
+source: focus/internals/src/lib/operation/sync.rs
+expression: "&profile"
+---
+/*
+!/*/
+*.bzl
+/3rdparty/
+/focus/
+/pants-internal/
+/pants-support/
+/tools/
+BUILD*
+WORKSPACE*
+

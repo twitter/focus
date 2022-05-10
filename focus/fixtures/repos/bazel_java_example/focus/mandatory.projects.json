@@ -3,6 +3,7 @@
         {
             "name": "mandatory",
             "description": "Mandatory dependencies imposed by the repository",
+            "mandatory": true,
             "targets": [
                 "bazel://mandatory_z/..."
             ]

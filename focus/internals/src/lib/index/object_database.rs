@@ -276,7 +276,7 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
 mod tests {
     use maplit::btreeset;
 
-    use focus_testing::scratch_git_repo::ScratchGitRepo;
+    use focus_testing::ScratchGitRepo;
 
     use crate::target::{Label, TargetName};
 

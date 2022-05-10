@@ -1,4 +1,4 @@
-use crate::model::selection::{Disposition, Operation, Selections};
+use crate::model::selection::{Project, ProjectSet, ProjectSets};
 use crate::{index::testing::HashMapOdb, model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
@@ -43,7 +43,8 @@ pub fn run(
     origin: Origin,
     sparse_repo_path: PathBuf,
     branch: String,
-    projects_and_targets: Vec<String>,
+    targets: Vec<String>,
+    layers: Vec<String>,
     copy_branches: bool,
     days_of_history: u64,
     app: Arc<App>,
@@ -66,7 +67,7 @@ pub fn run(
         ),
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, app)
+    set_up_sparse_repo(&sparse_repo_path, layers, targets, app)
 }
 
 /// Clone from a local path on disk.
@@ -190,7 +191,8 @@ fn clone_remote(
 
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
-    projects_and_targets: Vec<String>,
+    layers: Vec<String>,
+    targets: Vec<String>,
     app: Arc<App>,
 ) -> Result<()> {
     {
@@ -207,7 +209,18 @@ fn set_up_sparse_repo(
 
     // N.B. we must re-open the repo because otherwise it has no trees...
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
-    let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
+    let target_set = {
+        let outlining_tree = repo.outlining_tree().expect("No outlining tree");
+        let outlining_tree_underlying = outlining_tree.underlying();
+        let working_tree = repo.working_tree().expect("No working tree");
+
+        compute_and_store_initial_selection(
+            outlining_tree_underlying.path(),
+            working_tree.path(),
+            layers,
+            targets,
+        )?
+    };
 
     let odb = HashMapOdb::new();
     repo.sync(&target_set, app.clone(), &odb)
@@ -228,25 +241,36 @@ fn set_up_sparse_repo(
     Ok(())
 }
 
+pub(crate) fn named_projects_from_repo(
+    repo: &Path,
+    project_names: &[String],
+) -> Result<ProjectSet> {
+    let project_sets = ProjectSets::new(repo);
+    let rich_layer_set = RichProjectSet::new(
+        project_sets
+            .available_projects()
+            .context("getting available layers")?,
+    )?;
+
+    let mut projects = Vec::<Project>::new();
+    for project_name in project_names {
+        if let Some(project) = rich_layer_set.get(project_name) {
+            projects.push(project.clone());
+        } else {
+            bail!("Project named '{}' not found", &project_name)
+        }
+    }
+
+    Ok(ProjectSet::new(projects.into_iter().collect()))
+}
+
 fn compute_and_store_initial_selection(
     repo: &Repo,
-    projects_and_targets: Vec<String>,
+    projects: Vec<String>,
+    targets: Vec<String>,
 ) -> Result<TargetSet> {
-    use crate::model::selection::OperationProcessor;
-    let mut selections = Selections::try_from(repo)?;
-    let operations = projects_and_targets
-        .iter()
-        .map(|value| Operation::from((Disposition::Add, value.to_owned())))
-        .collect::<Vec<Operation>>();
-    let result = selections.process(&operations)?;
-    if !result.is_success() {
-        bail!("Selecting projects and targets failed");
-    }
-    selections.save()?;
-    let selection = selections.computed_selection()?;
-    let target_set = TargetSet::try_from(&selection)?;
-
-    Ok(target_set)
+    let selections = Selections::try_from(repo)?;
+    Ok(TargetSet::try_from(targets.as_slice()).context("Failed to parse targets")?)
 }
 
 fn clone_shallow(
@@ -507,7 +531,7 @@ mod test {
     use git2::Repository;
     use tracing::info;
 
-    use crate::{operation::testing::integration::RepoPairFixture, target::Target};
+    use crate::operation::testing::integration::RepoPairFixture;
     use focus_testing::init_logging;
     use focus_util::app::App;
 
@@ -520,27 +544,52 @@ mod test {
         init_logging();
 
         let mut fixture = RepoPairFixture::new()?;
-        let library_a_target_expression = String::from("bazel://library_a/...");
-        let project_b_label = String::from("team_zissou/project_b");
-        fixture
-            .projects_and_targets
-            .push(library_a_target_expression.clone());
-        fixture.projects_and_targets.push(project_b_label.clone());
+        let library_a_coord = String::from("bazel://library_a/...");
+        fixture.targets.push(library_a_coord);
+        let project_b_layer_label = String::from("team_zissou/project_b");
+        fixture.layers.push(project_b_layer_label);
 
         fixture.perform_clone()?;
 
-        let selections = fixture.sparse_repo()?.selections()?;
-        let selection = selections.computed_selection()?;
+        let sparse_repo = fixture.sparse_repo()?;
+        let working_tree = sparse_repo.working_tree().unwrap();
+        let layer_sets = working_tree.layer_sets()?;
 
-        let library_a_target = Target::try_from(library_a_target_expression.as_str())?;
-        let project_b = selections
-            .optional_projects
-            .underlying
-            .get(&project_b_label)
-            .unwrap();
-
-        assert!(selection.targets.contains(&library_a_target));
-        assert!(selection.projects.contains(project_b));
+        {
+            let ad_hoc_layers = layer_sets.adhoc_projects().unwrap().unwrap();
+            let layers = ad_hoc_layers.projects();
+            insta::assert_debug_snapshot!(layers, @r###"
+            [
+                Project {
+                    name: "adhoc",
+                    description: "Ad-hoc project",
+                    mandatory: false,
+                    targets: [
+                        "bazel://library_a/...",
+                    ],
+                },
+            ]
+            "###);
+        }
+        {
+            let selected_layers = layer_sets
+                .selected_projects()
+                .unwrap()
+                .expect("Should have had some layers");
+            let layers = selected_layers.projects();
+            insta::assert_debug_snapshot!(layers, @r###"
+            [
+                Project {
+                    name: "team_zissou/project_b",
+                    description: "Stuff relating to project B",
+                    mandatory: false,
+                    targets: [
+                        "bazel://project_b/...",
+                    ],
+                },
+            ]
+            "###);
+        }
 
         Ok(())
     }
