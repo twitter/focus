@@ -1,56 +1,67 @@
 use std::{
-    cell::RefCell,
     collections::HashMap,
     ffi::OsString,
     fs::File,
     io::{BufReader, BufWriter},
     os::unix::prelude::OsStrExt,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use anyhow::{bail, Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use tracing::debug;
+use tracing::{debug, debug_span};
 
 /// Load value from the specified path, decoding it from a JSON representation.
-pub fn load_model<T>(path: &dyn AsRef<Path>) -> Result<T>
+pub fn load_model<T>(path: impl AsRef<Path>) -> Result<T>
 where
     T: Default + DeserializeOwned,
 {
-    if let Ok(file) = File::open(path.as_ref()) {
+    let path = path.as_ref();
+    let span = debug_span!("Loading model");
+    let _guard = span.enter();
+    debug!(?path);
+    if let Ok(file) = File::open(path) {
         let reader = BufReader::new(file);
-        serde_json::from_reader(reader).map_err(|e| e.into())
+        Ok(serde_json::from_reader(reader)?)
     } else {
         Ok(Default::default())
     }
 }
 
 /// Store value to the specified path, encoding it as a JSON representation.
-pub fn store_model<T>(path: &dyn AsRef<Path>, value: &T) -> Result<()>
+pub fn store_model<T>(path: impl AsRef<Path>, value: &T) -> Result<()>
 where
     T: Serialize,
 {
-    let file = File::create(path.as_ref())?;
+    let path = path.as_ref();
+    let span = debug_span!("Storing model");
+    let _guard = span.enter();
+    debug!(?path);
+    let file = File::create(path).with_context(|| {
+        format!(
+            "Creating or truncating file {} to store model",
+            path.display()
+        )
+    })?;
     let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, value).map_err(|e| e.into())
+    Ok(serde_json::to_writer_pretty(writer, value)?)
 }
 
 /// A collection for working with FileBackedModels serialized to a single directory, indexed by name.
 pub struct FileBackedCollection<T> {
     directory: PathBuf,
     extension: OsString,
-    pub underlying: RefCell<HashMap<String, T>>,
+    pub underlying: HashMap<String, T>,
 }
 
 impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     /// Constructs a collection, loading all entities from the directory. The `extension` here is somewhat special in that it is treated as a suffix and can therefore contain period characters, allowing for files to have extensions such `foo.json`
-    pub fn new(directory: &dyn AsRef<Path>, extension: OsString) -> Result<Self> {
+    pub fn new(directory: impl AsRef<Path>, extension: OsString) -> Result<Self> {
         let directory = directory.as_ref().to_owned();
-        let instance = Self {
+        let mut instance = Self {
             directory,
             extension,
-            underlying: RefCell::new(Default::default()),
+            underlying: Default::default(),
         };
 
         instance.revert()?;
@@ -71,47 +82,36 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
 
         debug!(desired_extension = ?self.extension);
         let file_suffix = {
-            let mut temp = OsString::from_str(".").unwrap();
+            let mut temp = OsString::from(".");
             temp.push(&self.extension);
             temp
         };
         let file_suffix_bytes = file_suffix.as_bytes();
 
-        match std::fs::read_dir(directory) {
-            Ok(dir) => {
-                let mut underlying = HashMap::<String, T>::new();
-                for entry in dir {
-                    match entry {
-                        Ok(entry) => {
-                            let path = entry.path();
-                            let file_name_bytes =
-                                path.file_name().expect("No file name").as_bytes();
-                            if !file_name_bytes.ends_with(file_suffix_bytes) {
-                                debug!(?path, ?file_suffix, "Skipped");
-                                continue;
-                            }
-
-                            let instance = load_model::<T>(&path).with_context(|| {
-                                format!("deserializing object from {}", path.display())
-                            })?;
-
-                            let name = file_name_bytes
-                                .strip_suffix(file_suffix_bytes)
-                                .expect("Failed to strip file suffix");
-                            let name = String::from_utf8(name.to_vec())?;
-                            debug!(?path, ?name, "Successfully read entry");
-                            underlying.insert(name, instance);
-                        }
-                        Err(e) => {
-                            return Err(e.into());
-                        }
-                    }
-                }
-
-                Ok(underlying)
+        let dir = std::fs::read_dir(directory)
+            .with_context(|| format!("Could not read directory {}", directory.display()))?;
+        let mut underlying = HashMap::<String, T>::new();
+        for entry in dir {
+            let entry = entry?;
+            let path = entry.path();
+            let file_name_bytes = path.file_name().expect("No file name").as_bytes();
+            if !file_name_bytes.ends_with(file_suffix_bytes) {
+                debug!(?path, ?file_suffix, "Skipped");
+                continue;
             }
-            Err(_) => bail!("Could not read directory {}", directory.display()),
+
+            let instance = load_model(&path)
+                .with_context(|| format!("deserializing object from {}", path.display()))?;
+
+            let name = file_name_bytes
+                .strip_suffix(file_suffix_bytes)
+                .expect("Failed to strip file suffix");
+            let name = String::from_utf8(name.to_vec())?;
+            debug!(?path, ?name, "Successfully read entry");
+            underlying.insert(name, instance);
         }
+
+        Ok(underlying)
     }
 
     #[allow(dead_code)]
@@ -127,9 +127,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     {
         let path = self.make_path(name);
         debug!(?path, %name, "Insert");
-        self.underlying
-            .borrow_mut()
-            .insert(name.to_owned(), entity.clone());
+        self.underlying.insert(name.to_owned(), entity.clone());
         store_model(&path.as_path(), entity)
     }
 
@@ -137,7 +135,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     #[allow(dead_code)]
     pub fn remove(&mut self, name: &str) -> Result<()> {
         let path = self.make_path(name);
-        self.underlying.borrow_mut().remove(name);
+        self.underlying.remove(name);
         if path.is_file() {
             debug!(?path, %name, "Deleted persisted entity");
             std::fs::remove_file(path.as_path())
@@ -149,7 +147,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
 
     /// Replace the contents of the cache by loading all entities in the directory from disk.
     #[allow(dead_code)]
-    pub fn revert(&self) -> Result<()>
+    pub fn revert(&mut self) -> Result<()>
     where
         T: Default + DeserializeOwned,
     {
@@ -159,7 +157,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
                 self.directory.display()
             )
         })?;
-        self.underlying.replace(updated);
+        self.underlying = updated;
         Ok(())
     }
 
@@ -169,8 +167,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     where
         T: Default + DeserializeOwned,
     {
-        let underlying = self.underlying.borrow();
-        for (name, entity) in underlying.iter() {
+        for (name, entity) in self.underlying.iter() {
             let path = self.make_path(name);
             store_model(&path.as_path(), entity)
                 .with_context(|| format!("Storing entity to {}", path.display()))?
@@ -194,7 +191,7 @@ mod tests {
         name: String,
     }
 
-    fn make_collection(directory: &dyn AsRef<Path>) -> Result<FileBackedCollection<Person>> {
+    fn make_collection(directory: impl AsRef<Path>) -> Result<FileBackedCollection<Person>> {
         FileBackedCollection::<Person>::new(directory, OsString::from("person.json"))
     }
 
@@ -204,7 +201,7 @@ mod tests {
 
         let dir = tempfile::tempdir()?;
         let mut collection = make_collection(&dir.path())?;
-        let alternate_collection = make_collection(&dir.path())?;
+        let mut alternate_collection = make_collection(&dir.path())?;
 
         let name = "jeff";
         collection.insert(
@@ -213,25 +210,19 @@ mod tests {
                 name: String::from("Jeff Lebowski"),
             },
         )?;
-        assert!(collection.underlying.borrow().contains_key(name));
+        assert!(collection.underlying.contains_key(name));
         assert!(dir.path().join("jeff.person.json").is_file());
 
-        assert_eq!(
-            alternate_collection.underlying.borrow().contains_key(name),
-            false
-        );
+        assert_eq!(alternate_collection.underlying.contains_key(name), false);
         alternate_collection.revert()?;
-        assert!(alternate_collection.underlying.borrow().contains_key(name));
+        assert!(alternate_collection.underlying.contains_key(name));
 
         // Remove from first collection
         collection.remove(name)?;
-        assert_eq!(collection.underlying.borrow().contains_key(name), false);
+        assert_eq!(collection.underlying.contains_key(name), false);
         assert_eq!(dir.path().join("jeff.person.json").is_file(), false);
         alternate_collection.revert()?;
-        assert_eq!(
-            alternate_collection.underlying.borrow().contains_key(name),
-            false
-        );
+        assert_eq!(alternate_collection.underlying.contains_key(name), false);
 
         Ok(())
     }
@@ -251,8 +242,7 @@ mod tests {
                 },
             )?;
             {
-                let entities = collection.underlying.borrow();
-                let (actual_name, entity) = entities.iter().next().unwrap();
+                let (actual_name, entity) = collection.underlying.iter().next().unwrap();
                 assert_eq!(actual_name, name);
                 assert_eq!(entity.name, "Jeff Lebowski");
             }
@@ -264,8 +254,7 @@ mod tests {
                 },
             )?;
             {
-                let entities = collection.underlying.borrow();
-                let (actual_name, entity) = entities.iter().next().unwrap();
+                let (actual_name, entity) = collection.underlying.iter().next().unwrap();
                 assert_eq!(actual_name, name);
                 assert_eq!(entity.name, "Maude Lebowski");
             }
@@ -273,8 +262,7 @@ mod tests {
 
         {
             let collection = make_collection(&dir.path())?;
-            let entities = collection.underlying.borrow();
-            let (actual_name, entity) = entities.iter().next().unwrap();
+            let (actual_name, entity) = collection.underlying.iter().next().unwrap();
             assert_eq!(actual_name, name);
             assert_eq!(entity.name, "Maude Lebowski");
         }
@@ -287,16 +275,15 @@ mod tests {
         focus_testing::init_logging();
         let dir = tempfile::tempdir()?;
         {
-            let collection = make_collection(&dir.path())?;
+            let mut collection = make_collection(&dir.path())?;
             {
-                let mut underlying = collection.underlying.borrow_mut();
-                underlying.insert(
+                collection.underlying.insert(
                     String::from("foo"),
                     Person {
                         name: String::from("foo"),
                     },
                 );
-                underlying.insert(
+                collection.underlying.insert(
                     String::from("bar"),
                     Person {
                         name: String::from("bar"),
@@ -309,9 +296,8 @@ mod tests {
 
         {
             let collection = make_collection(&dir.path())?;
-            let underlying = collection.underlying.borrow();
-            assert!(underlying.contains_key("foo"));
-            assert!(underlying.contains_key("bar"));
+            assert!(collection.underlying.contains_key("foo"));
+            assert!(collection.underlying.contains_key("bar"));
         }
 
         Ok(())

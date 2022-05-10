@@ -33,7 +33,7 @@ impl Selections {
 
     /// Load a selection from the given `path` using project definitions from `projects`.
     fn load(path: &dyn AsRef<Path>, projects: &Projects) -> Result<Selection> {
-        match load_model::<PersistedSelection>(path) {
+        match load_model(path) {
             Ok(persisted_selection) => {
                 let mut selection: selection::Selection = Default::default();
                 let mut processor = SelectionOperationProcessor {

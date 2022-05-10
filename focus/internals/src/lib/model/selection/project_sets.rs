@@ -1,4 +1,3 @@
-use std::cell::Ref;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::Path;
@@ -18,7 +17,7 @@ impl ProjectSets {
         )?))
     }
 
-    pub fn underlying(&self) -> Ref<HashMap<String, ProjectSet>> {
-        self.0.underlying.borrow()
+    pub fn underlying(&self) -> &HashMap<String, ProjectSet> {
+        &self.0.underlying
     }
 }
