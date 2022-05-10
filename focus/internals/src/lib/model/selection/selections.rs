@@ -33,7 +33,7 @@ impl Selections {
 
     /// Load a selection from the given `path` using project definitions from `projects`.
     fn load(path: &dyn AsRef<Path>, projects: &Projects) -> Result<Selection> {
-        match FileBackedModel::load::<PersistedSelection>(path) {
+        match load_model::<PersistedSelection>(path) {
             Ok(persisted_selection) => {
                 let mut selection: selection::Selection = Default::default();
                 let mut processor = SelectionOperationProcessor {
@@ -63,7 +63,7 @@ impl Selections {
     pub fn save(&self) -> Result<()> {
         let selection = self.selection.borrow().clone();
         let persisted_selection = PersistedSelection::from(&selection);
-        FileBackedModel::store(&self.selection_path, &persisted_selection)?;
+        store_model(&self.selection_path, &persisted_selection)?;
         debug!(?persisted_selection, path = ?self.selection_path, "Saved selection");
         Ok(())
     }
@@ -75,7 +75,8 @@ impl Selections {
         let mandatory_projects = self
             .mandatory_projects
             .underlying
-            .values().cloned()
+            .values()
+            .cloned()
             .collect::<Vec<Project>>();
         debug!(mandatory = ?mandatory_projects, "Mandatory projects");
         selection.projects.extend(mandatory_projects);

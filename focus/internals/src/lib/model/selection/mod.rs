@@ -30,5 +30,5 @@ type TargetSet = crate::target::TargetSet;
 type TargetError = crate::target::TargetError;
 type Repo = super::repo::Repo;
 type WorkingTree = super::repo::WorkingTree;
-type FileBackedModel = crate::model::persistence::FileBackedModel;
+pub use crate::model::persistence::{load_model, store_model};
 type FileBackedCollection<T> = crate::model::persistence::FileBackedCollection<T>;
