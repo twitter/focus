@@ -26,7 +26,7 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
 
     let backed_up_sparse_profile = BackedUpFile::new(&sparse_profile_path)?;
 
-    let selections = Selections::try_from(&repo)?;
+    let selections = repo.selections()?;
     let selection = selections.computed_selection()?;
     let targets = TargetSet::try_from(&selection).context("constructing target set")?;
 

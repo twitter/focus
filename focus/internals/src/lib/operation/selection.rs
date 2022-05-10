@@ -17,7 +17,7 @@ fn mutate(
     app: Arc<focus_util::app::App>,
 ) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
-    let mut selections = Selections::try_from(&repo)?;
+    let mut selections = repo.selections()?;
     if selections.mutate(action, &projects_and_targets)? {
         selections.save().context("Saving selection")?;
         if sync_if_changed {
@@ -61,7 +61,7 @@ pub fn remove(
 
 pub fn status(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
-    let selections = Selections::try_from(&repo)?;
+    let selections = repo.selections()?;
     let selection = selections.computed_selection()?;
     println!("{}", selection);
     Ok(())
@@ -69,7 +69,7 @@ pub fn status(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
 
 pub fn list_projects(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
-    let selections = Selections::try_from(&repo)?;
+    let selections = repo.selections()?;
     println!("{}", selections.optional_projects);
     Ok(())
 }

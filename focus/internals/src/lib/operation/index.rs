@@ -133,7 +133,7 @@ pub fn resolve(
     assert_focused_repo(sparse_repo)?;
     let repo = Repo::open(sparse_repo, app.clone())?;
     let selection = {
-        let mut selections = Selections::try_from(&repo)?;
+        let mut selections = repo.selections()?;
         selections.mutate(OperationAction::Add, &projects_and_targets)?;
         selections.computed_selection()
     }?;
@@ -143,7 +143,7 @@ pub fn resolve(
 
 pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo, app.clone())?;
-    let selections = Selections::try_from(&repo)?;
+    let selections = repo.selections()?;
     let targets = {
         let mut targets = TargetSet::try_from(&selections.mandatory_projects)?;
         targets.extend(TargetSet::try_from(&selections.optional_projects)?);

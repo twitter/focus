@@ -269,7 +269,7 @@ fn compute_and_store_initial_selection(
     projects: Vec<String>,
     targets: Vec<String>,
 ) -> Result<TargetSet> {
-    let selections = Selections::try_from(repo)?;
+    let selections = repo.selections()?;
     Ok(TargetSet::try_from(targets.as_slice()).context("Failed to parse targets")?)
 }
 
