@@ -33,7 +33,7 @@ impl Selections {
     }
 
     fn new(
-        selection_path: &dyn AsRef<Path>,
+        selection_path: impl AsRef<Path>,
         optional_projects: Projects,
         mandatory_projects: Projects,
     ) -> Result<Self> {
@@ -48,7 +48,7 @@ impl Selections {
     }
 
     /// Load a selection from the given `path` using project definitions from `projects`.
-    fn load(path: &dyn AsRef<Path>, projects: &Projects) -> Result<Selection> {
+    fn load(path: impl AsRef<Path>, projects: &Projects) -> Result<Selection> {
         let persisted_selection = load_model(path).context("Loading persisted selection")?;
         Selection::from_persisted_selection(persisted_selection, projects)
     }
