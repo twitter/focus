@@ -1,16 +1,16 @@
-pub mod project;
-pub mod selection;
+mod project;
+mod selection;
 pub use project::Project;
 pub use selection::Selection;
 mod data_paths;
 use data_paths::DataPaths;
 mod persisted_selection;
 use persisted_selection::PersistedSelection;
-pub mod selections;
+mod selections;
 pub use selections::Selections;
-pub mod selection_operation_processor;
+mod selection_operation_processor;
 use selection_operation_processor::SelectionOperationProcessor;
-pub mod operations;
+mod operations;
 pub use operations::Disposition;
 pub use operations::Operation;
 pub use operations::OperationProcessor;
@@ -25,10 +25,10 @@ pub use projects::Projects;
 #[cfg(test)]
 mod testing;
 
-type Target = crate::target::Target;
-type TargetSet = crate::target::TargetSet;
-type TargetError = crate::target::TargetError;
-type Repo = super::repo::Repo;
-type WorkingTree = super::repo::WorkingTree;
+pub use crate::target::Target;
+pub use crate::target::TargetSet;
+pub use crate::target::TargetError;
+pub use super::repo::Repo;
+pub use super::repo::WorkingTree;
 pub use crate::model::persistence::{load_model, store_model};
-type FileBackedCollection<T> = crate::model::persistence::FileBackedCollection<T>;
+pub use crate::model::persistence::FileBackedCollection;
