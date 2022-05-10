@@ -64,7 +64,7 @@ mod testing {
     use super::*;
 
     #[test]
-    fn operation_from() {
+    fn operation_new() {
         assert_eq!(
             Operation::new(OperationAction::Add, "bazel://a/b:*"),
             Operation {
