@@ -12,7 +12,7 @@ use crate::index::{
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use crate::model::repo::Repo;
-use crate::model::selection::{OperationAction};
+use crate::model::selection::OperationAction;
 use crate::target::{Target, TargetSet};
 
 #[derive(
@@ -143,8 +143,10 @@ pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow
     let repo = Repo::open(&sparse_repo, app.clone())?;
     let selections = repo.selections()?;
     let targets = {
-        let mut targets = TargetSet::try_from(&selections.mandatory_projects)?;
-        targets.extend(TargetSet::try_from(&selections.optional_projects)?);
+        let mut targets = TargetSet::try_from(&selections.project_catalog().mandatory_projects)?;
+        targets.extend(TargetSet::try_from(
+            &selections.project_catalog().optional_projects,
+        )?);
         targets
     };
 

@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use std::{collections::BTreeSet, fmt::Display};
 
 use serde::{Deserialize, Serialize};
@@ -47,5 +48,26 @@ impl TryFrom<&Project> for TargetSet {
         }
 
         Ok(target_set)
+    }
+}
+
+/// ProjectCatalog allows for retrieval of projects (optional or mandatory) defined in a repository.
+pub struct ProjectCatalog {
+    pub optional_projects: Projects,
+    pub mandatory_projects: Projects,
+}
+
+impl ProjectCatalog {
+    pub(crate) fn new(paths: &DataPaths) -> Result<Self> {
+        let optional_projects = Projects::new(
+            ProjectSets::new(&paths.project_dir).context("Loading optional projects")?,
+        )?;
+        let mandatory_projects = Projects::new(
+            ProjectSets::new(&paths.focus_dir).context("Loading mandatory projects")?,
+        )?;
+        Ok(Self {
+            optional_projects,
+            mandatory_projects,
+        })
     }
 }

@@ -1,8 +1,8 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::Display,
-    path::{PathBuf, Path},
+    path::{Path, PathBuf},
 };
 use tracing::{debug, error, warn};
 
@@ -182,40 +182,32 @@ impl<'processor> SelectionOperationProcessor<'processor> {
     }
 }
 
-pub struct Selections {
+
+/// SelectionManager maintains the current selection within a repository. It also provides access to projects defined in the repository via the `project_catalog()` method and associated structure.
+pub struct SelectionManager {
+    /// The path where the selection is stored.
     selection_path: PathBuf,
-    pub optional_projects: Projects,
-    pub mandatory_projects: Projects,
+    /// The currently selected projects.
     selection: Selection,
+    /// A catalog of defined projects.
+    project_catalog: ProjectCatalog,
 }
 
-impl Selections {
+impl SelectionManager {
     pub fn from_repo(repo: &Repo) -> Result<Self> {
         let working_tree = repo
             .working_tree()
             .ok_or_else(|| anyhow::anyhow!("The repo must have a working tree"))?;
-
         let paths = DataPaths::from_working_tree(working_tree)?;
-        let optional_projects = Projects::new(
-            ProjectSets::new(&paths.project_dir).context("Loading optional projects")?,
-        )?;
-        let mandatory_projects = Projects::new(
-            ProjectSets::new(&paths.focus_dir).context("Loading mandatory projects")?,
-        )?;
-
-        Self::new(&paths.selection_file, optional_projects, mandatory_projects)
+        let project_catalog = ProjectCatalog::new(&paths)?;
+        Self::new(&paths.selection_file, project_catalog)
     }
 
-    fn new(
-        selection_path: impl AsRef<Path>,
-        optional_projects: Projects,
-        mandatory_projects: Projects,
-    ) -> Result<Self> {
+    fn new(selection_path: impl AsRef<Path>, project_catalog: ProjectCatalog) -> Result<Self> {
         let mut instance = Self {
             selection_path: selection_path.as_ref().to_owned(),
-            optional_projects,
-            mandatory_projects,
             selection: Default::default(),
+            project_catalog,
         };
         instance.reload()?;
         Ok(instance)
@@ -229,7 +221,10 @@ impl Selections {
 
     /// Load the selection from disk.
     pub fn reload(&mut self) -> Result<()> {
-        let selection: Selection = Self::load(&self.selection_path, &self.optional_projects)?;
+        let selection: Selection = Self::load(
+            &self.selection_path,
+            &self.project_catalog.optional_projects,
+        )?;
         debug!(?selection, path = ?self.selection_path, "Reloaded selection");
         self.selection = selection;
         Ok(())
@@ -249,6 +244,7 @@ impl Selections {
         let mut selection = self.selection.clone();
         debug!(selected = ?selection, "User-selected projects");
         let mandatory_projects = self
+            .project_catalog
             .mandatory_projects
             .underlying
             .values()
@@ -279,7 +275,7 @@ impl Selections {
         let mut selection = self.selection.clone();
         let mut processor = SelectionOperationProcessor {
             selection: &mut selection,
-            projects: &self.optional_projects,
+            projects: &self.project_catalog.optional_projects,
         };
         match processor.process(operations) {
             Ok(result) => {
@@ -292,5 +288,11 @@ impl Selections {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Get a reference to the selection manager's project catalog.
+    #[must_use]
+    pub fn project_catalog(&self) -> &ProjectCatalog {
+        &self.project_catalog
     }
 }
