@@ -76,7 +76,7 @@ enum Subcommand {
     },
 
     /// Remove projects and targets from the selection.
-    #[clap(alias("rm"))]
+    #[clap(visible_alias("rm"))]
     Remove {
         /// Project and targets to remove from the selection
         projects_and_targets: Vec<String>,
