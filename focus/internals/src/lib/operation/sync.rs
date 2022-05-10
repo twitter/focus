@@ -67,16 +67,16 @@ mod testing {
 
     use anyhow::Result;
     use maplit::hashset;
-    
 
     use focus_testing::init_logging;
     use focus_util::app;
 
     use crate::{
+        model::selection::OperationAction,
         operation::{
             self,
             testing::integration::{RepoDisposition, RepoPairFixture},
-        }, model::selection::OperationAction,
+        },
     };
 
     #[test]
@@ -224,12 +224,7 @@ It isn't just one of your holiday games
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
 
-        operation::selection::remove(
-            &path,
-            false,
-            vec![project_a_label],
-            fixture.app.clone(),
-        )?;
+        operation::selection::remove(&path, false, vec![project_a_label], fixture.app.clone())?;
         {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
@@ -239,12 +234,7 @@ It isn't just one of your holiday games
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
 
-        operation::selection::remove(
-            &path,
-            false,
-            vec![project_b_label],
-            fixture.app.clone(),
-        )?;
+        operation::selection::remove(&path, false, vec![project_b_label], fixture.app.clone())?;
         {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! {});
