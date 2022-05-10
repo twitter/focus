@@ -11,10 +11,8 @@ pub struct DataPaths {
     pub selection_file: PathBuf,
 }
 
-impl TryFrom<&WorkingTree> for DataPaths {
-    type Error = anyhow::Error;
-
-    fn try_from(working_tree: &WorkingTree) -> Result<Self> {
+impl DataPaths {
+    pub fn from_working_tree(working_tree: &WorkingTree) -> Result<Self> {
         let dot_focus_dir = working_tree.path().join(".focus");
         let focus_dir = working_tree.path().join("focus");
         let project_dir = focus_dir.join("projects");
@@ -31,9 +29,7 @@ impl TryFrom<&WorkingTree> for DataPaths {
             .context("Ensuring directories are set up correctly")?;
         Ok(instance)
     }
-}
 
-impl DataPaths {
     fn ensure_directories_are_set_up_correctly(&self) -> Result<()> {
         if !self.focus_dir.is_dir() {
             bail!(
