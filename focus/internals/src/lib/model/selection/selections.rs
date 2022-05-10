@@ -85,13 +85,13 @@ impl Selections {
 
     pub fn mutate(
         &mut self,
-        disposition: Disposition,
+        action: OperationAction,
         projects_and_targets: &Vec<String>,
     ) -> Result<bool> {
-        // let disposition = disposition.copy();
+        // let action = action.copy();
         let operations = projects_and_targets
             .iter()
-            .map(|value| Operation::from((disposition, value.clone())))
+            .map(|value| Operation::from((action, value.clone())))
             .collect::<Vec<Operation>>();
         let result = self.process(&operations)?;
         if !result.is_success() {

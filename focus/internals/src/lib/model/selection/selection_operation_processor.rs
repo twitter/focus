@@ -22,8 +22,8 @@ impl<'processor> OperationProcessor for SelectionOperationProcessor<'processor> 
 
         for operation in operations {
             debug!(?operation, "Processing operation");
-            match (&operation.disposition, &operation.underlying) {
-                (Disposition::Add, Underlying::Target(target)) => {
+            match (&operation.action, &operation.underlying) {
+                (OperationAction::Add, Underlying::Target(target)) => {
                     if self.selection.targets.insert(target.clone()) {
                         result.added.insert(operation.underlying.clone());
                         debug!(?target, "Target added to selection")
@@ -32,7 +32,7 @@ impl<'processor> OperationProcessor for SelectionOperationProcessor<'processor> 
                         debug!(?target, "Target already in selection")
                     }
                 }
-                (Disposition::Add, Underlying::Project(name)) => {
+                (OperationAction::Add, Underlying::Project(name)) => {
                     match self.projects.underlying.get(name.as_str()) {
                         Some(project) => {
                             if self.selection.projects.insert(project.clone()) {
@@ -49,7 +49,7 @@ impl<'processor> OperationProcessor for SelectionOperationProcessor<'processor> 
                         }
                     }
                 }
-                (Disposition::Remove, Underlying::Target(target)) => {
+                (OperationAction::Remove, Underlying::Target(target)) => {
                     if self.selection.targets.remove(target) {
                         debug!(?target, "Target removed from selection");
                         result.removed.insert(operation.underlying.clone());
@@ -58,7 +58,7 @@ impl<'processor> OperationProcessor for SelectionOperationProcessor<'processor> 
                         result.ignored.insert(operation.underlying.clone());
                     }
                 }
-                (Disposition::Remove, Underlying::Project(name)) => {
+                (OperationAction::Remove, Underlying::Project(name)) => {
                     match self.projects.underlying.get(name) {
                         Some(project) => {
                             if self.selection.projects.remove(project) {
