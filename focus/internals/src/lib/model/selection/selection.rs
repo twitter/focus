@@ -5,7 +5,7 @@ use std::{
 
 use super::*;
 
-/// A structure representing the current 6 in memory. Instead of serializing this structure, a PersistedSelection is stored to disk. In addition to that structure being simpler to serialize, it also allows for updates to the underlying project definitions.
+/// A structure representing the current selection in memory. Instead of serializing this structure, a PersistedSelection is stored to disk. In addition to that structure being simpler to serialize, the indirection allows for updates to the underlying project definitions.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Selection {
     pub projects: HashSet<Project>,
