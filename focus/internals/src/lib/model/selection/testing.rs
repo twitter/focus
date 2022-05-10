@@ -10,6 +10,7 @@ use tempfile::TempDir;
 use super::*;
 
 struct Fixture {
+    #[allow(dead_code)]
     dir: TempDir,
     underlying: ScratchGitRepo,
     app: Arc<App>,
