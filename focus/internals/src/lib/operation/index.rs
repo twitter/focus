@@ -13,7 +13,7 @@ use crate::index::{
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use crate::model::repo::Repo;
-use crate::model::selection::{Disposition, Selections};
+use crate::model::selection::{OperationAction, Selections};
 use crate::target::{Target, TargetSet};
 
 #[derive(
@@ -134,7 +134,7 @@ pub fn resolve(
     let repo = Repo::open(sparse_repo, app.clone())?;
     let selection = {
         let mut selections = Selections::try_from(&repo)?;
-        selections.mutate(Disposition::Add, &projects_and_targets)?;
+        selections.mutate(OperationAction::Add, &projects_and_targets)?;
         selections.computed_selection()
     }?;
     let targets = TargetSet::try_from(&selection)?;

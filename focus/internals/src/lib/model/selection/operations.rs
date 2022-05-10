@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum Disposition {
+pub enum OperationAction {
     Add,
     Remove,
 }
@@ -18,13 +18,13 @@ pub enum Underlying {
 
 #[derive(Debug, PartialEq, Hash)]
 pub struct Operation {
-    pub disposition: Disposition,
+    pub action: OperationAction,
     pub underlying: Underlying,
 }
 
-impl From<(Disposition, String)> for Operation {
-    fn from(parameters: (Disposition, String)) -> Self {
-        let (disposition, item) = parameters;
+impl From<(OperationAction, String)> for Operation {
+    fn from(parameters: (OperationAction, String)) -> Self {
+        let (action, item) = parameters;
 
         let underlying = if let Ok(target) = crate::target::Target::try_from(item.as_str()) {
             Underlying::Target(target)
@@ -33,7 +33,7 @@ impl From<(Disposition, String)> for Operation {
         };
 
         Self {
-            disposition,
+            action,
             underlying,
         }
     }
@@ -75,17 +75,17 @@ mod testing {
     #[test]
     fn operation_from() {
         assert_eq!(
-            Operation::from((Disposition::Add, String::from("bazel://a/b:*"))),
+            Operation::from((OperationAction::Add, String::from("bazel://a/b:*"))),
             Operation {
-                disposition: Disposition::Add,
+                action: OperationAction::Add,
                 underlying: Underlying::Target(Target::try_from("bazel://a/b:*").unwrap())
             }
         );
 
         assert_eq!(
-            Operation::from((Disposition::Remove, String::from("foo"))),
+            Operation::from((OperationAction::Remove, String::from("foo"))),
             Operation {
-                disposition: Disposition::Remove,
+                action: OperationAction::Remove,
                 underlying: Underlying::Project(String::from("foo"))
             }
         );

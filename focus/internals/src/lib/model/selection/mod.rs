@@ -11,7 +11,7 @@ pub use selections::Selections;
 mod selection_operation_processor;
 use selection_operation_processor::SelectionOperationProcessor;
 mod operations;
-pub use operations::Disposition;
+pub use operations::OperationAction;
 pub use operations::Operation;
 pub use operations::OperationProcessor;
 pub use operations::OperationProcessorResult;

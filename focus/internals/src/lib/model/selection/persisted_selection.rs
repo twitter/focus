@@ -53,12 +53,12 @@ impl TryFrom<PersistedSelection> for Vec<Operation> {
 
         let successful_targets = targets.filter_map(|r| r.ok());
         let target_operations = successful_targets.map(|target| Operation {
-            disposition: Disposition::Add,
+            action: OperationAction::Add,
             underlying: Underlying::Target(target),
         });
 
         let project_operations = persisted_selection.projects.iter().map(|name| Operation {
-            disposition: Disposition::Add,
+            action: OperationAction::Add,
             underlying: Underlying::Project(name.clone()),
         });
 
@@ -119,11 +119,11 @@ mod testing {
         assert_eq!(
             vec![
                 Operation {
-                    disposition: Disposition::Add,
+                    action: OperationAction::Add,
                     underlying: Underlying::Project(PROJECT_NAME_STR.to_owned())
                 },
                 Operation {
-                    disposition: Disposition::Add,
+                    action: OperationAction::Add,
                     underlying: Underlying::Target(target())
                 }
             ],

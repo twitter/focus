@@ -76,11 +76,11 @@ fn modifying_and_saving_the_selection() -> Result<()> {
         let mut selections = Selections::try_from(&repo)?;
         selections.process(&vec![
             Operation {
-                disposition: Disposition::Add,
+                action: OperationAction::Add,
                 underlying: Underlying::Project(project_name.clone()),
             },
             Operation {
-                disposition: Disposition::Add,
+                action: OperationAction::Add,
                 underlying: Underlying::Target(target.clone()),
             },
         ])?;
@@ -105,7 +105,7 @@ fn modifying_and_saving_the_selection() -> Result<()> {
 
         // Remove the target
         selections.process(&vec![Operation {
-            disposition: Disposition::Remove,
+            action: OperationAction::Remove,
             underlying: Underlying::Target(target),
         }])?;
         selections.save()?;
@@ -130,7 +130,7 @@ fn adding_an_unknown_project() -> Result<()> {
     let nonexistent_project = Underlying::Project(String::from("blofeld/moonbase"));
     let mut selections = Selections::try_from(&repo)?;
     let result = selections.process(&vec![Operation {
-        disposition: Disposition::Add,
+        action: OperationAction::Add,
         underlying: nonexistent_project.clone(),
     }])?;
     assert_eq!(result.is_success(), false);
@@ -149,7 +149,7 @@ fn mandatory_projects_cannot_be_selected() -> Result<()> {
     let mandatory_project = Underlying::Project(String::from("mandatory"));
     let mut selections = Selections::try_from(&repo)?;
     let result = selections.process(&vec![Operation {
-        disposition: Disposition::Add,
+        action: OperationAction::Add,
         underlying: mandatory_project.clone(),
     }])?;
     assert_eq!(result.is_success(), false);
@@ -168,14 +168,14 @@ fn duplicate_projects_are_ignored() -> Result<()> {
     let project_b = Underlying::Project(String::from("team_zissou/project_b"));
     let mut selections = Selections::try_from(&repo)?;
     let result = selections.process(&vec![Operation {
-        disposition: Disposition::Add,
+        action: OperationAction::Add,
         underlying: project_b.clone(),
     }])?;
     assert_eq!(result.is_success(), true);
     assert_eq!(result.added, hashset! {project_b.clone()});
 
     let result = selections.process(&vec![Operation {
-        disposition: Disposition::Add,
+        action: OperationAction::Add,
         underlying: project_b.clone(),
     }])?;
     assert_eq!(result.is_success(), true);

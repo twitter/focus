@@ -1,4 +1,4 @@
-use crate::model::selection::{Disposition, Operation, Selections};
+use crate::model::selection::{OperationAction, Operation, Selections};
 use crate::{index::testing::HashMapOdb, model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
@@ -236,7 +236,7 @@ fn compute_and_store_initial_selection(
     let mut selections = Selections::try_from(repo)?;
     let operations = projects_and_targets
         .iter()
-        .map(|value| Operation::from((Disposition::Add, value.to_owned())))
+        .map(|value| Operation::from((OperationAction::Add, value.to_owned())))
         .collect::<Vec<Operation>>();
     let result = selections.process(&operations)?;
     if !result.is_success() {

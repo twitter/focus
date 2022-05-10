@@ -12,13 +12,13 @@ use crate::model::{repo::Repo, selection::*};
 fn mutate(
     sparse_repo: &dyn AsRef<Path>,
     sync_if_changed: bool,
-    disposition: Disposition,
+    action: OperationAction,
     projects_and_targets: Vec<String>,
     app: Arc<focus_util::app::App>,
 ) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
     let mut selections = Selections::try_from(&repo)?;
-    if selections.mutate(disposition, &projects_and_targets)? {
+    if selections.mutate(action, &projects_and_targets)? {
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
@@ -38,7 +38,7 @@ pub fn add(
     mutate(
         sparse_repo,
         sync_if_changed,
-        Disposition::Add,
+        OperationAction::Add,
         projects_and_targets,
         app,
     )
@@ -53,7 +53,7 @@ pub fn remove(
     mutate(
         sparse_repo,
         sync_if_changed,
-        Disposition::Remove,
+        OperationAction::Remove,
         projects_and_targets,
         app,
     )

@@ -73,11 +73,10 @@ mod testing {
     use focus_util::app;
 
     use crate::{
-        model::selection::Disposition,
         operation::{
             self,
             testing::integration::{RepoDisposition, RepoPairFixture},
-        },
+        }, model::selection::OperationAction,
     };
 
     #[test]
@@ -271,13 +270,13 @@ It isn't just one of your holiday games
         let targets = vec![String::from("bazel://library_b/...")];
         let mut selections = fixture.sparse_repo()?.selections()?;
 
-        assert!(selections.mutate(Disposition::Add, &targets)?);
+        assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(library_b_dir.is_dir());
 
         // operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
-        assert!(selections.mutate(Disposition::Remove, &targets)?);
+        assert!(selections.mutate(OperationAction::Remove, &targets)?);
         selections.save()?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(!library_b_dir.is_dir());
