@@ -7,7 +7,7 @@ use tracing::{debug, error};
 
 use super::*;
 
-/// Project is an odd structure. It aggregates ProjectSets. This structure is meant to be constructed using the `TryFrom<ProjectSets>` implementation, which constructs a unified forward index of project name to project while keeping track of which sets projects were defined in and preventing duplicates in the flat namespace.
+/// Project a aggregates ProjectSets. When constructed, a unified forward index of project name to project is maintained, keeping track of which sets projects were defined in and preventing duplicates in the flat namespace.
 #[derive(Default, Debug)]
 pub struct Projects {
     /// Underlying maps project names to instances of the Project structure.
@@ -36,6 +36,15 @@ impl Display for Projects {
 // TODO(wilhelm): Reduce duplication of the keys of these tables by introducing an intermediate token table.
 
 impl Projects {
+    pub fn new(value: ProjectSets) -> Result<Self> {
+        let mut projects = Self::default();
+        for (project_set_name, project_set) in value.underlying().iter() {
+            projects.extend(project_set_name.as_str(), project_set)?;
+        }
+
+        Ok(projects)
+    }
+
     pub fn extend(&mut self, project_set_name: &str, project_set: &ProjectSet) -> Result<()> {
         for project in project_set.projects.iter() {
             let project_name = project.name.clone();
@@ -68,19 +77,6 @@ impl Projects {
 
     pub fn is_selectable(project: &Project) -> bool {
         !Self::is_mandatory(project)
-    }
-}
-
-impl TryFrom<ProjectSets> for Projects {
-    type Error = anyhow::Error;
-
-    fn try_from(value: ProjectSets) -> Result<Self, Self::Error> {
-        let mut projects = Self::default();
-        for (project_set_name, project_set) in value.underlying().iter() {
-            projects.extend(project_set_name.as_str(), project_set)?;
-        }
-
-        Ok(projects)
     }
 }
 
