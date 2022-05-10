@@ -84,7 +84,6 @@ impl Projects {
         Ok(())
     }
 
-    // pub fn from(p: ProjectSets)
     pub fn is_mandatory(project: &Project) -> bool {
         project.mandatory
     }
