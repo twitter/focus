@@ -13,31 +13,27 @@ use anyhow::{bail, Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::debug;
 
-pub struct FileBackedModel;
-
-impl FileBackedModel {
-    /// Load the a value from the specifeid path, decoding it from a JSON representation.
-    pub fn load<T>(path: &dyn AsRef<Path>) -> Result<T>
-    where
-        T: Default + DeserializeOwned,
-    {
-        if let Ok(file) = File::open(path.as_ref()) {
-            let reader = BufReader::new(file);
-            serde_json::from_reader(reader).map_err(|e| e.into())
-        } else {
-            Ok(Default::default())
-        }
+/// Load value from the specified path, decoding it from a JSON representation.
+pub fn load_model<T>(path: &dyn AsRef<Path>) -> Result<T>
+where
+    T: Default + DeserializeOwned,
+{
+    if let Ok(file) = File::open(path.as_ref()) {
+        let reader = BufReader::new(file);
+        serde_json::from_reader(reader).map_err(|e| e.into())
+    } else {
+        Ok(Default::default())
     }
+}
 
-    /// Serialize the given value to the specified path, encoding it as a JSON representation.
-    pub fn store<T>(path: &dyn AsRef<Path>, value: &T) -> Result<()>
-    where
-        T: Serialize,
-    {
-        let file = File::create(path.as_ref())?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, value).map_err(|e| e.into())
-    }
+/// Store value to the specified path, encoding it as a JSON representation.
+pub fn store_model<T>(path: &dyn AsRef<Path>, value: &T) -> Result<()>
+where
+    T: Serialize,
+{
+    let file = File::create(path.as_ref())?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, value).map_err(|e| e.into())
 }
 
 /// A collection for working with FileBackedModels serialized to a single directory, indexed by name.
@@ -95,10 +91,9 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
                                 continue;
                             }
 
-                            let instance =
-                                FileBackedModel::load::<T>(&path).with_context(|| {
-                                    format!("deserializing object from {}", path.display())
-                                })?;
+                            let instance = load_model::<T>(&path).with_context(|| {
+                                format!("deserializing object from {}", path.display())
+                            })?;
 
                             let name = file_name_bytes
                                 .strip_suffix(file_suffix_bytes)
@@ -135,7 +130,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
         self.underlying
             .borrow_mut()
             .insert(name.to_owned(), entity.clone());
-        FileBackedModel::store(&path.as_path(), entity)
+        store_model(&path.as_path(), entity)
     }
 
     /// Remove an entity by name from the `underlying` cache and erase it from disk.
@@ -177,7 +172,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
         let underlying = self.underlying.borrow();
         for (name, entity) in underlying.iter() {
             let path = self.make_path(name);
-            FileBackedModel::store(&path.as_path(), entity)
+            store_model(&path.as_path(), entity)
                 .with_context(|| format!("Storing entity to {}", path.display()))?
         }
 
