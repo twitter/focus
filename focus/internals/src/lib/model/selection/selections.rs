@@ -128,7 +128,7 @@ impl TryFrom<&Repo> for Selections {
     fn try_from(value: &Repo) -> Result<Self, Self::Error> {
         match value.working_tree() {
             Some(working_tree) => {
-                let paths = DataPaths::try_from(working_tree)?;
+                let paths = DataPaths::from_working_tree(working_tree)?;
                 let optional_projects = Projects::new(
                     ProjectSets::new(&paths.project_dir).context("Loading optional projects")?,
                 )?;
