@@ -33,22 +33,8 @@ impl Selections {
 
     /// Load a selection from the given `path` using project definitions from `projects`.
     fn load(path: &dyn AsRef<Path>, projects: &Projects) -> Result<Selection> {
-        match load_model(path) {
-            Ok(persisted_selection) => {
-                let mut selection: selection::Selection = Default::default();
-                let mut processor = SelectionOperationProcessor {
-                    selection: &mut selection,
-                    projects,
-                };
-                processor.reify(persisted_selection)?;
-                Ok(selection)
-            }
-            Err(e) => bail!(
-                "Failed to load persisted selection from {}: {}",
-                path.as_ref().display(),
-                e
-            ),
-        }
+        let persisted_selection = load_model(path).context("Loading persisted selection")?;
+        Selection::from_persisted_selection(persisted_selection, projects)
     }
 
     /// Load the selection from disk.

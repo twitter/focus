@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::Display,
@@ -10,6 +11,33 @@ use super::*;
 pub struct Selection {
     pub projects: HashSet<Project>,
     pub targets: HashSet<Target>,
+}
+
+impl Selection {
+    pub fn from_persisted_selection(
+        persisted_selection: PersistedSelection,
+        projects: &Projects,
+    ) -> Result<Self> {
+        let mut selection = Selection::default();
+        let operations = Vec::<Operation>::try_from(persisted_selection)
+            .context("Structuring a persisted selection as a set of operations")?;
+        selection
+            .apply_operations(&operations, projects)
+            .context("Creating a selection from its persisted form")?;
+        Ok(selection)
+    }
+
+    pub fn apply_operations(
+        &mut self,
+        operations: &Vec<Operation>,
+        projects: &Projects,
+    ) -> Result<OperationResult> {
+        let mut processor = SelectionOperationProcessor {
+            selection: self,
+            projects,
+        };
+        processor.process(operations)
+    }
 }
 
 impl TryFrom<&Selection> for TargetSet {

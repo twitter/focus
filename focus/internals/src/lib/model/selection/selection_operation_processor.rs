@@ -81,13 +81,3 @@ impl<'processor> SelectionOperationProcessor<'processor> {
         Ok(result)
     }
 }
-
-impl<'processor> SelectionOperationProcessor<'processor> {
-    pub(crate) fn reify(&mut self, persisted_selection: PersistedSelection) -> Result<()> {
-        let ops: Vec<Operation> = persisted_selection
-            .try_into()
-            .context("Failed to convert persisted selections to an operation stream")?;
-        self.process(&ops)?;
-        Ok(())
-    }
-}
