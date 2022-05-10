@@ -16,9 +16,9 @@ pub(crate) struct SelectionOperationProcessor<'processor> {
     pub projects: &'processor Projects,
 }
 
-impl<'processor> OperationProcessor for SelectionOperationProcessor<'processor> {
-    fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationProcessorResult> {
-        let mut result: OperationProcessorResult = Default::default();
+impl<'processor> SelectionOperationProcessor<'processor> {
+    pub fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationResult> {
+        let mut result: OperationResult = Default::default();
 
         for operation in operations {
             debug!(?operation, "Processing operation");

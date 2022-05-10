@@ -22,32 +22,27 @@ pub struct Operation {
     pub underlying: Underlying,
 }
 
-impl From<(OperationAction, String)> for Operation {
-    fn from(parameters: (OperationAction, String)) -> Self {
-        let (action, item) = parameters;
-
-        let underlying = if let Ok(target) = crate::target::Target::try_from(item.as_str()) {
+impl Operation {
+    pub fn new(action: OperationAction, string_repr: impl AsRef<str>) -> Self {
+        let underlying = if let Ok(target) = crate::target::Target::try_from(string_repr.as_ref()) {
             Underlying::Target(target)
         } else {
-            Underlying::Project(item)
+            Underlying::Project(string_repr.as_ref().into())
         };
 
-        Self {
-            action,
-            underlying,
-        }
+        Self { action, underlying }
     }
 }
 
 #[derive(Debug, Default)]
-pub struct OperationProcessorResult {
+pub struct OperationResult {
     pub added: HashSet<Underlying>,
     pub removed: HashSet<Underlying>,
     pub absent: HashSet<Underlying>,
     pub ignored: HashSet<Underlying>,
 }
 
-impl OperationProcessorResult {
+impl OperationResult {
     /// The number of projects and targets affected by processing the operations.
     pub fn change_count(&self) -> usize {
         self.added.len() + self.removed.len()
@@ -64,10 +59,6 @@ impl OperationProcessorResult {
     }
 }
 
-pub trait OperationProcessor {
-    fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationProcessorResult>;
-}
-
 #[cfg(test)]
 mod testing {
     use super::*;
@@ -75,7 +66,7 @@ mod testing {
     #[test]
     fn operation_from() {
         assert_eq!(
-            Operation::from((OperationAction::Add, String::from("bazel://a/b:*"))),
+            Operation::new(OperationAction::Add, "bazel://a/b:*"),
             Operation {
                 action: OperationAction::Add,
                 underlying: Underlying::Target(Target::try_from("bazel://a/b:*").unwrap())
@@ -83,7 +74,7 @@ mod testing {
         );
 
         assert_eq!(
-            Operation::from((OperationAction::Remove, String::from("foo"))),
+            Operation::new(OperationAction::Remove, "foo"),
             Operation {
                 action: OperationAction::Remove,
                 underlying: Underlying::Project(String::from("foo"))

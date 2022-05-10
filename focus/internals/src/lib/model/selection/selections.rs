@@ -91,7 +91,7 @@ impl Selections {
         // let action = action.copy();
         let operations = projects_and_targets
             .iter()
-            .map(|value| Operation::from((action, value.clone())))
+            .map(|value| Operation::new(action, value.clone()))
             .collect::<Vec<Operation>>();
         let result = self.process(&operations)?;
         if !result.is_success() {
@@ -99,10 +99,8 @@ impl Selections {
         }
         Ok(result.changed())
     }
-}
 
-impl OperationProcessor for Selections {
-    fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationProcessorResult> {
+    pub fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationResult> {
         let mut selection = self.selection.borrow().clone();
         let mut processor = SelectionOperationProcessor {
             selection: &mut selection,
