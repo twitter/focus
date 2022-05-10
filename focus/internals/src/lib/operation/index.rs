@@ -7,7 +7,6 @@ use anyhow::Context;
 use focus_util::app::{App, ExitCode};
 use focus_util::paths::assert_focused_repo;
 
-
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,

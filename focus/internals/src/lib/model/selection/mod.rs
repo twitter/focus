@@ -11,8 +11,8 @@ pub use selections::Selections;
 mod selection_operation_processor;
 use selection_operation_processor::SelectionOperationProcessor;
 mod operations;
-pub use operations::OperationAction;
 pub use operations::Operation;
+pub use operations::OperationAction;
 pub use operations::OperationResult;
 pub use operations::Underlying;
 mod project_set;
@@ -24,10 +24,10 @@ pub use projects::Projects;
 #[cfg(test)]
 mod testing;
 
-pub use crate::target::Target;
-pub use crate::target::TargetSet;
-pub use crate::target::TargetError;
 pub use super::repo::Repo;
 pub use super::repo::WorkingTree;
-pub use crate::model::persistence::{load_model, store_model};
 pub use crate::model::persistence::FileBackedCollection;
+pub use crate::model::persistence::{load_model, store_model};
+pub use crate::target::Target;
+pub use crate::target::TargetError;
+pub use crate::target::TargetSet;

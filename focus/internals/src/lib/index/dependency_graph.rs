@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use crate::target_resolver::ResolutionResult;
 use crate::target::{Label, Target, TargetName};
+use crate::target_resolver::ResolutionResult;
 
 use super::content_hash::HashContext;
 use super::{ContentHash, ObjectDatabase};
@@ -324,10 +324,10 @@ mod tests {
 
     use maplit::hashset;
 
-    use crate::target_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
     use crate::target::Target;
+    use crate::target_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use focus_testing::init_logging;
     use focus_testing::ScratchGitRepo;
     use focus_util::app::App;
@@ -421,7 +421,8 @@ sh_binary(
         let app = Arc::new(App::new(false)?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
-        let target_set = hashset! {"bazel://package1:foo".try_into()?, "bazel://package2:bar".try_into()?};
+        let target_set =
+            hashset! {"bazel://package1:foo".try_into()?, "bazel://package2:bar".try_into()?};
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: target_set,

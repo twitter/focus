@@ -8,15 +8,15 @@ use std::{
 };
 
 use crate::{
-    target_resolver::{
-        CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
-    },
     index::{
         get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
         HashContext, ObjectDatabase, PathsToMaterializeResult,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
     target::TargetSet,
+    target_resolver::{
+        CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
+    },
 };
 
 use super::{
