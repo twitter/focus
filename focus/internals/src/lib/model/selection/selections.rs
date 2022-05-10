@@ -12,7 +12,7 @@ pub struct Selections {
     selection_path: PathBuf,
     pub optional_projects: Projects,
     pub mandatory_projects: Projects,
-    selection: RefCell<selection::Selection>,
+    selection: Selection,
 }
 
 impl Selections {
@@ -37,11 +37,11 @@ impl Selections {
         optional_projects: Projects,
         mandatory_projects: Projects,
     ) -> Result<Self> {
-        let instance = Self {
+        let mut instance = Self {
             selection_path: selection_path.as_ref().to_owned(),
             optional_projects,
             mandatory_projects,
-            selection: RefCell::new(Default::default()),
+            selection: Default::default(),
         };
         instance.reload()?;
         Ok(instance)
@@ -54,16 +54,16 @@ impl Selections {
     }
 
     /// Load the selection from disk.
-    pub fn reload(&self) -> Result<()> {
+    pub fn reload(&mut self) -> Result<()> {
         let selection: Selection = Self::load(&self.selection_path, &self.optional_projects)?;
         debug!(?selection, path = ?self.selection_path, "Reloaded selection");
-        self.selection.replace(selection);
+        self.selection = selection;
         Ok(())
     }
 
     /// Save the current selection to the configured `selection_path`.
     pub fn save(&self) -> Result<()> {
-        let selection = self.selection.borrow().clone();
+        let selection = self.selection.clone();
         let persisted_selection = PersistedSelection::from(&selection);
         store_model(&self.selection_path, &persisted_selection)?;
         debug!(?persisted_selection, path = ?self.selection_path, "Saved selection");
@@ -72,7 +72,7 @@ impl Selections {
 
     /// Returns a Selection combining both user-selected and mandatory projects and targets.
     pub fn computed_selection(&self) -> Result<Selection> {
-        let mut selection = self.selection.borrow().clone();
+        let mut selection = self.selection.clone();
         debug!(selected = ?selection, "User-selected projects");
         let mandatory_projects = self
             .mandatory_projects
@@ -102,7 +102,7 @@ impl Selections {
     }
 
     pub fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationResult> {
-        let mut selection = self.selection.borrow().clone();
+        let mut selection = self.selection.clone();
         let mut processor = SelectionOperationProcessor {
             selection: &mut selection,
             projects: &self.optional_projects,
@@ -110,7 +110,7 @@ impl Selections {
         match processor.process(operations) {
             Ok(result) => {
                 if result.is_success() {
-                    self.selection.replace(selection);
+                    self.selection = selection;
                 } else {
                     error!("The selection will not be updated because an error occured while applying the requested changes");
                 }
