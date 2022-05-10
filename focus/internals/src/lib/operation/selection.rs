@@ -67,6 +67,6 @@ pub fn status(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
 pub fn list_projects(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = repo.selections()?;
-    println!("{}", selections.optional_projects);
+    println!("{}", selections.project_catalog().optional_projects);
     Ok(())
 }

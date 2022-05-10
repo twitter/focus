@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     outlining::{PatternSet, PatternSetWriter, BUILD_FILE_PATTERNS, SOURCE_BASELINE_PATTERNS},
-    selection::Selections,
+    selection::SelectionManager,
 };
 
 use anyhow::{bail, Context, Result};
@@ -622,7 +622,7 @@ impl Repo {
         Ok(())
     }
 
-    pub fn selections(&self) -> Result<Selections> {
-        Selections::from_repo(self)
+    pub fn selections(&self) -> Result<SelectionManager> {
+        SelectionManager::from_repo(self)
     }
 }

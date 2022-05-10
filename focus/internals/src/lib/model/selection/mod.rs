@@ -1,8 +1,9 @@
 mod project;
 mod selection;
 pub use project::Project;
+use project::ProjectCatalog;
 pub use selection::Selection;
-pub use selection::Selections;
+pub use selection::SelectionManager;
 mod data_paths;
 use data_paths::DataPaths;
 mod persisted_selection;
