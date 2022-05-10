@@ -10,7 +10,7 @@ use super::*;
 pub struct ProjectSets(FileBackedCollection<ProjectSet>);
 
 impl ProjectSets {
-    pub fn new(directory: &dyn AsRef<Path>) -> Result<Self> {
+    pub fn new(directory: impl AsRef<Path>) -> Result<Self> {
         Ok(Self(FileBackedCollection::<ProjectSet>::new(
             directory,
             OsString::from("projects.json"),

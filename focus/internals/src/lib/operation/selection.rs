@@ -10,7 +10,7 @@ use tracing::info;
 use crate::model::{repo::Repo, selection::*};
 
 fn mutate(
-    sparse_repo: &dyn AsRef<Path>,
+    sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     action: OperationAction,
     projects_and_targets: Vec<String>,
@@ -30,7 +30,7 @@ fn mutate(
 }
 
 pub fn add(
-    sparse_repo: &dyn AsRef<Path>,
+    sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
     app: Arc<App>,
@@ -45,7 +45,7 @@ pub fn add(
 }
 
 pub fn remove(
-    sparse_repo: &dyn AsRef<Path>,
+    sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
     app: Arc<App>,
@@ -59,7 +59,7 @@ pub fn remove(
     )
 }
 
-pub fn status(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
+pub fn status(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = repo.selections()?;
     let selection = selections.computed_selection()?;
@@ -67,7 +67,7 @@ pub fn status(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
     Ok(())
 }
 
-pub fn list_projects(sparse_repo: &dyn AsRef<Path>, app: Arc<App>) -> Result<()> {
+pub fn list_projects(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = repo.selections()?;
     println!("{}", selections.optional_projects);
