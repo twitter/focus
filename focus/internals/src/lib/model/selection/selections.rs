@@ -128,10 +128,10 @@ impl TryFrom<&Repo> for Selections {
         match value.working_tree() {
             Some(working_tree) => {
                 let paths = DataPaths::try_from(working_tree)?;
-                let optional_projects = Projects::try_from(
+                let optional_projects = Projects::new(
                     ProjectSets::new(&paths.project_dir).context("Loading optional projects")?,
                 )?;
-                let mandatory_projects = Projects::try_from(
+                let mandatory_projects = Projects::new(
                     ProjectSets::new(&paths.focus_dir).context("Loading mandatory projects")?,
                 )?;
 
