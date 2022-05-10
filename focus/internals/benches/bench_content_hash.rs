@@ -24,7 +24,7 @@ fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -
 pub fn bench_content_hash(c: &mut Criterion) {
     let app = Arc::new(App::new(false).unwrap());
     let repo_path = std::env::var_os("REPO")
-        .map(|path| PathBuf::from(path))
+        .map(PathBuf::from)
         .expect("Must set env var REPO=/path/to/repo");
 
     let repo = Repo::open(&repo_path, app).unwrap();
@@ -43,7 +43,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
     c.bench_function("content_hash_mandatory_layers", |b| {
         b.iter(|| {
             let hash_context = HashContext {
-                repo: &git_repo,
+                repo: git_repo,
                 head_tree: &head_tree,
                 caches: Default::default(),
             };
@@ -52,13 +52,13 @@ pub fn bench_content_hash(c: &mut Criterion) {
     });
 
     {
-        let odb = SimpleGitOdb::new(&git_repo);
+        let odb = SimpleGitOdb::new(git_repo);
         c.bench_function("content_hash_insert_simple_git_odb", |b| {
             b.iter_batched(
                 || {
                     odb.clear().unwrap();
                     HashContext {
-                        repo: &git_repo,
+                        repo: git_repo,
                         head_tree: &head_tree,
                         caches: Default::default(),
                     }
@@ -80,13 +80,13 @@ pub fn bench_content_hash(c: &mut Criterion) {
     }
 
     {
-        let odb = RocksDBCache::new(&git_repo);
+        let odb = RocksDBCache::new(git_repo);
         c.bench_function("content_hash_insert_rocks_db", |b| {
             b.iter_batched(
                 || {
                     odb.clear().unwrap();
                     HashContext {
-                        repo: &git_repo,
+                        repo: git_repo,
                         head_tree: &head_tree,
                         caches: Default::default(),
                     }

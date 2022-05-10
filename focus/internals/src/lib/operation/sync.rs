@@ -1,6 +1,6 @@
 use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::repo::Repo;
-use crate::model::selection::Selections;
+
 use crate::operation::util::perform;
 use crate::target::TargetSet;
 use content_addressed_cache::RocksDBCache;

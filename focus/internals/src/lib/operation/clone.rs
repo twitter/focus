@@ -1,4 +1,4 @@
-use crate::model::selection::{Operation, OperationAction, Selections};
+use crate::model::selection::{Operation, OperationAction};
 use crate::{index::testing::HashMapOdb, model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};

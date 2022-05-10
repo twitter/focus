@@ -12,7 +12,7 @@ use crate::index::{
     RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use crate::model::repo::Repo;
-use crate::model::selection::{OperationAction, Selections};
+use crate::model::selection::{OperationAction};
 use crate::target::{Target, TargetSet};
 
 #[derive(
