@@ -9,7 +9,7 @@ use std::{
 type Hasher = Sha256;
 
 // Hash a file's lines without line separators
-pub fn hash_file_lines(path: &dyn AsRef<Path>) -> Result<Vec<u8>> {
+pub fn hash_file_lines(path: impl AsRef<Path>) -> Result<Vec<u8>> {
     let path = path.as_ref();
     let buffered_reader = BufReader::new(
         File::open(&path).with_context(|| format!("Opening {} for hashing", path.display()))?,
