@@ -1,7 +1,4 @@
-use std::{
-    path::Path,
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
 use focus_util::app::App;
