@@ -26,7 +26,6 @@ pub fn bench_content_hash(c: &mut Criterion) {
     let repo_path = std::env::var_os("REPO")
         .map(|path| PathBuf::from(path))
         .expect("Must set env var REPO=/path/to/repo");
-    let repo_path = PathBuf::from(repo_path);
 
     let repo = Repo::open(&repo_path, app).unwrap();
     let git_repo = repo.underlying();
@@ -36,8 +35,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
     let selection = selections.computed_selection().unwrap();
     let dep_keys = TargetSet::try_from(&selection)
         .unwrap()
-        .iter()
-        .map(|target| target.to_owned())
+        .into_iter()
         .map(DependencyKey::from)
         .collect::<Vec<DependencyKey>>();
     println!("Dependency keys: {:?}", &dep_keys);
