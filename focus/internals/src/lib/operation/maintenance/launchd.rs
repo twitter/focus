@@ -233,6 +233,25 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
     Ok(())
 }
 
+fn schedule_defaults_for(tp: TimePeriod, plist_opts: ScheduledJobOpts) -> ScheduledJobOpts {
+    match tp {
+        // for the hourly time period we use every_n_minutes to schedule
+        // fetching to run every 5 min
+        TimePeriod::Hourly => ScheduledJobOpts {
+            time_period: tp,
+            schedule_defaults: Some(CalendarInterval {
+                every_n_minutes: Some(5),
+                ..Default::default()
+            }),
+            ..plist_opts
+        },
+        _ => ScheduledJobOpts {
+            time_period: tp,
+            ..plist_opts
+        },
+    }
+}
+
 /// This is the function that main calls to write out the plists and load them.
 /// If time_period is None that means "all"
 #[tracing::instrument]
@@ -264,18 +283,17 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
         None => TimePeriod::iter().collect(),
     };
 
-    let plist_opts = ScheduledJobOpts {
-        focus_path,
-        git_binary_path: git_path,
-        tracked,
-        ..Default::default()
-    };
-
     for tp in time_periods {
-        let plist_opts = ScheduledJobOpts {
-            time_period: tp,
-            ..plist_opts.clone()
-        };
+        let plist_opts = schedule_defaults_for(
+            tp,
+            ScheduledJobOpts {
+                focus_path: focus_path.to_owned(),
+                git_binary_path: git_path.to_owned(),
+                tracked,
+                ..Default::default()
+            },
+        );
+
         let label = plist_opts.label();
 
         launchctl.write_plist(&plist_opts)?;

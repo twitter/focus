@@ -7,7 +7,9 @@ use focus_internals::index::{
     content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue, HashContext,
     ObjectDatabase, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
+use focus_internals::model::project::ProjectSets;
 use focus_internals::model::repo::Repo;
+use focus_internals::target::Target;
 use focus_internals::target::TargetSet;
 use focus_util::app::App;
 
