@@ -27,7 +27,7 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
 
     let backed_up_sparse_profile = BackedUpFile::new(&sparse_profile_path)?;
 
-    let selections = repo.selections()?;
+    let selections = repo.selection_manager()?;
     let selection = selections.computed_selection()?;
     let targets = TargetSet::try_from(&selection).context("constructing target set")?;
 
@@ -157,7 +157,7 @@ It isn't just one of your holiday games
         let selected_project_names = || -> Result<HashSet<String>> {
             Ok(fixture
                 .sparse_repo()?
-                .selections()?
+                .selection_manager()?
                 .computed_selection()?
                 .projects
                 .iter()
@@ -259,7 +259,7 @@ It isn't just one of your holiday games
         let path = fixture.sparse_repo_path.clone();
         let library_b_dir = path.join("library_b");
         let targets = vec![String::from("bazel://library_b/...")];
-        let mut selections = fixture.sparse_repo()?.selections()?;
+        let mut selections = fixture.sparse_repo()?.selection_manager()?;
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
@@ -312,7 +312,7 @@ It isn't just one of your holiday games
 
         let path = fixture.sparse_repo_path.clone();
         let targets = vec![String::from("bazel://library_b/...")];
-        let mut selections = fixture.sparse_repo()?.selections()?;
+        let mut selections = fixture.sparse_repo()?.selection_manager()?;
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;

@@ -232,7 +232,7 @@ fn compute_and_store_initial_selection(
     repo: &Repo,
     projects_and_targets: Vec<String>,
 ) -> Result<TargetSet> {
-    let mut selections = repo.selections()?;
+    let mut selections = repo.selection_manager()?;
     let operations = projects_and_targets
         .iter()
         .map(|value| Operation::new(OperationAction::Add, value))
@@ -528,11 +528,12 @@ mod test {
 
         fixture.perform_clone()?;
 
-        let selections = fixture.sparse_repo()?.selections()?;
+        let selections = fixture.sparse_repo()?.selection_manager()?;
         let selection = selections.computed_selection()?;
 
         let library_a_target = Target::try_from(library_a_target_expression.as_str())?;
         let project_b = selections
+            .project_catalog()
             .optional_projects
             .underlying
             .get(&project_b_label)
