@@ -1,9 +1,10 @@
 mod project;
-pub(crate) use project::Project;
+pub use project::Project;
 pub(crate) use project::ProjectCatalog;
 use project::ProjectIndex;
 
 mod selection;
+pub use selection::Selection;
 pub(crate) use selection::SelectionManager;
 
 mod data_paths;

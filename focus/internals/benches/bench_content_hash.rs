@@ -7,9 +7,7 @@ use focus_internals::index::{
     content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue, HashContext,
     ObjectDatabase, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
-use focus_internals::model::project::ProjectSets;
 use focus_internals::model::repo::Repo;
-use focus_internals::target::Target;
 use focus_internals::target::TargetSet;
 use focus_util::app::App;
 
@@ -33,8 +31,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
     let git_repo = repo.underlying();
     let head_commit = git_repo.head().unwrap().peel_to_commit().unwrap();
     let head_tree = head_commit.tree().unwrap();
-    let selections = repo.selections().unwrap();
-    let selection = selections.computed_selection().unwrap();
+    let selection = repo.computed_selection().unwrap();
     let dep_keys = TargetSet::try_from(&selection)
         .unwrap()
         .into_iter()
