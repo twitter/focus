@@ -326,7 +326,7 @@ mod tests {
 
     use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
-    use crate::target::{Target, TargetSet};
+    use crate::target::Target;
     use crate::target_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use focus_testing::init_logging;
     use focus_testing::ScratchGitRepo;
