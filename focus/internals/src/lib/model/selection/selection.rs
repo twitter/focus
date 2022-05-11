@@ -10,15 +10,15 @@ use super::*;
 
 /// A structure representing the current selection in memory. Instead of serializing this structure, a PersistedSelection is stored to disk. In addition to that structure being simpler to serialize, the indirection allows for updates to the underlying project definitions.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Selection {
+pub(crate) struct Selection {
     pub projects: HashSet<Project>,
     pub targets: HashSet<Target>,
 }
 
 impl Selection {
-    pub fn from_persisted_selection(
+    pub(crate) fn from_persisted_selection(
         persisted_selection: PersistedSelection,
-        projects: &Projects,
+        projects: &ProjectIndex,
     ) -> Result<Self> {
         let mut selection = Selection::default();
         let operations = Vec::<Operation>::try_from(persisted_selection)
@@ -29,10 +29,10 @@ impl Selection {
         Ok(selection)
     }
 
-    pub fn apply_operations(
+    pub(crate) fn apply_operations(
         &mut self,
         operations: &Vec<Operation>,
-        projects: &Projects,
+        projects: &ProjectIndex,
     ) -> Result<OperationResult> {
         let mut processor = SelectionOperationProcessor {
             selection: self,
@@ -113,7 +113,7 @@ impl Display for Selection {
 
 pub(crate) struct SelectionOperationProcessor<'processor> {
     pub selection: &'processor mut Selection,
-    pub projects: &'processor Projects,
+    pub projects: &'processor ProjectIndex,
 }
 
 impl<'processor> SelectionOperationProcessor<'processor> {
@@ -184,7 +184,7 @@ impl<'processor> SelectionOperationProcessor<'processor> {
 
 
 /// SelectionManager maintains the current selection within a repository. It also provides access to projects defined in the repository via the `project_catalog()` method and associated structure.
-pub struct SelectionManager {
+pub(crate) struct SelectionManager {
     /// The path where the selection is stored.
     selection_path: PathBuf,
     /// The currently selected projects.
@@ -214,7 +214,7 @@ impl SelectionManager {
     }
 
     /// Load a selection from the given `path` using project definitions from `projects`.
-    fn load(path: impl AsRef<Path>, projects: &Projects) -> Result<Selection> {
+    fn load(path: impl AsRef<Path>, projects: &ProjectIndex) -> Result<Selection> {
         let persisted_selection = load_model(path).context("Loading persisted selection")?;
         Selection::from_persisted_selection(persisted_selection, projects)
     }
