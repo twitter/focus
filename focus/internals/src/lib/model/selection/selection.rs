@@ -264,30 +264,22 @@ impl SelectionManager {
             .iter()
             .map(|value| Operation::new(action, value.clone()))
             .collect::<Vec<Operation>>();
-        let result = self.process(&operations)?;
-        if !result.is_success() {
-            bail!("Failed to update the selection");
-        }
+        let result = self
+            .process(&operations)
+            .context("Processing updates to the selection")?;
         Ok(result.changed())
     }
 
     pub fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationResult> {
         let mut selection = self.selection.clone();
-        let mut processor = SelectionOperationProcessor {
-            selection: &mut selection,
-            projects: &self.project_catalog.optional_projects,
-        };
-        match processor.process(operations) {
-            Ok(result) => {
-                if result.is_success() {
-                    self.selection = selection;
-                } else {
-                    error!("The selection will not be updated because an error occured while applying the requested changes");
-                }
-                Ok(result)
-            }
-            Err(e) => Err(e),
+        let result =
+            selection.apply_operations(operations, &self.project_catalog.optional_projects)?;
+        if result.is_success() {
+            self.selection = selection;
+        } else {
+            error!("The selection will not be updated because an error occured while applying the requested changes");
         }
+        Ok(result)
     }
 
     /// Get a reference to the selection manager's project catalog.
