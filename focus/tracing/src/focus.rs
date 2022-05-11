@@ -71,7 +71,7 @@ pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
         .with_thread_names(false)
         .compact();
 
-        tracing_subscriber::registry()
+    tracing_subscriber::registry()
         .with(ErrorLayer::default())
         .with(EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),

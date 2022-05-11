@@ -9,7 +9,7 @@ use std::{
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
 };
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Migration instance should implement this trait.
 pub trait Migration {
