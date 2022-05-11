@@ -23,6 +23,7 @@ use focus_util::{
 use focus_internals::{
     operation,
     operation::maintenance::{self, ScheduleOpts},
+    target::Target,
     tracker::Tracker,
 };
 use strum::VariantNames;
@@ -201,6 +202,12 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: IndexSubcommand,
     },
+    /// Called by a git hook to trigger certain actions after a git event such as
+    /// merge completion or checkout
+    Event {
+        #[clap(subcommand)]
+        subcommand: EventSubcommand,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -243,6 +250,10 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             IndexSubcommand::Clear { .. } => "index-clear",
             IndexSubcommand::Generate { .. } => "index-generate",
             IndexSubcommand::Resolve { .. } => "index-resolve",
+        },
+        Subcommand::Event { subcommand } => match subcommand {
+            EventSubcommand::PostCheckout => "event-post-checkout",
+            EventSubcommand::PostMerge => "event-post-merge",
         },
     };
     subcommand_name.into()
@@ -479,6 +490,12 @@ enum IndexSubcommand {
 }
 
 #[derive(Parser, Debug)]
+enum EventSubcommand {
+    PostCheckout,
+    PostMerge,
+}
+
+#[derive(Parser, Debug)]
 #[clap(about = "Focused Development Tools")]
 struct FocusOpts {
     /// Number of threads to use when performing parallel resolution (where possible).
@@ -548,6 +565,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             };
 
             info!("Cloning {:?} into {}", dense_repo, sparse_repo.display());
+
+            // Add targets length to TI custom map.
+            ti_client
+                .get_context()
+                .add_to_custom_map("projects_and_targets_count", projects_and_targets.len().to_string());
 
             operation::clone::run(
                 origin,
@@ -860,6 +882,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 let exit_code = operation::index::resolve(app, backend, targets)?;
                 Ok(exit_code)
             }
+        },
+
+        Subcommand::Event { subcommand } => match subcommand {
+            EventSubcommand::PostCheckout => todo!("not implemented"),
+            EventSubcommand::PostMerge => todo!("not implemented"),
         },
     }
 }
