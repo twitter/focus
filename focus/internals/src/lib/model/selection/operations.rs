@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-
-
 use super::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]

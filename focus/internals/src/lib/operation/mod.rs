@@ -4,7 +4,6 @@ pub mod ensure_clean;
 pub mod index;
 pub mod init;
 pub mod maintenance;
-pub mod project;
 pub mod refs;
 pub mod repo;
 pub mod selection;

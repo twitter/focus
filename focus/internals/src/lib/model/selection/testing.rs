@@ -7,7 +7,7 @@ use focus_util::app::App;
 use maplit::hashset;
 use tempfile::TempDir;
 
-use super::{*, selection::Selection};
+use super::{selection::Selection, *};
 
 struct Fixture {
     #[allow(dead_code)]

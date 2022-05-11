@@ -23,7 +23,6 @@ use focus_util::{
 use focus_internals::{
     operation,
     operation::maintenance::{self, ScheduleOpts},
-    target::Target,
     tracker::Tracker,
 };
 use strum::VariantNames;
@@ -567,9 +566,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             info!("Cloning {:?} into {}", dense_repo, sparse_repo.display());
 
             // Add targets length to TI custom map.
-            ti_client
-                .get_context()
-                .add_to_custom_map("projects_and_targets_count", projects_and_targets.len().to_string());
+            ti_client.get_context().add_to_custom_map(
+                "projects_and_targets_count",
+                projects_and_targets.len().to_string(),
+            );
 
             operation::clone::run(
                 origin,
