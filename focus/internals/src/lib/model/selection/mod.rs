@@ -3,6 +3,7 @@ pub use project::Project;
 pub(crate) use project::ProjectCatalog;
 use project::ProjectIndex;
 
+#[allow(clippy::module_inception)]
 mod selection;
 pub use selection::Selection;
 pub(crate) use selection::SelectionManager;

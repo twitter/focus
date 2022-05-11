@@ -12,7 +12,7 @@ use tracing::error;
 use super::*;
 
 /// A project is a collection of targets.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Hash)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Project {
     /// The name of the project.
     pub name: String,
@@ -37,12 +37,6 @@ impl Project {
     /// Returns whether this project should be available to select by users.
     pub fn is_selectable(&self) -> bool {
         !self.is_mandatory()
-    }
-}
-
-impl Ord for Project {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.name.cmp(&other.name)
     }
 }
 
@@ -108,7 +102,11 @@ pub(crate) struct ProjectIndex {
 
 impl Display for ProjectIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let sorted_projects = BTreeSet::from_iter(self.underlying.values());
+        let sorted_projects = {
+            let mut projects: Vec<_> = self.underlying.values().into_iter().collect();
+            projects.sort_unstable_by_key(|project| project.name.as_str());
+            projects
+        };
         let longest_project_name = sorted_projects
             .iter()
             .fold(0_usize, |highest, &project| project.name.len().max(highest));

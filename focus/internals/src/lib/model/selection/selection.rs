@@ -32,7 +32,7 @@ impl Selection {
 
     fn apply_operations(
         &mut self,
-        operations: &Vec<Operation>,
+        operations: &[Operation],
         projects: &ProjectIndex,
     ) -> Result<OperationResult> {
         let mut processor = SelectionOperationProcessor {
@@ -58,14 +58,15 @@ impl TryFrom<&Selection> for TargetSet {
 impl Display for Selection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "--- Projects ---")?;
-        let sorted_projects =
-            BTreeSet::<Project>::from_iter(self.projects.iter().filter_map(|project| {
-                if project.mandatory {
-                    None
-                } else {
-                    Some(project.to_owned())
-                }
-            }));
+        let sorted_projects = {
+            let mut projects: Vec<_> = self
+                .projects
+                .iter()
+                .filter(|project| project.mandatory)
+                .collect();
+            projects.sort_unstable_by_key(|project| project.name.as_str());
+            projects
+        };
 
         if sorted_projects.is_empty() {
             writeln!(f, "None selected.")?;
@@ -118,7 +119,7 @@ pub(crate) struct SelectionOperationProcessor<'processor> {
 }
 
 impl<'processor> SelectionOperationProcessor<'processor> {
-    pub fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationResult> {
+    pub fn process(&mut self, operations: &[Operation]) -> Result<OperationResult> {
         let mut result: OperationResult = Default::default();
 
         for operation in operations {
@@ -258,7 +259,7 @@ impl SelectionManager {
     pub fn mutate(
         &mut self,
         action: OperationAction,
-        projects_and_targets: &Vec<String>,
+        projects_and_targets: &[String],
     ) -> Result<bool> {
         let operations = projects_and_targets
             .iter()
@@ -270,7 +271,7 @@ impl SelectionManager {
         Ok(result.changed())
     }
 
-    pub fn process(&mut self, operations: &Vec<Operation>) -> Result<OperationResult> {
+    pub fn process(&mut self, operations: &[Operation]) -> Result<OperationResult> {
         let mut selection = self.selection.clone();
         let result =
             selection.apply_operations(operations, &self.project_catalog.optional_projects)?;
