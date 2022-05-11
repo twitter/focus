@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     outlining::{PatternSet, PatternSetWriter, BUILD_FILE_PATTERNS, SOURCE_BASELINE_PATTERNS},
-    selection::SelectionManager,
+    selection::{Selection, SelectionManager},
 };
 
 use anyhow::{bail, Context, Result};
@@ -624,5 +624,10 @@ impl Repo {
 
     pub(crate) fn selection_manager(&self) -> Result<SelectionManager> {
         SelectionManager::from_repo(self)
+    }
+
+    // We expose the computed selection here for use in benchmarks since `SelectionManager` exposes types not visible outside the crate.
+    pub fn computed_selection(&self) -> Result<Selection> {
+        self.selection_manager()?.computed_selection()
     }
 }
