@@ -622,7 +622,7 @@ impl Repo {
         Ok(())
     }
 
-    pub(crate) fn selections(&self) -> Result<SelectionManager> {
+    pub(crate) fn selection_manager(&self) -> Result<SelectionManager> {
         SelectionManager::from_repo(self)
     }
 }

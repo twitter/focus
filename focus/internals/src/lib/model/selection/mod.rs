@@ -1,20 +1,20 @@
 mod project;
-mod selection;
 pub(crate) use project::Project;
 pub(crate) use project::ProjectCatalog;
 use project::ProjectIndex;
 
-pub(crate) use selection::Selection;
+mod selection;
 pub(crate) use selection::SelectionManager;
+
 mod data_paths;
 use data_paths::DataPaths;
-mod persisted_selection;
-use persisted_selection::PersistedSelection;
+
 mod operations;
 pub(crate) use operations::Operation;
 pub(crate) use operations::OperationAction;
 pub(crate) use operations::OperationResult;
 pub(crate) use operations::Underlying;
+
 #[cfg(test)]
 mod testing;
 
