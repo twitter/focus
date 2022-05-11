@@ -213,16 +213,16 @@ mod tests {
         assert!(collection.underlying.contains_key(name));
         assert!(dir.path().join("jeff.person.json").is_file());
 
-        assert_eq!(alternate_collection.underlying.contains_key(name), false);
+        assert!(!alternate_collection.underlying.contains_key(name));
         alternate_collection.revert()?;
         assert!(alternate_collection.underlying.contains_key(name));
 
         // Remove from first collection
         collection.remove(name)?;
-        assert_eq!(collection.underlying.contains_key(name), false);
-        assert_eq!(dir.path().join("jeff.person.json").is_file(), false);
+        assert!(!collection.underlying.contains_key(name));
+        assert!(!dir.path().join("jeff.person.json").is_file());
         alternate_collection.revert()?;
-        assert_eq!(alternate_collection.underlying.contains_key(name), false);
+        assert!(!alternate_collection.underlying.contains_key(name));
 
         Ok(())
     }
