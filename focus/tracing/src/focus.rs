@@ -63,7 +63,15 @@ pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
 
     let (stderr_writer, stderr_guard) = tracing_appender::non_blocking(io::stderr());
 
-    tracing_subscriber::registry()
+    let console_format = tracing_subscriber::fmt::format()
+        .with_level(false)
+        .with_source_location(false)
+        .with_target(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .compact();
+
+        tracing_subscriber::registry()
         .with(ErrorLayer::default())
         .with(EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
@@ -81,10 +89,10 @@ pub fn init_tracing(opts: TracingOpts) -> Result<Guard> {
         )
         .with(
             tracing_subscriber::fmt::layer()
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
                 .with_target(true)
                 .with_writer(stderr_writer)
-                .with_ansi(use_color),
+                .with_ansi(use_color)
+                .event_format(console_format),
         )
         .with(
             tracing_subscriber::fmt::layer()
