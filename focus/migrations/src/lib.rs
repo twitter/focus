@@ -9,7 +9,7 @@ use std::{
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
 };
-use tracing::{info, warn};
+use tracing::{info, debug};
 
 /// Migration instance should implement this trait.
 pub trait Migration {
@@ -63,7 +63,7 @@ impl Runner {
             migrations,
         };
         if let Err(error) = instance.load_manifest() {
-            warn!(%error, "Failed to load manifest");
+            debug!(%error, "Failed to load manifest");
         }
         Ok(instance)
     }
