@@ -20,7 +20,7 @@ impl From<&Selection> for PersistedSelection {
         let projects = selection
             .projects
             .iter()
-            .filter(|&project| Projects::is_selectable(project))
+            .filter(|&project| project.is_selectable())
             .map(|project| project.name.clone())
             .collect::<HashSet<String>>();
         let targets = selection
