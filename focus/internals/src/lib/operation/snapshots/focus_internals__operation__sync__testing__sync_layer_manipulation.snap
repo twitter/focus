@@ -4,10 +4,6 @@ expression: "std::fs::read_to_string(&profile_path)?"
 ---
 /*
 !/*/
-/mandatory_z/
-/3rdparty/
 /focus/
-/pants-internal/
-/pants-support/
-/tools/
+/mandatory_z/
 

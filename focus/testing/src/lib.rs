@@ -16,6 +16,7 @@ pub fn init_logging() {
         let is_tty = termion::is_tty(&std::io::stdout());
         let nocolor_requested = std::env::var_os("NO_COLOR").is_some(); // see https://no-color.org/
         let use_color = is_tty && !nocolor_requested;
+        let console_format = tracing_subscriber::fmt::format().pretty();
         tracing_subscriber::registry()
             .with(ErrorLayer::default())
             .with(EnvFilter::new(
@@ -25,7 +26,8 @@ pub fn init_logging() {
                 tracing_subscriber::fmt::layer()
                     .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
                     .with_target(false)
-                    .with_ansi(use_color),
+                    .with_ansi(use_color)
+                    .event_format(console_format),
             )
             .try_init()
             .unwrap();
