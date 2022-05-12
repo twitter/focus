@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use std::{
@@ -18,17 +19,24 @@ use lazy_static::lazy_static;
 const MAIN_SEPARATOR_BYTE: u8 = MAIN_SEPARATOR as u8;
 const MAIN_SEPARATOR_BYTES: &[u8] = &[MAIN_SEPARATOR_BYTE];
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "pattern")]
 pub enum Pattern {
     Verbatim {
+        #[serde(default = "pattern_default_precedence")]
         precedence: usize,
         fragment: String,
     },
     Directory {
+        #[serde(default = "pattern_default_precedence")]
         precedence: usize,
         path: std::path::PathBuf,
         recursive: bool,
     },
+}
+
+fn pattern_default_precedence() -> usize {
+    usize::MAX
 }
 
 impl PartialOrd for Pattern {
@@ -163,12 +171,13 @@ impl From<Pattern> for Vec<OsString> {
     }
 }
 
-/// A sorted for Pattern instances. Backed by a BTreeSet.
+/// A set of patterns
 pub type PatternSet = BTreeSet<Pattern>;
 
-pub trait PatternSetReader {
-    /// Merge the Patterns from a file indicated by the given path into a PatternSet.
-    fn merge_from_file(&mut self, path: &Path) -> Result<usize>;
+// A container for patterns, to be loaded as part of repository configuration
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PatternContainer {
+    pub patterns: PatternSet,
 }
 
 pub trait PatternSetWriter {
@@ -260,48 +269,17 @@ impl LeadingPatternInserter for PatternSet {
 }
 
 lazy_static! {
-    pub static ref SOURCE_BASELINE_PATTERNS: PatternSet = {
+    pub static ref BASELINE_PATTERNS: PatternSet = {
         let mut patterns = PatternSet::new();
         patterns.insert(Pattern::Directory {
-            precedence: 0,
+            precedence: patterns.len(),
             path: PathBuf::default(),
             recursive: true,
         });
-        patterns.insert(Pattern::Verbatim {
+        patterns.insert(Pattern::Directory {
             precedence: usize::MAX,
-            fragment: String::from("/3rdparty/"),
-        });
-        patterns.insert(Pattern::Verbatim {
-            precedence: usize::MAX,
-            fragment: String::from("/focus/"),
-        });
-        patterns.insert(Pattern::Verbatim {
-            precedence: usize::MAX,
-            fragment: String::from("/tools/"),
-        });
-        patterns.insert(Pattern::Verbatim {
-            precedence: usize::MAX,
-            fragment: String::from("/pants-internal/"),
-        });
-        patterns.insert(Pattern::Verbatim {
-            precedence: usize::MAX,
-            fragment: String::from("/pants-support/"),
-        });
-        patterns
-    };
-    pub static ref BUILD_FILE_PATTERNS: PatternSet = {
-        let mut patterns = PatternSet::new();
-        patterns.insert(Pattern::Verbatim {
-            precedence: usize::MAX,
-            fragment: String::from("WORKSPACE*"),
-        });
-        patterns.insert(Pattern::Verbatim {
-            precedence: usize::MAX,
-            fragment: String::from("BUILD*"),
-        });
-        patterns.insert(Pattern::Verbatim {
-            precedence: usize::MAX,
-            fragment: String::from("*.bzl"),
+            path: PathBuf::from("focus"),
+            recursive: true,
         });
         patterns
     };
@@ -348,15 +326,15 @@ mod testing {
     #[test]
     fn pattern_set_ops() {
         let mut pattern_set = PatternSet::new();
-        pattern_set.extend(BUILD_FILE_PATTERNS.clone());
+        pattern_set.extend(BASELINE_PATTERNS.clone());
         pattern_set.insert(Pattern::Directory {
             precedence: pattern_set.len(),
             path: PathBuf::from("project_a"),
             recursive: true,
         });
         let count = pattern_set.len();
-        pattern_set.retain(|pattern| !BUILD_FILE_PATTERNS.contains(pattern));
-        assert_eq!(pattern_set.len(), count - BUILD_FILE_PATTERNS.len());
+        pattern_set.retain(|pattern| !BASELINE_PATTERNS.contains(pattern));
+        assert_eq!(pattern_set.len(), count - BASELINE_PATTERNS.len());
     }
 
     #[test]

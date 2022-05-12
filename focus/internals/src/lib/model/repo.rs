@@ -21,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    outlining::{PatternSet, PatternSetWriter, BUILD_FILE_PATTERNS, SOURCE_BASELINE_PATTERNS},
+    outlining::{PatternContainer, PatternSet, PatternSetWriter, BASELINE_PATTERNS},
     selection::{Selection, SelectionManager},
 };
 
@@ -34,6 +34,8 @@ const SYNC_REF_NAME: &str = "refs/focus/sync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
 const VERSION_CONFIG_KEY: &str = "focus.version";
 const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
+const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
+const LAST: usize = usize::MAX;
 
 /// Models a Git working tree.
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -82,17 +84,17 @@ impl WorkingTree {
                 .context("Hashing contents of existing sparse profile failed")?;
             if !existing_content_hash.is_empty() && existing_content_hash == new_content_hash {
                 // We wrote the exact same thing. Skip everything.
-                info!("Skipping application of the sparse profile because it has not changed");
+                info!(profile = ?sparse_profile_path, "Skipping application of the sparse profile because it has not changed");
                 std::fs::remove_file(&candidate_sparse_profile_path)
                     .context("Removing candidate sparse profile")?;
                 return Ok(false);
             }
         }
-        std::fs::rename(candidate_sparse_profile_path, sparse_profile_path)
+        std::fs::rename(&candidate_sparse_profile_path, &sparse_profile_path)
             .context("Moving candidate sparse profile into place")?;
 
         // Update the working tree to match
-        info!(count = %patterns.len(), "Applying patterns");
+        info!(profile = ?sparse_profile_path, count = %patterns.len(), "Applying patterns");
         {
             let args = vec![
                 "sparse-checkout",
@@ -173,7 +175,7 @@ impl WorkingTree {
     }
 
     pub fn default_working_tree_patterns(&self) -> Result<PatternSet> {
-        Ok(SOURCE_BASELINE_PATTERNS.clone())
+        Ok(BASELINE_PATTERNS.clone())
     }
 
     #[allow(dead_code)]
@@ -311,17 +313,46 @@ impl OutliningTree {
         self.underlying.clone()
     }
 
-    pub fn build_file_patterns(&self) -> Result<PatternSet> {
-        let mut pattern_set = self.underlying.default_working_tree_patterns()?;
-        pattern_set.extend(BUILD_FILE_PATTERNS.clone());
-        Ok(pattern_set)
-    }
-
-    pub fn apply_build_file_patterns(&self, app: Arc<App>) -> Result<bool> {
-        let patterns = self.build_file_patterns()?;
+    fn apply_configured_outlining_patterns(
+        &self,
+        commit_id: git2::Oid,
+        app: Arc<App>,
+    ) -> Result<bool> {
+        let patterns = self.configured_outlining_patterns(commit_id)?;
         self.underlying
             .apply_sparse_patterns(&patterns, false, app)
             .context("Failed to apply build file patterns")
+    }
+
+    /// Read configured outlining patterns from the repository at the given commit.
+    fn configured_outlining_patterns(&self, commit_id: git2::Oid) -> Result<PatternSet> {
+        let repo = self.underlying().git_repo()?;
+        let commit = repo.find_commit(commit_id).context("Resolving commit")?;
+        let tree = commit.tree().context("Resolving tree")?;
+        let pattern_file = tree
+            .get_path(Path::new(OUTLINING_PATTERN_FILE_NAME)).with_context(|| format!(
+                "No outlining pattern file (named '{}') was found in the repository at this commit ({})",
+                OUTLINING_PATTERN_FILE_NAME,
+                &commit.id().to_string(),
+            ))?;
+        let pattern_object = pattern_file.to_object(&repo).context("Resolving object")?;
+        let pattern_blob = pattern_object.as_blob().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Expected {} to be a blob, but it was not",
+                OUTLINING_PATTERN_FILE_NAME
+            )
+        })?;
+
+        let pattern_container: PatternContainer = serde_json::from_slice(pattern_blob.content())
+            .with_context(|| {
+                format!(
+                    "Parsing outline pattern file '{}' (at commit {})",
+                    OUTLINING_PATTERN_FILE_NAME,
+                    &commit.id().to_string()
+                )
+            })?;
+
+        Ok(pattern_container.patterns)
     }
 
     fn resolver(&self) -> Result<RoutingResolver> {
@@ -338,7 +369,8 @@ impl OutliningTree {
         target_set: &TargetSet,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)> {
-        // Switch to the commit
+        self.apply_configured_outlining_patterns(commit_id, app.clone())
+            .context("Applying configured outlining patterns failed")?;
         self.underlying()
             .switch_to_commit(commit_id, true, true, app.clone())
             .context("Failed to switch to commit")?;
@@ -365,7 +397,6 @@ impl OutliningTree {
             }
         };
 
-        const LAST: usize = usize::MAX;
         for path in result.paths.iter() {
             let qualified_path = repo_path.join(path);
             match paths::find_closest_directory_with_build_file(&qualified_path, &repo_path)
@@ -501,7 +532,7 @@ impl Repo {
                     paths
                         .into_iter()
                         .map(|path| Pattern::Directory {
-                            precedence: 0,
+                            precedence: LAST,
                             path,
                             recursive: true,
                         })
@@ -563,9 +594,15 @@ impl Repo {
         }
 
         let work_tree_gitdir = self.working_tree_git_dir();
-        // Apply the correct sparse patterns
         let outlining_tree = OutliningTree::new(Arc::new(WorkingTree::new(path, work_tree_gitdir)));
-        outlining_tree.apply_build_file_patterns(self.app.clone())?;
+        let repo = outlining_tree.underlying().git_repo()?;
+        let commit_id = repo
+            .head()
+            .context("Resolving HEAD reference")?
+            .peel_to_commit()
+            .context("Resolving HEAD commit")?
+            .id();
+        outlining_tree.apply_configured_outlining_patterns(commit_id, self.app.clone())?;
         Ok(())
     }
 
