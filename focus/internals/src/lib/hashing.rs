@@ -8,7 +8,7 @@ use std::{
 
 type Hasher = Sha256;
 
-// Hash a file's lines without line separators
+/// Hash a file's lines without line separators
 pub fn hash_file_lines(path: impl AsRef<Path>) -> Result<Vec<u8>> {
     let path = path.as_ref();
     let buffered_reader = BufReader::new(
