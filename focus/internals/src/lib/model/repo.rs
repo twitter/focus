@@ -87,9 +87,6 @@ impl WorkingTree {
                     .context("Removing candidate sparse profile")?;
                 return Ok(false);
             }
-
-            std::fs::remove_file(&sparse_profile_path)
-                .context("Could not remove existing sparse profile")?;
         }
         std::fs::rename(candidate_sparse_profile_path, sparse_profile_path)
             .context("Moving candidate sparse profile into place")?;
