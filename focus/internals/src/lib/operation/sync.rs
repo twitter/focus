@@ -47,7 +47,7 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
 
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
-        repo.sync(&targets, app.clone(), &odb)
+        repo.sync(&targets, false, app.clone(), &odb)
             .context("Sync failed")
     })?;
     ti_context.add_to_custom_map("pattern_count", pattern_count.to_string());

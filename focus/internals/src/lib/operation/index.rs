@@ -108,8 +108,8 @@ fn resolve_targets(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let (num_applied_patterns, _checked_out) = repo.sync(&targets, app, odb.borrow())?;
-            println!("Applied patterns: {}", num_applied_patterns);
+            let (pattern_count, _checked_out) = repo.sync(&targets, true, app, odb.borrow())?;
+            println!("Pattern count: {}", pattern_count);
 
             match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {
                 PathsToMaterializeResult::Ok { seen_keys, paths } => Ok(Ok(ResolveTargetResult {
