@@ -256,6 +256,11 @@ impl SelectionManager {
         Ok(selection)
     }
 
+    /// Returns user-selected projects and targets.
+    pub fn selection(&self) -> Result<Selection> {
+        Ok(self.selection.clone())
+    }
+
     pub fn mutate(
         &mut self,
         action: OperationAction,
