@@ -210,7 +210,7 @@ fn set_up_sparse_repo(
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
 
     let odb = HashMapOdb::new();
-    repo.sync(&target_set, app.clone(), &odb)
+    repo.sync(&target_set, false, app.clone(), &odb)
         .context("Sync failed")?;
 
     repo.working_tree().unwrap().write_sync_point_ref()?;

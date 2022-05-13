@@ -526,6 +526,7 @@ impl Repo {
     pub fn sync(
         &self,
         targets: &TargetSet,
+        skip_pattern_application: bool,
         app: Arc<App>,
         odb: &dyn ObjectDatabase,
     ) -> Result<(usize, bool)> {
@@ -591,9 +592,13 @@ impl Repo {
 
         trace!(?outline_patterns);
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
-        let checked_out = working_tree
-            .apply_sparse_patterns(&outline_patterns, true, app)
-            .context("Failed to apply outlined patterns to working tree")?;
+        let checked_out = if skip_pattern_application {
+            false
+        } else {
+            working_tree
+                .apply_sparse_patterns(&outline_patterns, true, app)
+                .context("Failed to apply outlined patterns to working tree")?
+        };
         Ok((outline_patterns.len(), checked_out))
     }
 
