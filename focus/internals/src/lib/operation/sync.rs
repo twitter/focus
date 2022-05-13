@@ -285,7 +285,7 @@ It isn't just one of your holiday games
         let sparse_repo = fixture.sparse_repo()?;
         let outlining_tree = sparse_repo.outlining_tree().unwrap();
         let underlying = outlining_tree.underlying();
-        let outlining_tree_root = underlying.path();
+        let outlining_tree_root = underlying.work_dir();
 
         let top_level_bazelisk_rc = outlining_tree_root.join(".bazeliskrc");
 

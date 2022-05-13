@@ -38,20 +38,46 @@ const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
 const LAST: usize = usize::MAX;
 
 /// Models a Git working tree.
-#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct WorkingTree {
-    path: PathBuf,
-    git_dir: PathBuf,
+    repo: git2::Repository,
 }
+
+impl std::fmt::Debug for WorkingTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { repo } = self;
+        f.debug_struct("WorkingTree")
+            .field("repo_path", &repo.path())
+            .finish()
+    }
+}
+
+impl PartialEq for WorkingTree {
+    fn eq(&self, other: &Self) -> bool {
+        let Self { repo } = self;
+        let Self { repo: other_repo } = other;
+        repo.path() == other_repo.path()
+    }
+}
+
+impl Eq for WorkingTree {}
 
 impl WorkingTree {
     /// Creates an instance.
-    pub fn new(path: PathBuf, git_dir: PathBuf) -> Self {
-        Self { path, git_dir }
+    pub fn new(repo: git2::Repository) -> Result<Self> {
+        if repo.workdir().is_none() {
+            anyhow::bail!("Cannot create `WorkingTree` for bare repo");
+        }
+        Ok(Self { repo })
+    }
+
+    pub fn from_git_dir(git_dir: &Path) -> Result<Self> {
+        let repo = git2::Repository::open(git_dir)
+            .with_context(|| format!("Creating `WorkingTree` from git dir: {:?}", git_dir))?;
+        Self::new(repo)
     }
 
     fn info_dir(&self) -> PathBuf {
-        self.git_dir.join("info")
+        self.repo.path().join("info")
     }
 
     /// The location of the current sparse checkout file within the working tree.
@@ -69,7 +95,7 @@ impl WorkingTree {
         // Write the patterns
         let info_dir = self.info_dir();
         std::fs::create_dir_all(&info_dir)
-            .with_context(|| format!("In working tree {}", self.path.display()))
+            .with_context(|| format!("In working tree {}", self.work_dir().display()))
             .context("Failed to create leading directories for sparse profile")?;
 
         // Make sure Git doesn't try to do something cute with the sparse profile like merge existing contents.
@@ -101,14 +127,14 @@ impl WorkingTree {
                 "init",
                 if cone { "--cone" } else { "--no-cone" },
             ];
-            let description = format!("Running git {:?} in {}", args, self.path.display());
+            let description = format!("Running git {:?} in {}", args, self.work_dir().display());
             let (mut cmd, scmd) = git_helper::git_command(description.clone(), app.clone())?;
             scmd.ensure_success_or_log(
-                cmd.current_dir(&self.path).args(args),
+                cmd.current_dir(self.work_dir()).args(args),
                 SandboxCommandOutput::Stderr,
                 &description,
             )
-            .with_context(|| format!("In working tree {}", self.path.display()))
+            .with_context(|| format!("In working tree {}", self.work_dir().display()))
             .context("git sparse-checkout init failed")?;
         }
 
@@ -116,14 +142,14 @@ impl WorkingTree {
         info!("Checking out");
         {
             let args = vec!["checkout"];
-            let description = format!("Running git {:?} in {}", args, self.path.display());
+            let description = format!("Running git {:?} in {}", args, self.work_dir().display());
             let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
             scmd.ensure_success_or_log(
-                cmd.current_dir(&self.path).args(args),
+                cmd.current_dir(self.work_dir()).args(args),
                 SandboxCommandOutput::Stderr,
                 &description,
             )
-            .with_context(|| format!("In working tree {}", self.path.display()))
+            .with_context(|| format!("In working tree {:?}", self.work_dir()))
             .context("git checkout failed")?;
         }
 
@@ -140,7 +166,7 @@ impl WorkingTree {
     ) -> Result<()> {
         // Update the working tree to match
         let commit_id_str = commit_id.to_string();
-        let span = info_span!("Switching to detached commit", commit_id = %commit_id_str, path = ?self.path);
+        let span = info_span!("Switching to detached commit", commit_id = %commit_id_str, path = ?self.work_dir());
         let _guard = span.enter();
 
         let mut args = vec!["switch", "--ignore-other-worktrees"];
@@ -152,10 +178,10 @@ impl WorkingTree {
         }
         args.push(&commit_id_str);
 
-        let description = format!("Running git {:?} in {}", args, self.path.display());
+        let description = format!("Running git {:?} in {}", args, self.work_dir().display());
         let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
         scmd.ensure_success_or_log(
-            cmd.current_dir(&self.path).args(args),
+            cmd.current_dir(self.work_dir()).args(args),
             SandboxCommandOutput::Stderr,
             &description,
         )
@@ -165,13 +191,14 @@ impl WorkingTree {
     }
 
     /// Get a reference to the working tree's path.
-    pub fn path(&self) -> &Path {
-        &self.path
+    pub fn work_dir(&self) -> &Path {
+        // Verified by constructor.
+        self.repo.workdir().unwrap()
     }
 
     /// Get a reference to the working tree's git dir.
     pub fn git_dir(&self) -> &Path {
-        &self.git_dir
+        self.repo.path()
     }
 
     pub fn default_working_tree_patterns(&self) -> Result<PatternSet> {
@@ -181,10 +208,8 @@ impl WorkingTree {
     #[allow(dead_code)]
     fn locate_paths_in_tree(&self, prefixes: &HashSet<PathBuf>) -> Result<PatternSet> {
         let mut results = PatternSet::new();
-        let repo = self
-            .git_repo()
-            .with_context(|| (format!("Opening repo in {}", self.path.display())))?;
-        let head_tree = repo
+        let head_tree = self
+            .repo
             .head()
             .context("Failed to resolve the HEAD reference")?
             .peel_to_tree()
@@ -226,9 +251,12 @@ impl WorkingTree {
 
     /// Reads the commit ID of the sparse sync ref (named SYNC_REF_NAME)
     pub fn read_sync_point_ref(&self) -> Result<Option<Oid>> {
-        let description = format!("Recording sparse sync point in {}", self.path.display());
-        let repo = self.git_repo()?;
-        let reference = repo
+        let description = format!(
+            "Recording sparse sync point in {}",
+            self.work_dir().display()
+        );
+        let reference = self
+            .repo
             .find_reference(SYNC_REF_NAME)
             .context(description.clone())
             .context("Finding sync reference");
@@ -246,30 +274,33 @@ impl WorkingTree {
 
     /// Updates the sparse sync ref to the value of the HEAD ref (named SYNC_REF_NAME)
     pub fn write_sync_point_ref(&self) -> Result<()> {
-        let description = format!("Recording sparse sync point in {}", self.path.display());
-        let git_repo = self.git_repo()?;
-        let head_commit = git_repo
+        let description = format!(
+            "Recording sparse sync point in {}",
+            self.work_dir().display()
+        );
+        let head_commit = self
+            .repo
             .head()
             .context(description.clone())
             .context("Reading HEAD reference")?
             .peel_to_commit()
             .context(description)
             .context("Finding commit associated with HEAD reference")?;
-        git_repo.reference(SYNC_REF_NAME, head_commit.id(), true, "focus sync")?;
+        self.repo
+            .reference(SYNC_REF_NAME, head_commit.id(), true, "focus sync")?;
 
         Ok(())
     }
 
-    // TODO: Try to buffer instantiation of these.
-    pub fn git_repo(&self) -> Result<Repository> {
-        Ok(Repository::open(self.path())?)
+    pub fn git_repo(&self) -> &Repository {
+        &self.repo
     }
 
     /// Determine if the working tree is clean
     pub fn is_clean(&self, app: Arc<App>) -> Result<bool> {
         Ok(git_helper::run_consuming_stdout(
             "git status",
-            &self.path,
+            self.work_dir(),
             vec!["status", "--porcelain"],
             app,
         )?
@@ -278,8 +309,7 @@ impl WorkingTree {
     }
 
     pub fn read_uuid(&self) -> Result<Option<Uuid>> {
-        let repo = self.git_repo()?;
-        let config_snapshot = repo.config()?.snapshot()?;
+        let config_snapshot = self.repo.config()?.snapshot()?;
         match config_snapshot.get_str(UUID_CONFIG_KEY) {
             Ok(uuid) => {
                 let uuid = Uuid::from_str(uuid)?;
@@ -291,15 +321,15 @@ impl WorkingTree {
 
     pub fn write_generated_uuid(&self) -> Result<Uuid> {
         let uuid = Uuid::new_v4();
-        let repo = self.git_repo()?;
-        repo.config()?
+        self.repo
+            .config()?
             .set_str(UUID_CONFIG_KEY, uuid.to_string().as_str())?;
         Ok(uuid)
     }
 }
 
 /// A specialization of a WorkingTree used for outlining tasks, containing only files related to, and necessary for querying, the build graph.
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct OutliningTree {
     underlying: Arc<WorkingTree>,
 }
@@ -326,7 +356,8 @@ impl OutliningTree {
 
     /// Read configured outlining patterns from the repository at the given commit.
     fn configured_outlining_patterns(&self, commit_id: git2::Oid) -> Result<PatternSet> {
-        let repo = self.underlying().git_repo()?;
+        let repo = self.underlying();
+        let repo = repo.git_repo();
         let commit = repo.find_commit(commit_id).context("Resolving commit")?;
         let tree = commit.tree().context("Resolving tree")?;
         let pattern_file = tree
@@ -335,7 +366,7 @@ impl OutliningTree {
                 OUTLINING_PATTERN_FILE_NAME,
                 &commit.id().to_string(),
             ))?;
-        let pattern_object = pattern_file.to_object(&repo).context("Resolving object")?;
+        let pattern_object = pattern_file.to_object(repo).context("Resolving object")?;
         let pattern_blob = pattern_object.as_blob().ok_or_else(|| {
             anyhow::anyhow!(
                 "Expected {} to be a blob, but it was not",
@@ -377,7 +408,7 @@ impl OutliningTree {
 
         let mut patterns = PatternSet::new();
 
-        let repo_path = self.underlying().path().to_owned();
+        let repo_path = self.underlying().work_dir().to_owned();
         let cache_options = CacheOptions::default();
         let request = ResolutionRequest {
             repo: repo_path.clone(),
@@ -452,17 +483,20 @@ impl Repo {
             bail!("Bare repos are not supported");
         }
         let git_dir = repo.path().to_owned();
-        let working_tree = repo
-            .workdir()
-            .map(|work_tree_path| WorkingTree::new(work_tree_path.to_owned(), git_dir.clone()));
+        let working_tree = match repo.workdir() {
+            Some(work_dir) => {
+                let repo = git2::Repository::open(work_dir)?;
+                Some(WorkingTree::new(repo)?)
+            }
+            None => None,
+        };
 
         let outlining_tree_path = Self::outlining_tree_path(&git_dir);
         let outlining_tree_git_dir = git_dir.join("worktrees").join(OUTLINING_TREE_NAME);
         let outlining_tree = if outlining_tree_path.is_dir() {
-            Some(OutliningTree::new(Arc::new(WorkingTree::new(
-                outlining_tree_path,
-                outlining_tree_git_dir,
-            ))))
+            Some(OutliningTree::new(Arc::new(WorkingTree::from_git_dir(
+                &outlining_tree_git_dir,
+            )?)))
         } else {
             None
         };
@@ -593,9 +627,10 @@ impl Repo {
                 .map(|_| ())?;
         }
 
-        let work_tree_gitdir = self.working_tree_git_dir();
-        let outlining_tree = OutliningTree::new(Arc::new(WorkingTree::new(path, work_tree_gitdir)));
-        let repo = outlining_tree.underlying().git_repo()?;
+        let working_tree = WorkingTree::new(git2::Repository::open(self.working_tree_git_dir())?)?;
+        let outlining_tree = OutliningTree::new(Arc::new(working_tree));
+        let repo = outlining_tree.underlying();
+        let repo = repo.git_repo();
         let commit_id = repo
             .head()
             .context("Resolving HEAD reference")?
@@ -611,19 +646,8 @@ impl Repo {
     }
 
     pub fn create_working_tree(&self) -> Result<()> {
-        let path = self
-            .git_dir
-            .parent()
-            .with_context(|| {
-                format!(
-                    "Failed determining the parent directory of git_dir ({})",
-                    self.git_dir.display(),
-                )
-            })?
-            .to_owned();
-
         // Apply the top-level patterns
-        let working_tree = WorkingTree::new(path, self.git_dir.to_owned());
+        let working_tree = WorkingTree::from_git_dir(&self.git_dir)?;
         working_tree
             .apply_working_tree_patterns(self.app.clone())
             .context("Failed to apply top-level patterns")?;
