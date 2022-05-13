@@ -247,7 +247,9 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             subcommand,
         } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear",
+            IndexSubcommand::Fetch { .. } => "index-fetch",
             IndexSubcommand::Generate { .. } => "index-generate",
+            IndexSubcommand::Push { .. } => "index-push",
             IndexSubcommand::Resolve { .. } => "index-resolve",
         },
         Subcommand::Event { subcommand } => match subcommand {
@@ -477,8 +479,23 @@ enum IndexSubcommand {
         sparse_repo: PathBuf,
     },
 
+    /// Fetch the pre-computed index for the repository.
+    Fetch {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
+
     /// Populate the index with entries for all projects.
     Generate {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
+
+    /// Generate and push the pre-computed index to the remote store for others
+    /// to fetch.
+    Push {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
@@ -872,8 +889,18 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(ExitCode(0))
             }
 
+            IndexSubcommand::Fetch { sparse_repo } => {
+                let exit_code = operation::index::fetch(app, backend, sparse_repo)?;
+                Ok(exit_code)
+            }
+
             IndexSubcommand::Generate { sparse_repo } => {
                 let exit_code = operation::index::generate(app, backend, sparse_repo)?;
+                Ok(exit_code)
+            }
+
+            IndexSubcommand::Push { sparse_repo } => {
+                let exit_code = operation::index::push(app, backend, sparse_repo)?;
                 Ok(exit_code)
             }
 

@@ -57,15 +57,16 @@ pub struct GitBackedCacheSynchronizer {
 impl fmt::Debug for GitBackedCacheSynchronizer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GitBackedCacheSynchronizer")
+            .field("app", &self.app)
             .field("remote", &self.remote)
-            .field("path", &self.path.to_str())
+            .field("path", &self.path)
             .finish()
     }
 }
 
 impl GitBackedCacheSynchronizer {
     pub fn create(path: PathBuf, remote: String, app: Arc<App>) -> Result<Self> {
-        let repo = Repository::init(path.clone())?;
+        let repo = Repository::init(path.clone()).context("initializing Git repository")?;
         Ok(Self {
             repo,
             app,
@@ -148,7 +149,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
         self.populate(keyset_id, dest_cache)
     }
 
-    #[instrument]
+    #[instrument(skip(keyset))]
     fn share(
         &self,
         keyset_id: KeysetID,

@@ -31,7 +31,7 @@ pub trait ObjectDatabase {
 }
 
 /// Cache key for object database.
-const FUNCTION_ID: &[u8; 2] = b"ob";
+pub const FUNCTION_ID: &[u8; 2] = b"ob";
 
 impl<T: Cache> ObjectDatabase for T {
     fn get(

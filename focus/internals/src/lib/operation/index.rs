@@ -1,16 +1,18 @@
 use std::borrow::Borrow;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
+use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer};
 use focus_util::app::{App, ExitCode};
 use focus_util::git_helper::get_head_commit;
 use focus_util::paths::assert_focused_repo;
+use tracing::info;
 
 use crate::index::{
     get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
-    RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb,
+    RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb, FUNCTION_ID,
 };
 use crate::model::repo::Repo;
 use crate::model::selection::OperationAction;
@@ -66,11 +68,17 @@ fn dep_key_to_target(dep_key: &DependencyKey) -> String {
     }
 }
 
+#[derive(Clone, Debug)]
+struct ResolveTargetResult {
+    seen_keys: BTreeSet<DependencyKey>,
+    paths: BTreeSet<PathBuf>,
+}
+
 fn resolve_targets(
     app: Arc<App>,
     backend: Backend,
     targets: HashSet<Target>,
-) -> anyhow::Result<ExitCode> {
+) -> anyhow::Result<Result<ResolveTargetResult, ExitCode>> {
     let dep_keys: HashSet<DependencyKey> = targets
         .iter()
         .map(|target| DependencyKey::from(target.clone()))
@@ -88,12 +96,8 @@ fn resolve_targets(
 
     let materialize_result = get_files_to_materialize(&ctx, odb.borrow(), dep_keys.clone())?;
     match materialize_result {
-        PathsToMaterializeResult::Ok { paths } => {
-            println!("Paths to materialize:");
-            for path in paths {
-                println!("{}", path.display());
-            }
-            Ok(ExitCode(0))
+        PathsToMaterializeResult::Ok { seen_keys, paths } => {
+            Ok(Ok(ResolveTargetResult { seen_keys, paths }))
         }
 
         PathsToMaterializeResult::MissingKeys { keys } => {
@@ -107,14 +111,17 @@ fn resolve_targets(
             println!("Applied patterns: {}", num_applied_patterns);
 
             match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {
-                PathsToMaterializeResult::Ok { .. } => Ok(ExitCode(0)),
+                PathsToMaterializeResult::Ok { seen_keys, paths } => Ok(Ok(ResolveTargetResult {
+                    seen_keys,
+                    paths: paths.into_iter().collect(),
+                })),
 
                 PathsToMaterializeResult::MissingKeys { keys } => {
                     println!("Keys STILL missing, this is a bug:");
                     for (key, hash) in keys {
                         println!("{} {}", hash, dep_key_to_target(&key));
                     }
-                    Ok(ExitCode(1))
+                    Ok(Err(ExitCode(1)))
                 }
             }
         }
@@ -135,13 +142,26 @@ pub fn resolve(
         selections.computed_selection()
     }?;
     let targets = TargetSet::try_from(&selection)?;
-    resolve_targets(app, backend, targets)
+
+    let paths = match resolve_targets(app, backend, targets)? {
+        Ok(ResolveTargetResult {
+            seen_keys: _,
+            paths,
+        }) => paths,
+        Err(exit_code) => return Ok(exit_code),
+    };
+
+    println!("Paths to materialize:");
+    for path in paths.iter() {
+        println!("{}", path.display());
+    }
+    Ok(ExitCode(0))
 }
 
 pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo, app.clone())?;
     let selections = repo.selection_manager()?;
-    let targets = {
+    let all_targets = {
         let mut targets = TargetSet::try_from(&selections.project_catalog().mandatory_projects)?;
         targets.extend(TargetSet::try_from(
             &selections.project_catalog().optional_projects,
@@ -149,5 +169,79 @@ pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow
         targets
     };
 
-    resolve_targets(app, backend, targets)
+    match resolve_targets(app, backend, all_targets)? {
+        Ok(_result) => Ok(ExitCode(0)),
+        Err(exit_code) => Ok(exit_code),
+    }
+}
+
+fn get_index_dir(sparse_repo: &Path) -> PathBuf {
+    sparse_repo.join(".git").join("focus").join("focus-index")
+}
+
+const INDEX_REMOTE: &str = "https://git.twitter.biz/focus-index";
+
+pub fn fetch(_app: Arc<App>, _backend: Backend, _sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
+    todo!()
+}
+
+pub fn push(
+    app: Arc<App>,
+    backend: Backend,
+    sparse_repo_path: PathBuf,
+) -> anyhow::Result<ExitCode> {
+    let repo = Repo::open(&sparse_repo_path, app.clone())?;
+    let selections = repo.selection_manager()?;
+    let all_targets = {
+        let mut targets = TargetSet::try_from(&selections.project_catalog().mandatory_projects)?;
+        targets.extend(TargetSet::try_from(
+            &selections.project_catalog().optional_projects,
+        )?);
+        targets
+    };
+
+    let index_dir = get_index_dir(&sparse_repo_path);
+    std::fs::create_dir_all(&index_dir).context("creating index directory")?;
+    let synchronizer =
+        GitBackedCacheSynchronizer::create(index_dir, INDEX_REMOTE.to_string(), app.clone())?;
+
+    let head_commit = repo.get_head_commit()?;
+    let head_tree = head_commit.tree().context("finding HEAD tree")?;
+    let ctx = HashContext {
+        repo: &repo.underlying(),
+        head_tree: &head_tree,
+        caches: Default::default(),
+    };
+
+    let ResolveTargetResult {
+        seen_keys,
+        paths: _,
+    } = match resolve_targets(app, backend.clone(), all_targets)? {
+        Ok(result) => result,
+        Err(exit_code) => return Ok(exit_code),
+    };
+
+    let odb = match backend {
+        Backend::Simple => {
+            anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
+        }
+        Backend::RocksDb => RocksDBCache::new(&repo.underlying()),
+    };
+
+    let keyset = {
+        let mut result = HashSet::new();
+        for key in seen_keys {
+            let (hash, value) = odb.get(&ctx, &key)?;
+            if value.is_none() {
+                panic!("Value not found for key: {key:?}");
+            }
+            result.insert((*FUNCTION_ID, git2::Oid::from(hash)));
+        }
+        result
+    };
+
+    info!("Pushing index");
+    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
+
+    Ok(ExitCode(0))
 }
