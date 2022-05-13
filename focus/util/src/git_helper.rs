@@ -328,6 +328,14 @@ impl Drop for BranchSwitch {
     }
 }
 
+pub fn get_head_commit(repo: &git2::Repository) -> Result<git2::Commit> {
+    let head_reference = repo.head().context("resolving HEAD reference")?;
+    let head_commit = head_reference
+        .peel_to_commit()
+        .context("resolving HEAD commit")?;
+    Ok(head_commit)
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq)]
 /// Represents a git "ident", which is a signature and timestamp.
 pub struct Ident {

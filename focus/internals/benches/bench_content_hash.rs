@@ -29,7 +29,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
 
     let repo = Repo::open(&repo_path, app).unwrap();
     let git_repo = repo.underlying();
-    let head_commit = git_repo.head().unwrap().peel_to_commit().unwrap();
+    let head_commit = repo.get_head_commit().unwrap();
     let head_tree = head_commit.tree().unwrap();
     let selection = repo.computed_selection().unwrap();
     let dep_keys = TargetSet::try_from(&selection)

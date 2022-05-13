@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use focus_util::app::{App, ExitCode};
+use focus_util::git_helper::get_head_commit;
 use focus_util::paths::assert_focused_repo;
 
 use crate::index::{
@@ -76,10 +77,8 @@ fn resolve_targets(
         .collect();
 
     let repo = git2::Repository::open(".").context("opening sparse repo")?;
-    let head_commit = repo.head().context("looking up HEAD")?;
-    let head_tree = head_commit
-        .peel_to_tree()
-        .context("resolving HEAD to tree")?;
+    let head_commit = get_head_commit(&repo)?;
+    let head_tree = head_commit.tree().context("resolving HEAD to tree")?;
     let ctx = HashContext {
         repo: &repo,
         head_tree: &head_tree,

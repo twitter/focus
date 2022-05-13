@@ -24,6 +24,7 @@ mod partition {
     use std::collections::HashSet;
 
     use anyhow::{Context, Result};
+    use focus_util::git_helper::get_head_commit;
     use focus_util::time::{FocusTime, GitTime};
     use git2::{Commit, Oid, Repository};
 
@@ -34,13 +35,6 @@ mod partition {
         pub name: String,
         pub author_time: FocusTime,
         pub merge_base_auth_time: Option<FocusTime>,
-    }
-
-    fn head_commit(repo: &Repository) -> Result<Commit> {
-        repo.head()
-            .context("Finding repo HEAD")?
-            .peel_to_commit()
-            .context("peeling HEAD commit")
     }
 
     fn safe_refs() -> HashSet<&'static str> {
@@ -73,7 +67,7 @@ mod partition {
 
     pub(super) fn collect_ref_info(repo: &Repository) -> Result<Vec<RefInfo>> {
         let repo = repo;
-        let head = head_commit(repo)?;
+        let head = get_head_commit(repo)?;
 
         let mut refs: Vec<RefInfo> = Vec::new();
 
