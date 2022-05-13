@@ -484,6 +484,10 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// The Git remote to fetch from.
+        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
+        remote: String,
     },
 
     /// Populate the index with entries for all projects.
@@ -499,6 +503,10 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// The Git remote to push to.
+        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
+        remote: String,
     },
 
     /// Resolve the targets to their resulting pattern sets.
@@ -889,8 +897,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(ExitCode(0))
             }
 
-            IndexSubcommand::Fetch { sparse_repo } => {
-                let exit_code = operation::index::fetch(app, backend, sparse_repo)?;
+            IndexSubcommand::Fetch {
+                sparse_repo,
+                remote,
+            } => {
+                let exit_code = operation::index::fetch(app, backend, sparse_repo, remote)?;
                 Ok(exit_code)
             }
 
@@ -899,8 +910,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Push { sparse_repo } => {
-                let exit_code = operation::index::push(app, backend, sparse_repo)?;
+            IndexSubcommand::Push {
+                sparse_repo,
+                remote,
+            } => {
+                let exit_code = operation::index::push(app, backend, sparse_repo, remote)?;
                 Ok(exit_code)
             }
 

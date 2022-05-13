@@ -179,12 +179,16 @@ fn get_index_dir(sparse_repo: &Path) -> PathBuf {
     sparse_repo.join(".git").join("focus").join("focus-index")
 }
 
-const INDEX_REMOTE: &str = "https://git.twitter.biz/focus-index";
+pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
-pub fn fetch(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
+pub fn fetch(
+    app: Arc<App>,
+    backend: Backend,
+    sparse_repo: PathBuf,
+    remote: String,
+) -> anyhow::Result<ExitCode> {
     let index_dir = get_index_dir(&sparse_repo);
-    let synchronizer =
-        GitBackedCacheSynchronizer::create(index_dir, INDEX_REMOTE.to_string(), app)?;
+    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app)?;
 
     let repo = git2::Repository::open(&sparse_repo)?;
     let head_commit = repo
@@ -211,6 +215,7 @@ pub fn push(
     app: Arc<App>,
     backend: Backend,
     sparse_repo_path: PathBuf,
+    remote: String,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
@@ -224,8 +229,7 @@ pub fn push(
 
     let index_dir = get_index_dir(&sparse_repo_path);
     std::fs::create_dir_all(&index_dir).context("creating index directory")?;
-    let synchronizer =
-        GitBackedCacheSynchronizer::create(index_dir, INDEX_REMOTE.to_string(), app.clone())?;
+    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
 
     let head_commit = repo.get_head_commit()?;
     let head_tree = head_commit.tree().context("finding HEAD tree")?;
