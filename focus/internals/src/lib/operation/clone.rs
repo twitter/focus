@@ -635,7 +635,7 @@ mod test {
         {
             let outlining_tree = model_repo.outlining_tree().unwrap();
             let outlining_tree_underlying = outlining_tree.underlying();
-            let outlining_tree_path = outlining_tree_underlying.path();
+            let outlining_tree_path = outlining_tree_underlying.work_dir();
             let walker = walkdir::WalkDir::new(outlining_tree_path).follow_links(false);
 
             let outlining_tree_paths: HashSet<PathBuf> = walker
@@ -664,7 +664,7 @@ mod test {
 
         {
             let working_tree = model_repo.working_tree().unwrap();
-            let working_tree_path = working_tree.path();
+            let working_tree_path = working_tree.work_dir();
             let walker = walkdir::WalkDir::new(working_tree_path).follow_links(false);
             let working_tree_paths: HashSet<PathBuf> = walker
                 .into_iter()

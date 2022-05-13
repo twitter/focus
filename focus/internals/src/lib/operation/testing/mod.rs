@@ -325,18 +325,18 @@ pub(in crate::operation) mod integration {
                     commands.push((
                         Command::new("bazel")
                             .arg("shutdown")
-                            .current_dir(working_tree.path())
+                            .current_dir(working_tree.work_dir())
                             .spawn(),
-                        working_tree.path().to_owned(),
+                        working_tree.work_dir().to_owned(),
                     ));
                 }
                 if let Some(outlining_tree) = sparse_repo.outlining_tree() {
                     commands.push((
                         Command::new("bazel")
                             .arg("shutdown")
-                            .current_dir(outlining_tree.underlying().path())
+                            .current_dir(outlining_tree.underlying().work_dir())
                             .spawn(),
-                        outlining_tree.underlying().path().to_owned(),
+                        outlining_tree.underlying().work_dir().to_owned(),
                     ));
                 }
             }

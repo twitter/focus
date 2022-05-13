@@ -13,8 +13,8 @@ pub struct DataPaths {
 
 impl DataPaths {
     pub fn from_working_tree(working_tree: &WorkingTree) -> Result<Self> {
-        let dot_focus_dir = working_tree.path().join(".focus");
-        let focus_dir = working_tree.path().join("focus");
+        let dot_focus_dir = working_tree.work_dir().join(".focus");
+        let focus_dir = working_tree.work_dir().join("focus");
         let project_dir = focus_dir.join("projects");
         let selection_file = dot_focus_dir.join("user.selection.json");
 
