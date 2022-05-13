@@ -14,4 +14,6 @@ pub use dependency_graph::{
     DependencyValue, PathsToMaterializeResult,
 };
 pub use object_database::testing;
-pub use object_database::{ObjectDatabase, RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb};
+pub use object_database::{
+    ObjectDatabase, RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb, FUNCTION_ID,
+};

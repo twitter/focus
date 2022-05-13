@@ -554,8 +554,11 @@ impl Repo {
             )?;
 
             match paths_to_materialize {
-                PathsToMaterializeResult::Ok { paths } => {
-                    info!("Cache hit for sparse checkout patterns");
+                PathsToMaterializeResult::Ok { seen_keys, paths } => {
+                    info!(
+                        num_seen_keys = seen_keys.len(),
+                        "Cache hit for sparse checkout patterns"
+                    );
                     paths
                         .into_iter()
                         .map(|path| Pattern::Directory {

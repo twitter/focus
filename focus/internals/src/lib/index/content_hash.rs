@@ -28,6 +28,13 @@ const VERSION: usize = 1;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ContentHash(pub(super) git2::Oid);
 
+impl From<ContentHash> for git2::Oid {
+    fn from(hash: ContentHash) -> Self {
+        let ContentHash(oid) = hash;
+        oid
+    }
+}
+
 impl Display for ContentHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(hash) = self;

@@ -156,6 +156,11 @@ pub fn update_object_database_from_resolution(
 pub enum PathsToMaterializeResult {
     /// The set of paths to materialize was successfully determined.
     Ok {
+        /// *All* dependency keys encountered in the course of materializing
+        /// paths. This includes the starting set of keys passed in and its
+        /// transitively-reachable closure.
+        seen_keys: BTreeSet<DependencyKey>,
+
         /// The set of files/directories which should be materialized.
         paths: BTreeSet<PathBuf>,
     },
@@ -309,6 +314,7 @@ pub fn get_files_to_materialize(
 
     if missing_keys.is_empty() {
         Ok(PathsToMaterializeResult::Ok {
+            seen_keys: seen_keys.into_iter().collect(),
             paths: paths_to_materialize.into_iter().collect(),
         })
     } else {
@@ -484,6 +490,20 @@ sh_binary(
             get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?;
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
+                ),
+                BazelPackage(
+                    Label("//package1:foo.sh"),
+                ),
+                BazelPackage(
+                    Label("//package2:bar"),
+                ),
+                BazelPackage(
+                    Label("//package2:bar.sh"),
+                ),
+            },
             paths: {
                 "package1",
                 "package2",
@@ -573,6 +593,14 @@ New contents
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
+                ),
+                BazelPackage(
+                    Label("//package2:contents"),
+                ),
+            },
             paths: {
                 "package1",
                 "package2",
@@ -645,6 +673,14 @@ def my_macro_inner(name):
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
+                ),
+                BazelPackage(
+                    Label("//package3:contents"),
+                ),
+            },
             paths: {
                 "package1",
                 "package3",
@@ -713,6 +749,14 @@ def some_macro():
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
+                ),
+                BazelPackage(
+                    Label("//package1:foo.sh"),
+                ),
+            },
             paths: {
                 "package1",
             },
@@ -817,6 +861,14 @@ def some_macro():
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
+                ),
+                BazelPackage(
+                    Label("//package1:foo.sh"),
+                ),
+            },
             paths: {
                 "package1",
             },
@@ -879,6 +931,17 @@ sh_binary(
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         Ok {
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1/..."),
+                ),
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo"),
+                ),
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo.sh"),
+                ),
+            },
             paths: {
                 "package1",
                 "package1/some/sub/package",
