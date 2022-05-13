@@ -1,4 +1,9 @@
-use focus_util::{app::App, git_helper, paths, sandbox_command::SandboxCommandOutput};
+use focus_util::{
+    app::App,
+    git_helper::{self, get_head_commit},
+    paths,
+    sandbox_command::SandboxCommandOutput,
+};
 use std::{
     collections::HashSet,
     fs::{self},
@@ -208,12 +213,8 @@ impl WorkingTree {
     #[allow(dead_code)]
     fn locate_paths_in_tree(&self, prefixes: &HashSet<PathBuf>) -> Result<PatternSet> {
         let mut results = PatternSet::new();
-        let head_tree = self
-            .repo
-            .head()
-            .context("Failed to resolve the HEAD reference")?
-            .peel_to_tree()
-            .context("Failed to locate the tree associated with the HEAD reference")?;
+        let head_commit = self.get_head_commit()?;
+        let head_tree = head_commit.tree().context("Getting HEAD tree")?;
         head_tree
             .walk(TreeWalkMode::PreOrder, |s, _| {
                 if s.is_empty() {
@@ -278,14 +279,7 @@ impl WorkingTree {
             "Recording sparse sync point in {}",
             self.work_dir().display()
         );
-        let head_commit = self
-            .repo
-            .head()
-            .context(description.clone())
-            .context("Reading HEAD reference")?
-            .peel_to_commit()
-            .context(description)
-            .context("Finding commit associated with HEAD reference")?;
+        let head_commit = self.get_head_commit().context(description)?;
         self.repo
             .reference(SYNC_REF_NAME, head_commit.id(), true, "focus sync")?;
 
@@ -325,6 +319,10 @@ impl WorkingTree {
             .config()?
             .set_str(UUID_CONFIG_KEY, uuid.to_string().as_str())?;
         Ok(uuid)
+    }
+
+    pub fn get_head_commit(&self) -> Result<git2::Commit> {
+        get_head_commit(&self.repo)
     }
 }
 
@@ -531,12 +529,7 @@ impl Repo {
         app: Arc<App>,
         odb: &dyn ObjectDatabase,
     ) -> Result<(usize, bool)> {
-        let head_commit = self
-            .repo
-            .head()
-            .context("Failed to resolve HEAD reference")?
-            .peel_to_commit()
-            .context("Failed to peel to commit")?;
+        let head_commit = self.get_head_commit()?;
         let head_tree = head_commit.tree().context("Failed to resolve head tree")?;
         let hash_context = HashContext {
             repo: &self.repo,
@@ -629,14 +622,7 @@ impl Repo {
 
         let working_tree = WorkingTree::new(git2::Repository::open(self.working_tree_git_dir())?)?;
         let outlining_tree = OutliningTree::new(Arc::new(working_tree));
-        let repo = outlining_tree.underlying();
-        let repo = repo.git_repo();
-        let commit_id = repo
-            .head()
-            .context("Resolving HEAD reference")?
-            .peel_to_commit()
-            .context("Resolving HEAD commit")?
-            .id();
+        let commit_id = self.get_head_commit()?.id();
         outlining_tree.apply_configured_outlining_patterns(commit_id, self.app.clone())?;
         Ok(())
     }
@@ -687,5 +673,13 @@ impl Repo {
     // We expose the computed selection here for use in benchmarks since `SelectionManager` exposes types not visible outside the crate.
     pub fn computed_selection(&self) -> Result<Selection> {
         self.selection_manager()?.computed_selection()
+    }
+
+    pub fn get_head_commit(&self) -> Result<git2::Commit> {
+        let head_reference = self.repo.head().context("resolving HEAD reference")?;
+        let head_commit = head_reference
+            .peel_to_commit()
+            .context("resolving HEAD commit")?;
+        Ok(head_commit)
     }
 }
