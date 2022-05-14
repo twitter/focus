@@ -193,11 +193,7 @@ pub fn fetch(
     let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app)?;
 
     let repo = git2::Repository::open(&sparse_repo)?;
-    let head_commit = repo
-        .head()
-        .context("finding HEAD")?
-        .peel_to_commit()
-        .context("peeling to commit")?;
+    let head_commit = get_head_commit(&repo)?;
     let head_tree = head_commit.tree().context("finding HEAD tree")?;
 
     let odb = match backend {
@@ -272,4 +268,114 @@ pub fn push(
     synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
 
     Ok(ExitCode(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use focus_testing::ScratchGitRepo;
+    use maplit::hashset;
+
+    use crate::operation::testing::integration::RepoPairFixture;
+    use crate::target::Label;
+
+    use super::*;
+
+    #[test]
+    fn test_index_push_and_fetch() -> anyhow::Result<()> {
+        let backend = Backend::RocksDb;
+
+        let temp_dir = tempfile::tempdir()?;
+        let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
+        let remote = format!("file://{}", remote_index_store.path().display());
+
+        let app = Arc::new(App::new(false)?);
+        let label: Label = "//project_a/src/main/java/com/example/cmdline:runner".parse()?;
+
+        // Populate remote index store.
+        {
+            let fixture = RepoPairFixture::new()?;
+            fixture.perform_clone()?;
+            let ExitCode(exit_code) = push(
+                app.clone(),
+                backend.clone(),
+                fixture.sparse_repo_path.clone(),
+                remote.clone(),
+            )?;
+            assert_eq!(exit_code, 0);
+        }
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+        let repo = fixture.sparse_repo()?;
+        let repo = repo.underlying();
+        let head_tree = repo.head()?.peel_to_commit()?.tree()?;
+        let ctx = HashContext {
+            repo,
+            head_tree: &head_tree,
+            caches: Default::default(),
+        };
+
+        // Try to materialize files -- this should be a cache miss.
+        {
+            let odb = make_odb(backend.clone(), repo);
+            let materialize_result = get_files_to_materialize(
+                &ctx,
+                odb.borrow(),
+                hashset! {DependencyKey::BazelPackage(label.clone() )},
+            )?;
+            insta::assert_debug_snapshot!(materialize_result, @r###"
+            MissingKeys {
+                keys: {
+                    (
+                        BazelPackage(
+                            Label("//project_a/src/main/java/com/example/cmdline:runner"),
+                        ),
+                        ContentHash(
+                            d5e48dc31d04b2e2641d0333cd772b3fb750d185,
+                        ),
+                    ),
+                },
+            }
+            "###);
+        }
+
+        let ExitCode(exit_code) = fetch(
+            app.clone(),
+            backend.clone(),
+            fixture.sparse_repo_path.clone(),
+            remote.clone(),
+        )?;
+        assert_eq!(exit_code, 0);
+
+        // Try to materialize files again -- this should be a cache hit.
+        {
+            let odb = make_odb(backend.clone(), repo);
+            let materialize_result = get_files_to_materialize(
+                &ctx,
+                odb.borrow(),
+                hashset! {DependencyKey::BazelPackage(label.clone() )},
+            )?;
+            insta::assert_debug_snapshot!(materialize_result, @r###"
+            Ok {
+                seen_keys: {
+                    BazelPackage(
+                        Label("//library_a:a"),
+                    ),
+                    BazelPackage(
+                        Label("//project_a/src/main/java/com/example/cmdline:Runner.java"),
+                    ),
+                    BazelPackage(
+                        Label("//project_a/src/main/java/com/example/cmdline:runner"),
+                    ),
+                },
+                paths: {
+                    "library_a",
+                    "project_a/src/main/java/com/example/cmdline",
+                },
+            }
+            "###);
+        }
+
+        Ok(())
+    }
 }
