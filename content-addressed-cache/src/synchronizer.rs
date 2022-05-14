@@ -22,6 +22,13 @@ pub fn tag_fmt(ksid: KeysetID) -> String {
     return format!("refs/tags/focus/{}", ksid);
 }
 
+#[derive(Clone, Debug)]
+pub struct PopulateResult {
+    pub entry_count: usize,
+    pub new_entry_count: usize,
+    pub failed_entry_count: usize,
+}
+
 /// A synchronization mechanism for [Cache]s, which syncs key-value pairs.
 ///
 /// This is optimized for synchronization in a situation where keys are
@@ -32,8 +39,12 @@ pub fn tag_fmt(ksid: KeysetID) -> String {
 /// in the next commit's keyset can be shared with the current commit's keyset.
 pub trait CacheSynchronizer: Debug {
     fn fetch(&self, keyset_id: KeysetID) -> Result<()>;
-    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()>;
-    fn get_and_populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()>;
+    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<PopulateResult>;
+    fn get_and_populate(
+        &self,
+        keyset_id: KeysetID,
+        dest_cache: &dyn Cache,
+    ) -> Result<PopulateResult>;
     fn share(
         &self,
         keyset_id: KeysetID,
@@ -91,7 +102,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
     }
 
     #[instrument]
-    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()> {
+    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<PopulateResult> {
         let reference = self
             .repo
             .find_reference(&tag_fmt(keyset_id)[..])
@@ -101,7 +112,12 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
             .peel_to_tree()
             .context("peeling kv tree reference")?;
 
+        let mut entry_count = 0;
+        let mut new_entry_count = 0;
+        let mut failed_entry_count = 0;
         for tree_entry in kv_tree.iter() {
+            entry_count += 1;
+
             let object = match tree_entry.to_object(&self.repo) {
                 Ok(object) => object,
                 Err(_) => {
@@ -133,18 +149,44 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                     continue;
                 }
             };
-            match dest_cache.put(kind, key, blob.content()) {
-                Ok(_) => continue,
-                Err(_) => {
-                    warn!(?object, "Failed to insert key into Cache");
+
+            match dest_cache.get(kind, key) {
+                Ok(Some(_)) => {
+                    // Already present, do nothing.
                     continue;
                 }
-            };
+                Ok(None) => {
+                    // Insert below.
+                }
+                Err(e) => {
+                    // Insert below.
+                    warn!(?kind, ?key, ?e, "Failed to get key from cache");
+                }
+            }
+
+            match dest_cache.put(kind, key, blob.content()) {
+                Ok(()) => {
+                    new_entry_count += 1;
+                }
+                Err(e) => {
+                    failed_entry_count += 1;
+                    warn!(?object, ?e, "Failed to insert key into Cache");
+                }
+            }
         }
-        Ok(())
+
+        Ok(PopulateResult {
+            entry_count,
+            new_entry_count,
+            failed_entry_count,
+        })
     }
 
-    fn get_and_populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<()> {
+    fn get_and_populate(
+        &self,
+        keyset_id: KeysetID,
+        dest_cache: &dyn Cache,
+    ) -> Result<PopulateResult> {
         self.fetch(keyset_id)?;
         self.populate(keyset_id, dest_cache)
     }
