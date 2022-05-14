@@ -919,7 +919,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
 
             IndexSubcommand::Resolve { targets } => {
-                let exit_code = operation::index::resolve(app, backend, targets)?;
+                let exit_code = operation::index::resolve(app, backend, Path::new("."), targets)?;
                 Ok(exit_code)
             }
         },

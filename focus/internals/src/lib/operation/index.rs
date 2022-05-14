@@ -77,6 +77,7 @@ struct ResolveTargetResult {
 fn resolve_targets(
     app: Arc<App>,
     backend: Backend,
+    sparse_repo_path: &Path,
     targets: HashSet<Target>,
 ) -> anyhow::Result<Result<ResolveTargetResult, ExitCode>> {
     let dep_keys: HashSet<DependencyKey> = targets
@@ -84,7 +85,7 @@ fn resolve_targets(
         .map(|target| DependencyKey::from(target.clone()))
         .collect();
 
-    let repo = git2::Repository::open(".").context("opening sparse repo")?;
+    let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
     let head_commit = get_head_commit(&repo)?;
     let head_tree = head_commit.tree().context("resolving HEAD to tree")?;
     let ctx = HashContext {
@@ -131,6 +132,7 @@ fn resolve_targets(
 pub fn resolve(
     app: Arc<App>,
     backend: Backend,
+    sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
 ) -> anyhow::Result<ExitCode> {
     let sparse_repo = Path::new(".");
@@ -143,7 +145,7 @@ pub fn resolve(
     }?;
     let targets = TargetSet::try_from(&selection)?;
 
-    let paths = match resolve_targets(app, backend, targets)? {
+    let paths = match resolve_targets(app, backend, sparse_repo_path, targets)? {
         Ok(ResolveTargetResult {
             seen_keys: _,
             paths,
@@ -169,7 +171,7 @@ pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow
         targets
     };
 
-    match resolve_targets(app, backend, all_targets)? {
+    match resolve_targets(app, backend, &sparse_repo, all_targets)? {
         Ok(_result) => Ok(ExitCode(0)),
         Err(exit_code) => Ok(exit_code),
     }
@@ -242,7 +244,7 @@ pub fn push(
     let ResolveTargetResult {
         seen_keys,
         paths: _,
-    } = match resolve_targets(app, backend.clone(), all_targets)? {
+    } = match resolve_targets(app, backend.clone(), &sparse_repo_path, all_targets)? {
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
