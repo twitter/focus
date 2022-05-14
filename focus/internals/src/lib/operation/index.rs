@@ -181,8 +181,30 @@ fn get_index_dir(sparse_repo: &Path) -> PathBuf {
 
 const INDEX_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
-pub fn fetch(_app: Arc<App>, _backend: Backend, _sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
-    todo!()
+pub fn fetch(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
+    let index_dir = get_index_dir(&sparse_repo);
+    let synchronizer =
+        GitBackedCacheSynchronizer::create(index_dir, INDEX_REMOTE.to_string(), app)?;
+
+    let repo = git2::Repository::open(&sparse_repo)?;
+    let head_commit = repo
+        .head()
+        .context("finding HEAD")?
+        .peel_to_commit()
+        .context("peeling to commit")?;
+    let head_tree = head_commit.tree().context("finding HEAD tree")?;
+
+    let odb = match backend {
+        Backend::Simple => {
+            anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
+        }
+        Backend::RocksDb => RocksDBCache::new(&repo),
+    };
+    info!(head_tree_id = ?head_tree.id(), "Fetching objects");
+    let populate_result = synchronizer.get_and_populate(head_tree.id(), &odb)?;
+    info!(?populate_result, "Populated index");
+
+    Ok(ExitCode(0))
 }
 
 pub fn push(
