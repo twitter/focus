@@ -49,7 +49,7 @@ enum Subcommand {
         days_of_history: u64,
 
         /// Copy only the specified branch rather than all local branches.
-        #[clap(parse(try_from_str), default_value = "true")]
+        #[clap(long, parse(try_from_str), default_value = "true")]
         copy_branches: bool,
 
         /// Initial projects and targets to add to the repo.
