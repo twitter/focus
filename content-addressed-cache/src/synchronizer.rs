@@ -30,6 +30,17 @@ pub struct PopulateResult {
     pub failed_entry_count: usize,
 }
 
+impl PopulateResult {
+    fn is_noop(&self) -> bool {
+        let PopulateResult {
+            entry_count,
+            new_entry_count,
+            failed_entry_count,
+        } = self;
+        entry_count + new_entry_count + failed_entry_count == 0
+    }
+}
+
 impl AddAssign for PopulateResult {
     fn add_assign(&mut self, rhs: Self) {
         let Self {
@@ -202,7 +213,9 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
             let populate_result = self
                 .populate(commit_id, dest_cache)
                 .with_context(|| format!("Populating cache from commit {}", &commit_id_str))?;
-            info!(?populate_result, commit_id = %commit_id_str, "Populated index");
+            if !populate_result.is_noop() {
+                info!(?populate_result, commit_id = %commit_id_str, "Populated index");
+            }
             result += populate_result;
         }
         Ok((result, fetched_commits))
