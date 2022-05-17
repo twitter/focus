@@ -4,7 +4,7 @@ use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 use anyhow::Context;
 use content_addressed_cache::Cache;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub use content_addressed_cache::RocksDBCache;
 
@@ -57,6 +57,22 @@ impl<T: Cache> ObjectDatabase for T {
         let hash = content_hash_dependency_key(ctx, key)?;
         debug!(?hash, ?value, "Inserting entry into object database");
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
+
+        if let Some(old_payload) = self.get(*FUNCTION_ID, hash.0)? {
+            if payload != old_payload {
+                let old_value: DependencyValue = serde_json::from_slice(&old_payload)
+                    .context("deserializing old DependencyValue")?;
+                error!(
+                    ?key,
+                    ?old_value,
+                    new_value = ?value,
+                    ?hash,
+                    "Non-deterministic dependency hashing"
+                );
+                anyhow::bail!("Non-deterministic dependency hashing")
+            }
+        }
+
         self.put(*FUNCTION_ID, hash.0, &payload[..])?;
         Ok(())
     }
@@ -140,6 +156,7 @@ pub mod testing {
                         ?hash,
                         "Non-deterministic dependency hashing"
                     );
+                    anyhow::bail!("Non-deterministic dependency hashing");
                 }
             }
             Ok(())
