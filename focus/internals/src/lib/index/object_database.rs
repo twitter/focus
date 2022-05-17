@@ -80,6 +80,7 @@ impl RocksDBMemoizationCacheExt for RocksDBCache {
     }
 }
 
+#[cfg(test)]
 /// Testing utilities.
 pub mod testing {
     use crate::index::content_hash_dependency_key;

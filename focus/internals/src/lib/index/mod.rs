@@ -13,7 +13,9 @@ pub use dependency_graph::{
     get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
     DependencyValue, PathsToMaterializeResult,
 };
-pub use object_database::testing;
 pub use object_database::{
     ObjectDatabase, RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb, FUNCTION_ID,
 };
+
+#[cfg(test)]
+pub use object_database::testing;
