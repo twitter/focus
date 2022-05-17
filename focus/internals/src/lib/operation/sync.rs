@@ -46,16 +46,12 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
         selection.targets.len().to_string(),
     );
 
-    let ExitCode(fetch_exit_code) = index::fetch(
+    let _: Result<ExitCode> = index::fetch(
         app.clone(),
         index::Backend::RocksDb,
         sparse_repo.to_path_buf(),
         index::INDEX_DEFAULT_REMOTE.to_string(),
-    )
-    .context("Fetching index")?;
-    if fetch_exit_code != 0 {
-        bail!("Fetching index failed");
-    }
+    );
 
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
