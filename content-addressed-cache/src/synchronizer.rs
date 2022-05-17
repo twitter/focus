@@ -1,12 +1,13 @@
 use crate::{Cache, CacheKey, CacheKeyKind, CompositeKey};
 use anyhow::{Context, Result};
 use core::fmt;
-use focus_util::{app::App, git_helper::fetch_ref, git_helper::push_ref};
+use focus_util::{app::App, git_helper};
 use git2::Oid;
 use git2::{Commit, Repository};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
+use std::ops::AddAssign;
 use std::{collections::HashSet, path::PathBuf, str::FromStr, sync::Arc};
-use tracing::{instrument, warn};
+use tracing::{info, instrument, warn};
 
 pub type Keyset = HashSet<(CacheKeyKind, CacheKey)>;
 pub type KeysetID = Oid;
@@ -14,19 +15,32 @@ pub type KeysetID = Oid;
 const COMMIT_USER_NAME: &str = "focus";
 const COMMIT_USER_EMAIL: &str = "source-eng-team@twitter.com";
 
-pub fn refspec_fmt(ksid: KeysetID) -> String {
-    return format!("+refs/tags/focus/{}:refs/tags/focus/{}", ksid, ksid);
+pub fn refspec_fmt(value: impl Display) -> String {
+    return format!("+refs/tags/focus/{}:refs/tags/focus/{}", value, value);
 }
 
-pub fn tag_fmt(ksid: KeysetID) -> String {
-    return format!("refs/tags/focus/{}", ksid);
+pub fn tag_fmt(value: impl Display) -> String {
+    return format!("refs/tags/focus/{}", value);
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct PopulateResult {
     pub entry_count: usize,
     pub new_entry_count: usize,
     pub failed_entry_count: usize,
+}
+
+impl AddAssign for PopulateResult {
+    fn add_assign(&mut self, rhs: Self) {
+        let Self {
+            entry_count,
+            new_entry_count,
+            failed_entry_count,
+        } = rhs;
+        self.entry_count += entry_count;
+        self.new_entry_count += new_entry_count;
+        self.failed_entry_count += failed_entry_count;
+    }
 }
 
 /// A synchronization mechanism for [Cache]s, which syncs key-value pairs.
@@ -38,20 +52,20 @@ pub struct PopulateResult {
 /// most commits don't change most build artifacts, many of the key-value pairs
 /// in the next commit's keyset can be shared with the current commit's keyset.
 pub trait CacheSynchronizer: Debug {
-    fn fetch(&self, keyset_id: KeysetID) -> Result<()>;
-    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<PopulateResult>;
-    fn get_and_populate(
+    fn fetch(&self) -> Result<HashSet<git2::Oid>>;
+    fn populate(&self, commit_id: &git2::Oid, dest_cache: &dyn Cache) -> Result<PopulateResult>;
+    fn fetch_and_populate(
         &self,
-        keyset_id: KeysetID,
         dest_cache: &dyn Cache,
-    ) -> Result<PopulateResult>;
+    ) -> Result<(PopulateResult, HashSet<git2::Oid>)>;
     fn share(
         &self,
         keyset_id: KeysetID,
         keyset: &Keyset,
         cache: &dyn Cache,
         previous_keyset_id: Option<KeysetID>,
-    ) -> Result<()>;
+        additional_ref_name: Option<&str>,
+    ) -> Result<git2::Oid>;
 }
 
 /// Synchronize using Git as a key-value store. Keysets are pushed as tags to
@@ -89,28 +103,23 @@ impl GitBackedCacheSynchronizer {
 
 impl CacheSynchronizer for GitBackedCacheSynchronizer {
     #[instrument]
-    fn fetch(&self, keyset_id: KeysetID) -> Result<()> {
-        let refspecs = refspec_fmt(keyset_id);
-        fetch_ref(
+    fn fetch(&self) -> Result<HashSet<git2::Oid>> {
+        git_helper::fetch_all_tags(
             self.path.as_path(),
-            refspecs.as_str(),
             self.remote.as_str(),
             self.app.clone(),
             Some(1),
-        )?;
-        Ok(())
+        )
+        .context("Fetching")
     }
 
     #[instrument]
-    fn populate(&self, keyset_id: KeysetID, dest_cache: &dyn Cache) -> Result<PopulateResult> {
-        let reference = self
+    fn populate(&self, commit_id: &git2::Oid, dest_cache: &dyn Cache) -> Result<PopulateResult> {
+        let commit = self
             .repo
-            .find_reference(&tag_fmt(keyset_id)[..])
-            .context("Failed to find commit locally for given keyset_id.")?;
-
-        let kv_tree = reference
-            .peel_to_tree()
-            .context("peeling kv tree reference")?;
+            .find_commit(*commit_id)
+            .context("Resolving commit")?;
+        let kv_tree = commit.tree().context("Resolving tree")?;
 
         let mut entry_count = 0;
         let mut new_entry_count = 0;
@@ -182,13 +191,21 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
         })
     }
 
-    fn get_and_populate(
+    fn fetch_and_populate(
         &self,
-        keyset_id: KeysetID,
         dest_cache: &dyn Cache,
-    ) -> Result<PopulateResult> {
-        self.fetch(keyset_id)?;
-        self.populate(keyset_id, dest_cache)
+    ) -> Result<(PopulateResult, HashSet<git2::Oid>)> {
+        let fetched_commits = self.fetch().context("Fetching index updates")?;
+        let mut result = PopulateResult::default();
+        for commit_id in fetched_commits.iter() {
+            let commit_id_str = commit_id.to_string();
+            let populate_result = self
+                .populate(commit_id, dest_cache)
+                .with_context(|| format!("Populating cache from commit {}", &commit_id_str))?;
+            info!(?populate_result, commit_id = %commit_id_str, "Populated index");
+            result += populate_result;
+        }
+        Ok((result, fetched_commits))
     }
 
     #[instrument(skip(keyset))]
@@ -198,7 +215,8 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
         keyset: &Keyset,
         cache: &dyn Cache,
         previous_keyset_id: Option<KeysetID>,
-    ) -> Result<()> {
+        additional_ref_name: Option<&str>,
+    ) -> Result<git2::Oid> {
         let mut kv_tree = self
             .repo
             .treebuilder(None)
@@ -243,6 +261,12 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
             &self.repo.find_tree(kv_tree_oid)?,
             &vec_of_prev_commit_references[..],
         )?;
+
+        let mut refspecs = vec![refspec_fmt(&keyset_id)];
+        if let Some(additional_ref_name) = additional_ref_name {
+            refspecs.push(refspec_fmt(&additional_ref_name))
+        }
+
         self.repo
             .reference(
                 &tag_fmt(keyset_id)[..],
@@ -251,14 +275,23 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                 "Tree is used as key-value store.",
             )
             .context("updating reference")?;
-        let refspecs = refspec_fmt(keyset_id);
-        push_ref(
+        if let Some(ref_name) = additional_ref_name {
+            self.repo
+                .reference(
+                    &tag_fmt(ref_name),
+                    commit_oid,
+                    true,
+                    "Tree is used as key-value store.",
+                )
+                .context("updating additional reference")?;
+        }
+        git_helper::push_refs(
             self.path.as_path(),
-            refspecs.as_str(),
+            refspecs.into_iter(),
             self.remote.as_str(),
             self.app.clone(),
         )?;
-        Ok(())
+        Ok(commit_oid)
     }
 }
 
@@ -279,6 +312,12 @@ mod tests {
     use crate::{CacheKey, CacheKeyKind, CacheSynchronizer, Keyset};
     use focus_util::app::App;
 
+    use maplit::hashset;
+
+    use super::*;
+
+    const RANDOM_KEY_COUNT: usize = 100;
+
     fn keyset_id_1() -> Oid {
         Oid::from_str("abcd1abcd1abcd1abcd1").unwrap()
     }
@@ -291,7 +330,6 @@ mod tests {
         hex::decode("f5b3").unwrap().try_into().unwrap()
     }
 
-    use super::GitBackedCacheSynchronizer;
     fn setup_server_repo_locally() -> Result<(TempDir, PathBuf)> {
         let tmp_dir = tempdir().unwrap();
         let file_path = tmp_dir.path().join("server-repo");
@@ -345,7 +383,7 @@ mod tests {
 
     fn populate_demo_hashset(memo_cache: &dyn Cache, kind: CacheKeyKind) -> Keyset {
         let mut pairs: Keyset = HashSet::new();
-        for _x in 1..100 {
+        for _x in 0..RANDOM_KEY_COUNT {
             let (a, v) = generate_random_key_values();
             memo_cache.put(kind, a, &v[..]).unwrap();
             pairs.insert((kind, a));
@@ -391,16 +429,18 @@ mod tests {
         populate_demo_hashset(&memo_cache_1, kind);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, kind);
-        memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None)?;
-        memo_cache_sync_2.fetch(keyset_id).unwrap();
+        let commit_1_id =
+            memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None, None)?;
+        let fetched_commit_ids = memo_cache_sync_2.fetch().unwrap();
+        assert_eq!(fetched_commit_ids, hashset! { commit_1_id });
 
-        //Test overwriting an index (force push+pull)
+        // Test overwriting an index (force push+pull)
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, kind);
-        memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None)?;
+        let commit_2_id =
+            memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None, None)?;
 
-        memo_cache_sync_2
-            .get_and_populate(keyset_id, &memo_cache_2)
-            .unwrap();
+        let (_, fetched_commit_ids) = memo_cache_sync_2.fetch_and_populate(&memo_cache_2).unwrap();
+        assert_eq!(fetched_commit_ids, hashset! { commit_2_id });
 
         assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
         assert_cache_doesnt_contain(commit_1_keys, &memo_cache_2);
@@ -421,22 +461,24 @@ mod tests {
         let kind = kind();
         let keyset_id1 = keyset_id_1();
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, kind);
-        memo_cache_sync_1.share(keyset_id1, &commit_1_keys, &memo_cache_1, None)?;
+        let commit_1_id =
+            memo_cache_sync_1.share(keyset_id1, &commit_1_keys, &memo_cache_1, None, None)?;
 
         let keyset_id2 = keyset_id_2();
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, kind);
-        memo_cache_sync_1.share(keyset_id2, &commit_2_keys, &memo_cache_1, Some(keyset_id1))?;
+        let commit_2_id = memo_cache_sync_1.share(
+            keyset_id2,
+            &commit_2_keys,
+            &memo_cache_1,
+            Some(keyset_id1),
+            None,
+        )?;
 
-        memo_cache_sync_2
-            .get_and_populate(keyset_id2, &memo_cache_2)
-            .unwrap();
+        let (_, fetched_commit_ids) = memo_cache_sync_2.fetch_and_populate(&memo_cache_2).unwrap();
 
-        let commit = memo_cache_sync_2
-            .repo
-            .find_reference(&tag_fmt(keyset_id2)[..])
-            .unwrap()
-            .peel_to_commit()
-            .unwrap();
+        assert_eq!(fetched_commit_ids, hashset! {commit_1_id, commit_2_id});
+
+        let commit = memo_cache_sync_2.repo.find_commit(commit_2_id).unwrap();
         assert!(commit.parent_count() == 1);
 
         assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
@@ -461,19 +503,48 @@ mod tests {
         populate_demo_hashset(&memo_cache_1, kind);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, kind);
-        memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None)?;
-        memo_cache_sync_2.fetch(keyset_id).unwrap();
+        let commit_1_id =
+            memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None, None)?;
+        let fetched_commit_ids = memo_cache_sync_2.fetch().unwrap();
+        assert_eq!(fetched_commit_ids, hashset! { commit_1_id  });
 
-        //Test overwriting an index (force push+pull)
+        // Test overwriting an index (force push+pull)
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, kind);
-        memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None)?;
+        let commit_2_id =
+            memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None, None)?;
 
-        memo_cache_sync_2
-            .get_and_populate(keyset_id, &memo_cache_2)
-            .unwrap();
+        let (results, fetched_commit_ids) =
+            memo_cache_sync_2.fetch_and_populate(&memo_cache_2).unwrap();
+        assert_eq!(fetched_commit_ids, hashset! { commit_2_id  });
+        assert_eq!(
+            results,
+            PopulateResult {
+                new_entry_count: RANDOM_KEY_COUNT,
+                entry_count: RANDOM_KEY_COUNT,
+                failed_entry_count: 0
+            }
+        );
 
         assert_cache_doesnt_contain(commit_1_keys, &memo_cache_2);
         assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
         Ok(())
+    }
+
+    #[test]
+    pub fn refspec_formatting() {
+        assert_eq!(refspec_fmt(&keyset_id_1()), String::from("+refs/tags/focus/abcd1abcd1abcd1abcd100000000000000000000:refs/tags/focus/abcd1abcd1abcd1abcd100000000000000000000"));
+        assert_eq!(
+            refspec_fmt("foo"),
+            String::from("+refs/tags/focus/foo:refs/tags/focus/foo")
+        );
+    }
+
+    #[test]
+    pub fn tag_formatting() {
+        assert_eq!(
+            tag_fmt(&keyset_id_1()),
+            String::from("refs/tags/focus/abcd1abcd1abcd1abcd100000000000000000000"),
+        );
+        assert_eq!(tag_fmt("foo"), String::from("refs/tags/focus/foo"));
     }
 }

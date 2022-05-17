@@ -507,6 +507,10 @@ enum IndexSubcommand {
         /// The Git remote to push to.
         #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
+
+        /// When specified, the content is also pushed with the given ref name.
+        #[clap(long)]
+        additional_ref_name: Option<String>,
     },
 
     /// Resolve the targets to their resulting pattern sets.
@@ -913,8 +917,15 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             IndexSubcommand::Push {
                 sparse_repo,
                 remote,
+                additional_ref_name: additional_ref_name_name,
             } => {
-                let exit_code = operation::index::push(app, backend, sparse_repo, remote)?;
+                let exit_code = operation::index::push(
+                    app,
+                    backend,
+                    sparse_repo,
+                    remote,
+                    additional_ref_name_name.as_deref(),
+                )?;
                 Ok(exit_code)
             }
 

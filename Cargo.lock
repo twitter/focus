@@ -321,6 +321,7 @@ dependencies = [
  "focus-util",
  "git2",
  "hex",
+ "maplit",
  "rand 0.6.5",
  "rocksdb",
  "tempfile",
