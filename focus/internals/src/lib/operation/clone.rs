@@ -1,7 +1,9 @@
+use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::selection::{Operation, OperationAction};
-use crate::{index::testing::HashMapOdb, model::repo::Repo, target::TargetSet, tracker::Tracker};
+use crate::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
+use content_addressed_cache::RocksDBCache;
 use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
 use git2::Repository;
 use std::{
@@ -209,7 +211,7 @@ fn set_up_sparse_repo(
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
 
-    let odb = HashMapOdb::new();
+    let odb = RocksDBCache::new(repo.underlying());
     repo.sync(&target_set, false, app.clone(), &odb)
         .context("Sync failed")?;
 
