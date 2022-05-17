@@ -22,7 +22,7 @@ use super::DependencyKey;
 
 /// This value is mixed into all content hashes. Update this value when
 /// content-hashing changes in a backward-incompatible way.
-const VERSION: usize = 1;
+const VERSION: usize = 2;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -138,25 +138,82 @@ pub fn content_hash_dependency_key(
     match key {
         DependencyKey::BazelPackage(
             label @ Label {
-                external_repository: None,
+                external_repository,
                 path_components,
                 target_name: _,
             },
         ) => {
-            let path: PathBuf = path_components.iter().collect();
             buf.push_str("::BazelPackage(");
             buf.push_str(&label.to_string());
+
             buf.push(',');
+            let path: PathBuf = path_components.iter().collect();
             buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
 
-            let loaded_deps = match get_tree_for_path(ctx, &path)? {
-                Some(tree) => find_load_dependencies(ctx, &tree)?,
-                None => Default::default(),
-            };
-            for label in loaded_deps {
-                let key = DependencyKey::BazelBuildFile(label);
-                buf.push_str(", ");
-                buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
+            if external_repository.is_none() {
+                let loaded_deps = match get_tree_for_path(ctx, &path)? {
+                    Some(tree) => find_load_dependencies(ctx, &tree)?,
+                    None => Default::default(),
+                };
+                for label in loaded_deps {
+                    let key = DependencyKey::BazelBuildFile(label);
+                    buf.push_str(", ");
+                    buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
+                }
+            }
+
+            // Every package has an implicit dependency on the `WORKSPACE` file.
+            let key = DependencyKey::BazelBuildFile(Label {
+                external_repository: None,
+                path_components: Vec::new(),
+                target_name: TargetName::Name("WORKSPACE".to_string()),
+            });
+            buf.push_str(", ");
+            buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
+        }
+
+        DependencyKey::BazelBuildFile(
+            label @ Label {
+                external_repository,
+                path_components,
+                target_name,
+            },
+        ) => {
+            buf.push_str("::BazelBuildFile(");
+            buf.push_str(&label.to_string());
+
+            if external_repository.is_none() {
+                match target_name {
+                    TargetName::Name(target_name) => {
+                        let path: PathBuf = {
+                            let mut path: PathBuf = path_components.iter().collect();
+                            path.push(target_name);
+                            path
+                        };
+                        buf.push_str(", ");
+                        buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
+
+                        let loaded_deps = match ctx.head_tree.get_path(&path) {
+                            Ok(tree_entry) => {
+                                extract_load_statements_from_tree_entry(ctx, &tree_entry)?
+                            }
+                            Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
+                            Err(e) => return Err(e.into()),
+                        };
+                        for label in loaded_deps {
+                            let dep_key = DependencyKey::BazelBuildFile(label);
+                            buf.push_str(", ");
+                            buf.push_str(&content_hash_dependency_key(ctx, &dep_key)?.to_string());
+                        }
+                    }
+
+                    TargetName::Ellipsis => {
+                        anyhow::bail!(
+                            "Got label referring to a ellipsis, but it should be a BUILD or .bzl file: {:?}",
+                            label
+                        );
+                    }
+                }
             }
 
             // Every package has an implicit dependency on the `WORKSPACE` file.
@@ -172,71 +229,6 @@ pub fn content_hash_dependency_key(
         DependencyKey::Path(path) => {
             buf.push_str("::Path(");
             buf.push_str(&content_hash_tree_path(ctx, path)?.to_string());
-        }
-
-        DependencyKey::BazelPackage(Label {
-            external_repository: Some(_),
-            path_components: _,
-            target_name: _,
-        }) => {
-            // Nothing to do. The package in question will already have
-            // established a dependency on the `WORKSPACE` file, which uniquely
-            // identifies any external packages.
-        }
-
-        DependencyKey::BazelBuildFile(label) => {
-            buf.push_str("::BazelBuildFile(");
-            match label {
-                Label {
-                    external_repository: None,
-                    path_components,
-                    target_name: TargetName::Name(target_name),
-                } => {
-                    let path: PathBuf = {
-                        let mut path: PathBuf = path_components.iter().collect();
-                        path.push(target_name);
-                        path
-                    };
-                    buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
-
-                    // TODO: what if the `.bzl` file has been deleted?
-                    let loaded_deps = match ctx.head_tree.get_path(&path) {
-                        Ok(tree_entry) => {
-                            extract_load_statements_from_tree_entry(ctx, &tree_entry)?
-                        }
-                        Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
-                        Err(e) => return Err(e.into()),
-                    };
-                    for label in loaded_deps {
-                        let dep_key = DependencyKey::BazelBuildFile(label);
-                        buf.push_str(", ");
-                        buf.push_str(&content_hash_dependency_key(ctx, &dep_key)?.to_string());
-                    }
-                }
-
-                Label {
-                    external_repository: None,
-                    path_components,
-                    target_name: TargetName::Ellipsis,
-                } => {
-                    warn!(
-                        ?label,
-                        "Got label referring to a ellipsis, but it should be a BUILD or .bzl file"
-                    );
-                    let path: PathBuf = path_components.iter().collect();
-                    buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
-                }
-
-                Label {
-                    external_repository: Some(_),
-                    path_components: _,
-                    target_name: _,
-                } => {
-                    // Nothing to do. The package in question will already have
-                    // established a dependency on the `WORKSPACE` file, which
-                    // uniquely identifies any external packages.
-                }
-            }
         }
 
         DependencyKey::DummyForTesting(inner_dep_key) => {

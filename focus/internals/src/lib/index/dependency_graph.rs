@@ -417,7 +417,7 @@ sh_binary(
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        da6ec58b380623d3435fe3d9811ab214969106b4,
+                        c54fa47f98902c2c54bee766e9ad63ba92bac67d,
                     ),
                 ),
             },
@@ -648,7 +648,7 @@ def my_macro_inner(name):
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        2f54409efd5377cc19d91eb1b4bda0103391bc69,
+                        6126b8687d7c1bcf28e5b5cc75f3ec12e8f270f3,
                     ),
                 ),
             },
@@ -794,7 +794,7 @@ def some_macro():
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        57ee93ce36deffbf69e4f951d4d7f1be96cb12a8,
+                        75784a249d689f5122b9a0db2723f853b0654c6f,
                     ),
                 ),
             },
