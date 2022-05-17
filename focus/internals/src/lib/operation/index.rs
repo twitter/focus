@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer};
 use focus_util::app::{App, ExitCode};
-use focus_util::git_helper::get_head_commit;
+use focus_util::git_helper;
 use focus_util::paths::assert_focused_repo;
 use tracing::info;
 
@@ -86,7 +86,7 @@ fn resolve_targets(
         .collect();
 
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
-    let head_commit = get_head_commit(&repo)?;
+    let head_commit = git_helper::get_head_commit(&repo)?;
     let head_tree = head_commit.tree().context("resolving HEAD to tree")?;
     let ctx = HashContext {
         repo: &repo,
@@ -177,8 +177,8 @@ pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow
     }
 }
 
-fn get_index_dir(sparse_repo: &Path) -> PathBuf {
-    sparse_repo.join(".git").join("focus").join("focus-index")
+fn index_repo_dir(sparse_repo: &Path) -> PathBuf {
+    sparse_repo.join(".git").join("focus").join("index")
 }
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
@@ -189,22 +189,19 @@ pub fn fetch(
     sparse_repo: PathBuf,
     remote: String,
 ) -> anyhow::Result<ExitCode> {
-    let index_dir = get_index_dir(&sparse_repo);
+    let index_dir = index_repo_dir(&sparse_repo);
     let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app)?;
 
     let repo = git2::Repository::open(&sparse_repo)?;
-    let head_commit = get_head_commit(&repo)?;
-    let head_tree = head_commit.tree().context("finding HEAD tree")?;
-
     let odb = match backend {
         Backend::Simple => {
             anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
         }
         Backend::RocksDb => RocksDBCache::new(&repo),
     };
-    info!(head_tree_id = ?head_tree.id(), "Fetching objects");
-    let populate_result = synchronizer.get_and_populate(head_tree.id(), &odb)?;
-    info!(?populate_result, "Populated index");
+    synchronizer
+        .fetch_and_populate(&odb)
+        .context("Fetching index data")?;
 
     Ok(ExitCode(0))
 }
@@ -214,6 +211,7 @@ pub fn push(
     backend: Backend,
     sparse_repo_path: PathBuf,
     remote: String,
+    additional_ref_name: Option<&str>,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
@@ -225,14 +223,14 @@ pub fn push(
         targets
     };
 
-    let index_dir = get_index_dir(&sparse_repo_path);
+    let index_dir = index_repo_dir(&sparse_repo_path);
     std::fs::create_dir_all(&index_dir).context("creating index directory")?;
     let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
 
     let head_commit = repo.get_head_commit()?;
     let head_tree = head_commit.tree().context("finding HEAD tree")?;
     let ctx = HashContext {
-        repo: &repo.underlying(),
+        repo: repo.underlying(),
         head_tree: &head_tree,
         caches: Default::default(),
     };
@@ -249,7 +247,7 @@ pub fn push(
         Backend::Simple => {
             anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
         }
-        Backend::RocksDb => RocksDBCache::new(&repo.underlying()),
+        Backend::RocksDb => RocksDBCache::new(repo.underlying()),
     };
 
     let keyset = {
@@ -265,7 +263,7 @@ pub fn push(
     };
 
     info!("Pushing index");
-    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
+    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None, additional_ref_name)?;
 
     Ok(ExitCode(0))
 }
@@ -300,6 +298,7 @@ mod tests {
                 backend.clone(),
                 fixture.sparse_repo_path.clone(),
                 remote.clone(),
+                None,
             )?;
             assert_eq!(exit_code, 0);
         }
@@ -375,6 +374,38 @@ mod tests {
             }
             "###);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_index_push_additional_ref_name() -> anyhow::Result<()> {
+        let backend = Backend::RocksDb;
+
+        let temp_dir = tempfile::tempdir()?;
+        let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
+        let remote = format!("file://{}", remote_index_store.path().display());
+
+        let app = Arc::new(App::new(false)?);
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+        let ExitCode(exit_code) = push(
+            app.clone(),
+            backend.clone(),
+            fixture.sparse_repo_path.clone(),
+            remote.clone(),
+            Some("latest"),
+        )?;
+        assert_eq!(exit_code, 0);
+
+        let ExitCode(exit_code) = fetch(
+            app.clone(),
+            backend.clone(),
+            fixture.sparse_repo_path.clone(),
+            remote.clone(),
+        )?;
+        assert_eq!(exit_code, 0);
 
         Ok(())
     }

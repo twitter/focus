@@ -12,9 +12,10 @@ git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b
     "vendored-libgit2",
 ] }
 focus-util = { path = "../focus/util" }
+hex = "0.3.1"
+maplit = "1.0.2"
 rand = "0.6.3"
 rocksdb = "0.18.0"
 tempfile = "3.2.0"
 thiserror = "1.0.30"
 tracing = "0.1.32"
-hex = "0.3.1"
