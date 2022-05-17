@@ -124,7 +124,6 @@ pub fn fetch_all_tags<P: AsRef<Path>>(
         .arg("--prune-tags")
         .arg("--tags")
         .arg("--force")
-        .arg("--write-fetch-head")
         .arg("-k"); // Keep pack
     if let Some(d) = depth {
         cmd.arg(format!("--depth={}", d));
