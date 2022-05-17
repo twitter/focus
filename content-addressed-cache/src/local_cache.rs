@@ -107,6 +107,9 @@ impl RocksDBCache {
     fn make_db(path: &Path, ttl: Duration) -> DB {
         let mut opts = Options::default();
         opts.create_if_missing(true);
+        // Compression settings from https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#compression
+        opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+        opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
         DB::open_with_ttl(&opts, path, ttl).unwrap()
     }
 
