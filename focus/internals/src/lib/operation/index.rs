@@ -44,8 +44,8 @@ fn make_odb<'a>(backend: Backend, repo: &'a git2::Repository) -> Box<dyn ObjectD
     }
 }
 
-pub fn clear(backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<()> {
-    let repo = git2::Repository::open(sparse_repo).context("opening sparse repo")?;
+pub fn clear(backend: Backend, sparse_repo_path: PathBuf) -> anyhow::Result<()> {
+    let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
     let odb = make_odb(backend, &repo);
     odb.clear()?;
     Ok(())
@@ -135,9 +135,8 @@ pub fn resolve(
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
 ) -> anyhow::Result<ExitCode> {
-    let sparse_repo = Path::new(".");
-    assert_focused_repo(sparse_repo)?;
-    let repo = Repo::open(sparse_repo, app.clone())?;
+    assert_focused_repo(sparse_repo_path)?;
+    let repo = Repo::open(sparse_repo_path, app.clone())?;
     let selection = {
         let mut selections = repo.selection_manager()?;
         selections.mutate(OperationAction::Add, &projects_and_targets)?;
@@ -160,8 +159,12 @@ pub fn resolve(
     Ok(ExitCode(0))
 }
 
-pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
-    let repo = Repo::open(&sparse_repo, app.clone())?;
+pub fn generate(
+    app: Arc<App>,
+    backend: Backend,
+    sparse_repo_path: PathBuf,
+) -> anyhow::Result<ExitCode> {
+    let repo = Repo::open(&sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
     let all_targets = {
         let mut targets = TargetSet::try_from(&selections.project_catalog().mandatory_projects)?;
@@ -171,14 +174,14 @@ pub fn generate(app: Arc<App>, backend: Backend, sparse_repo: PathBuf) -> anyhow
         targets
     };
 
-    match resolve_targets(app, backend, &sparse_repo, all_targets)? {
+    match resolve_targets(app, backend, &sparse_repo_path, all_targets)? {
         Ok(_result) => Ok(ExitCode(0)),
         Err(exit_code) => Ok(exit_code),
     }
 }
 
-fn index_repo_dir(sparse_repo: &Path) -> PathBuf {
-    sparse_repo.join(".git").join("focus").join("index")
+fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
+    sparse_repo_path.join(".git").join("focus").join("index")
 }
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
@@ -186,13 +189,13 @@ pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 pub fn fetch(
     app: Arc<App>,
     backend: Backend,
-    sparse_repo: PathBuf,
+    sparse_repo_path: PathBuf,
     remote: String,
 ) -> anyhow::Result<ExitCode> {
-    let index_dir = index_repo_dir(&sparse_repo);
+    let index_dir = index_repo_dir(&sparse_repo_path);
     let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app)?;
 
-    let repo = git2::Repository::open(&sparse_repo)?;
+    let repo = git2::Repository::open(&sparse_repo_path)?;
     let odb = match backend {
         Backend::Simple => {
             anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
