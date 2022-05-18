@@ -131,6 +131,11 @@ impl BazelResolver {
         let recursive_package_query_deps =
             self.add_recursive_package_query_deps(recursive_package_queries, &immediate_deps);
 
+        let immediate_keys: HashSet<_> = immediate_deps.keys().collect();
+        let recursive_keys: HashSet<_> = recursive_package_query_deps.keys().collect();
+        let intersection: HashSet<_> = immediate_keys.intersection(&recursive_keys).collect();
+        assert!(intersection.is_empty());
+
         let deps: BTreeMap<DependencyKey, DependencyValue> = immediate_deps
             .into_iter()
             .chain(recursive_package_query_deps.into_iter())
