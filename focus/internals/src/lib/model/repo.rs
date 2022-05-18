@@ -570,10 +570,7 @@ impl Repo {
                         .collect()
                 }
 
-                PathsToMaterializeResult::MissingKeys {
-                    // TODO: somehow populate odb
-                    keys: missing_keys,
-                } => {
+                PathsToMaterializeResult::MissingKeys { keys: missing_keys } => {
                     info!(
                         num_missing_keys = ?missing_keys.len(),
                         "Cache miss for sparse checkout patterns; querying Bazel"
