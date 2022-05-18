@@ -8,11 +8,12 @@ use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer};
 use focus_util::app::{App, ExitCode};
 use focus_util::git_helper;
 use focus_util::paths::assert_focused_repo;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::index::{
-    get_files_to_materialize, DependencyKey, HashContext, ObjectDatabase, PathsToMaterializeResult,
-    RocksDBCache, RocksDBMemoizationCacheExt, SimpleGitOdb, FUNCTION_ID,
+    content_hash_dependency_key, get_files_to_materialize, DependencyKey, HashContext,
+    ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
+    SimpleGitOdb, FUNCTION_ID,
 };
 use crate::model::repo::Repo;
 use crate::model::selection::OperationAction;
@@ -156,6 +157,33 @@ pub fn resolve(
     for path in paths.iter() {
         println!("{}", path.display());
     }
+    Ok(ExitCode(0))
+}
+
+pub fn hash(
+    _app: Arc<App>,
+    sparse_repo_path: &Path,
+    targets: &[String],
+) -> anyhow::Result<ExitCode> {
+    let repo = git2::Repository::open(sparse_repo_path)?;
+    let head_commit = git_helper::get_head_commit(&repo)?;
+    let head_tree = head_commit.tree()?;
+    let hash_context = HashContext {
+        repo: &repo,
+        head_tree: &head_tree,
+        caches: Default::default(),
+    };
+    info!(?hash_context, "Using this hash context");
+
+    for target in targets {
+        let target = Target::try_from(target.as_str())?;
+        let dep_key = DependencyKey::from(target);
+        let hash = content_hash_dependency_key(&hash_context, &dep_key)?;
+        println!("{hash} {dep_key:?}");
+    }
+
+    debug!(?hash_context, "Finished with this hash context");
+
     Ok(ExitCode(0))
 }
 

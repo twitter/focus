@@ -257,6 +257,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             IndexSubcommand::Clear { .. } => "index-clear",
             IndexSubcommand::Fetch { .. } => "index-fetch",
             IndexSubcommand::Generate { .. } => "index-generate",
+            IndexSubcommand::Hash { .. } => "index-hash",
             IndexSubcommand::Push { .. } => "index-push",
             IndexSubcommand::Resolve { .. } => "index-resolve",
         },
@@ -503,6 +504,12 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+    },
+
+    /// Calculate and print the content hashes of the provided targets.
+    Hash {
+        /// The targets to hash.
+        targets: Vec<String>,
     },
 
     /// Generate and push the pre-computed index to the remote store for others
@@ -926,6 +933,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
             IndexSubcommand::Generate { sparse_repo } => {
                 let exit_code = operation::index::generate(app, backend, sparse_repo)?;
+                Ok(exit_code)
+            }
+
+            IndexSubcommand::Hash { targets } => {
+                let exit_code = operation::index::hash(app, Path::new("."), &targets)?;
                 Ok(exit_code)
             }
 
