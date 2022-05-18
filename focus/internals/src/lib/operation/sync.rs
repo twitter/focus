@@ -17,7 +17,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 /// Synchronize the sparse repo's contents with the build graph. Returns whether a checkout actually occured.
-pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
+pub fn run(sparse_repo: &Path, app: Arc<App>, fetch_index: bool) -> Result<bool> {
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
     if !sparse_profile_path.is_file() {
@@ -46,12 +46,14 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
         selection.targets.len().to_string(),
     );
 
-    let _: Result<ExitCode> = index::fetch(
-        app.clone(),
-        index::Backend::RocksDb,
-        sparse_repo.to_path_buf(),
-        index::INDEX_DEFAULT_REMOTE.to_string(),
-    );
+    if fetch_index {
+        let _: Result<ExitCode> = index::fetch(
+            app.clone(),
+            index::Backend::RocksDb,
+            sparse_repo.to_path_buf(),
+            index::INDEX_DEFAULT_REMOTE.to_string(),
+        );
+    }
 
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
@@ -134,7 +136,7 @@ It isn't just one of your holiday games
         );
 
         // Sync in the sparse repo
-        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone())?;
+        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone(), false)?;
 
         let x_dir = fixture.sparse_repo_path.join("x");
         assert!(!x_dir.is_dir());
@@ -148,7 +150,7 @@ It isn't just one of your holiday games
         )?;
 
         // Sync
-        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone())?;
+        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone(), false)?;
 
         assert!(x_dir.is_dir());
 
@@ -207,7 +209,7 @@ It isn't just one of your holiday games
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, fixture.app.clone(), false)?;
 
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_b_dir.is_dir());
@@ -228,7 +230,7 @@ It isn't just one of your holiday games
                 hashset! { project_a_label.clone(), project_b_label.clone() }
             )
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, fixture.app.clone(), false)?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
@@ -238,7 +240,7 @@ It isn't just one of your holiday games
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, fixture.app.clone(), false)?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
@@ -248,7 +250,7 @@ It isn't just one of your holiday games
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! {});
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, fixture.app.clone(), false)?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
 
         assert!(!library_b_dir.is_dir());
@@ -271,13 +273,13 @@ It isn't just one of your holiday games
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, fixture.app.clone(), false)?;
         assert!(library_b_dir.is_dir());
 
         // operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
         assert!(selections.mutate(OperationAction::Remove, &targets)?);
         selections.save()?;
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, fixture.app.clone(), false)?;
         assert!(!library_b_dir.is_dir());
 
         Ok(())
@@ -324,10 +326,16 @@ It isn't just one of your holiday games
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
-        assert_eq!(operation::sync::run(&path, fixture.app.clone())?, true);
+        assert_eq!(
+            operation::sync::run(&path, fixture.app.clone(), false)?,
+            true,
+        );
 
         // Subsequent sync does not perform a checkout.
-        assert_eq!(operation::sync::run(&path, fixture.app.clone())?, false);
+        assert_eq!(
+            operation::sync::run(&path, fixture.app.clone(), false)?,
+            false,
+        );
 
         Ok(())
     }

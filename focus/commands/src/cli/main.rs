@@ -69,6 +69,10 @@ enum Subcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// Try to fetch a remote index before syncing.
+        #[clap(long, parse(try_from_str), default_value = "true")]
+        fetch_index: bool,
     },
 
     /// Interact with repos configured on this system. Run `focus repo help` for more information.
@@ -633,13 +637,16 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             Ok(ExitCode(0))
         }
 
-        Subcommand::Sync { sparse_repo } => {
+        Subcommand::Sync {
+            sparse_repo,
+            fetch_index,
+        } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::sync::run(&sparse_repo, app)?;
+            operation::sync::run(&sparse_repo, app, fetch_index)?;
             Ok(ExitCode(0))
         }
 
