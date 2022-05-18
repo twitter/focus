@@ -52,6 +52,14 @@ enum Subcommand {
         #[clap(long, parse(try_from_str), default_value = "true")]
         copy_branches: bool,
 
+        /// The repository to fetch the index from.
+        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
+        index_remote: String,
+
+        /// Whether to fetch the index.
+        #[clap(long, parse(try_from_str), default_value = "true")]
+        fetch_index: bool,
+
         /// Initial projects and targets to add to the repo.
         projects_and_targets: Vec<String>,
     },
@@ -580,6 +588,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             branch,
             days_of_history,
             copy_branches,
+            fetch_index,
+            index_remote,
             projects_and_targets,
         } => {
             let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
@@ -606,6 +616,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 projects_and_targets,
                 copy_branches,
                 days_of_history,
+                if fetch_index {
+                    Some(index_remote)
+                } else {
+                    None
+                },
                 app,
             )?;
             Ok(ExitCode(0))
