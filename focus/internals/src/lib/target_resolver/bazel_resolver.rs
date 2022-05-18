@@ -14,6 +14,8 @@ use crate::target::{Label, TargetName};
 
 use super::*;
 
+const OUTLINING_BAZELRC_PATH: &str = "focus/outlining.bazelrc";
+
 /// Resolves Bazel targets to paths
 pub struct BazelResolver {
     #[allow(dead_code)]
@@ -201,10 +203,16 @@ impl BazelResolver {
             path
         };
 
+        let mut initial_bazel_args = Vec::<String>::new();
+        if request.repo.join(OUTLINING_BAZELRC_PATH).is_file() {
+            initial_bazel_args.push(String::from("--noworkspace_rc"));
+            initial_bazel_args.push(format!("--bazelrc={}", OUTLINING_BAZELRC_PATH));
+        }
         let (mut cmd, scmd) =
             SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app)?;
         scmd.ensure_success_or_log(
-            cmd.arg("query")
+            cmd.args(initial_bazel_args)
+                .arg("query")
                 .arg("--query_file")
                 .arg(query_file_path)
                 .args(bazel_args)
