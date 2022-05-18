@@ -83,6 +83,21 @@ pub struct HashContext<'a> {
     pub caches: RefCell<Caches>,
 }
 
+impl std::fmt::Debug for HashContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self {
+            repo,
+            head_tree,
+            caches,
+        } = self;
+        f.debug_struct("HashContext")
+            .field("repo", &repo.path())
+            .field("head_tree", &head_tree.id())
+            .field("caches", &caches)
+            .finish()
+    }
+}
+
 /// Compute a content-addressable hash for the provided [`DependencyKey`] using
 /// the context in `ctx`.
 pub fn content_hash_dependency_key(
