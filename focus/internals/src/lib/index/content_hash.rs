@@ -12,6 +12,7 @@ use anyhow::Context;
 use lazy_static::lazy_static;
 use regex::Regex;
 use tracing::debug;
+use tracing::trace;
 use tracing::warn;
 
 use crate::target::Label;
@@ -304,7 +305,7 @@ fn get_tree_for_path<'repo>(
 }
 
 fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Result<BTreeSet<Label>> {
-    debug!(?tree, "Finding load dependencies");
+    trace!(?tree, "Finding load dependencies");
     if let Some(result) = ctx.caches.borrow().load_dependencies_cache.get(&tree.id()) {
         return Ok(result.clone());
     }
