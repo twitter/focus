@@ -6,6 +6,7 @@ use std::{cell::RefCell, fmt::Debug, str::FromStr};
 use anyhow::{self, Context};
 use rocksdb::{Options, DB};
 use std::path::{Path, PathBuf};
+use tracing::{error, info};
 
 /// The "kind" of a key. This is combined with the [CacheKey] to produce a
 /// composite key. It effectively introduces a namespace for a set of keys.
@@ -121,6 +122,22 @@ impl RocksDBCache {
     }
     pub fn open(path: PathBuf) -> Self {
         Self::open_with_ttl(path, Duration::from_secs(0))
+    }
+}
+
+impl Drop for RocksDBCache {
+    fn drop(&mut self) {
+        let db = self.db.borrow();
+        let db = db.as_ref().unwrap();
+        info!("Flushing RocksDB...");
+        match db.flush() {
+            Ok(()) => {
+                info!("Flushed RocksDB");
+            }
+            Err(err) => {
+                error!(?err, "Could not flush RocksDB")
+            }
+        }
     }
 }
 
