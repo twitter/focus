@@ -83,6 +83,10 @@ enum Subcommand {
 
     /// Add projects and targets to the selection.
     Add {
+        /// Try to fetch a remote index before syncing.
+        #[clap(long, parse(try_from_str), default_value = "true")]
+        fetch_index: bool,
+
         /// Project and targets to add to the selection.
         projects_and_targets: Vec<String>,
     },
@@ -90,6 +94,10 @@ enum Subcommand {
     /// Remove projects and targets from the selection.
     #[clap(visible_alias("rm"))]
     Remove {
+        /// Try to fetch a remote index before syncing.
+        #[clap(long, parse(try_from_str), default_value = "true")]
+        fetch_index: bool,
+
         /// Project and targets to remove from the selection
         projects_and_targets: Vec<String>,
     },
@@ -731,6 +739,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         }
 
         Subcommand::Add {
+            fetch_index,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -738,11 +747,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+            operation::selection::add(&sparse_repo, true, projects_and_targets, fetch_index, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Remove {
+            fetch_index,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -750,7 +760,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
+            operation::selection::remove(
+                &sparse_repo,
+                true,
+                projects_and_targets,
+                fetch_index,
+                app,
+            )?;
             Ok(ExitCode(0))
         }
 

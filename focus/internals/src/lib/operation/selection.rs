@@ -11,6 +11,7 @@ fn mutate(
     sync_if_changed: bool,
     action: OperationAction,
     projects_and_targets: Vec<String>,
+    fetch_index: bool,
     app: Arc<focus_util::app::App>,
 ) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
@@ -19,7 +20,7 @@ fn mutate(
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
-            super::sync::run(sparse_repo.as_ref(), app, true)?;
+            super::sync::run(sparse_repo.as_ref(), app, fetch_index)?;
         }
     }
 
@@ -30,6 +31,7 @@ pub fn add(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
+    fetch_index: bool,
     app: Arc<App>,
 ) -> Result<()> {
     mutate(
@@ -37,6 +39,7 @@ pub fn add(
         sync_if_changed,
         OperationAction::Add,
         projects_and_targets,
+        fetch_index,
         app,
     )
 }
@@ -45,6 +48,7 @@ pub fn remove(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
+    fetch_index: bool,
     app: Arc<App>,
 ) -> Result<()> {
     mutate(
@@ -52,6 +56,7 @@ pub fn remove(
         sync_if_changed,
         OperationAction::Remove,
         projects_and_targets,
+        fetch_index,
         app,
     )
 }
