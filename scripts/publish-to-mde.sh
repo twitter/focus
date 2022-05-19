@@ -17,9 +17,6 @@ case $channel in
   release)
     ;;
 
-  beta)
-    ;;
-
   development)
     ;;
 
