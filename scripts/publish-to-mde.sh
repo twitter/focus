@@ -43,11 +43,11 @@ tar czf $target_tarball -C target/package focus || die "Creating release tarball
 
 pushd $mde_repo
 
-# git reset --hard || die "git reset in $mde_repo failed"
-# git pull --quiet || die "git pull in $mde_repo failed"
+git reset --hard || die "git reset in $mde_repo failed"
+git pull --quiet || die "git pull in $mde_repo failed"
 mde-admin edit-package --upload-file $target_tarball --git-sha $focus_rev --platform MacOSX --channel $channel eng.team.ee.experimental.focus focus || die "Editing package with MDE failed"
 git add packages/team/ee/experimental/focus
-git commit -am "Update focus $focus_rev $channel channel AUTOMATED_COMMIT=true"
+git commit -am "Update focus to $focus_rev on the $channel channel AUTOMATED_COMMIT=true"
 popd # $mde_repo
 
 popd # $focus_repo
