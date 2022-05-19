@@ -146,6 +146,7 @@ It isn't just one of your holiday games
             &fixture.sparse_repo_path,
             false,
             vec![String::from("bazel://x/...")],
+            false,
             fixture.app.clone(),
         )?;
 
@@ -203,6 +204,7 @@ It isn't just one of your holiday games
             &path,
             false,
             vec![project_b_label.clone()],
+            false,
             fixture.app.clone(),
         )?;
         {
@@ -221,6 +223,7 @@ It isn't just one of your holiday games
             &path,
             false,
             vec![project_a_label.clone()],
+            false,
             fixture.app.clone(),
         )?;
         {
@@ -235,7 +238,13 @@ It isn't just one of your holiday games
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
 
-        operation::selection::remove(&path, false, vec![project_a_label], fixture.app.clone())?;
+        operation::selection::remove(
+            &path,
+            false,
+            vec![project_a_label],
+            false,
+            fixture.app.clone(),
+        )?;
         {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
@@ -245,7 +254,13 @@ It isn't just one of your holiday games
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
 
-        operation::selection::remove(&path, false, vec![project_b_label], fixture.app.clone())?;
+        operation::selection::remove(
+            &path,
+            false,
+            vec![project_b_label],
+            false,
+            fixture.app.clone(),
+        )?;
         {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! {});
