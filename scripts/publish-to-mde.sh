@@ -41,7 +41,7 @@ echo $focus_rev > target/release/FOCUS_VERSION
 tar czf $target_tarball -C target/release $focus_binary FOCUS_VERSION || die "Creating release tarball $target_tarball failed"
 
 pushd $mde_repo
-mde-admin edit-package --upload-file "$release_tarball" --platform MacOSX --channel $channel eng.team.ee.experimental.focus focus || die "Editing package with MDE failed"
+mde-admin edit-package --upload-file $target_tarball --platform MacOSX --channel $channel eng.team.ee.experimental.focus focus || die "Editing package with MDE failed"
 popd # $mde_repo
 
 popd # $focus_repo
