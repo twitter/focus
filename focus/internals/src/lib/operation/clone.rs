@@ -221,6 +221,10 @@ fn set_up_sparse_repo(
         info!("Setting up the working tree");
         repo.create_working_tree()
             .context("Failed to create the working tree")?;
+
+        Tracker::default()
+            .ensure_registered(sparse_repo_path, app.clone())
+            .context("Registering repo")?;
     }
 
     // N.B. we must re-open the repo because otherwise it has no trees...
