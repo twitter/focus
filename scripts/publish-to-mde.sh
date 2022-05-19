@@ -21,11 +21,9 @@ case $channel in
     ;;
 
   *)
-    bail "Unknown channel \"$channel\""
+    die "Unknown channel \"$channel\""
     ;;
 esac
-
-set -o errexit
 
 set -x
 
@@ -37,11 +35,19 @@ target_tarball=$(mktemp -t "focus.$focus_rev.$os.$arch.tgz")
 
 scripts/mac-build.sh || die "Build failed"
 test -f target/release/$focus_binary || die "The build succeeded, but produced no binary"
-echo $focus_rev > target/release/FOCUS_VERSION
-tar czf $target_tarball -C target/release $focus_binary FOCUS_VERSION || die "Creating release tarball $target_tarball failed"
+rm -rf target/package
+mkdir -p target/package/focus/bin
+echo $focus_rev > target/package/focus/bin/FOCUS_VERSION
+cp target/package/release/$focus_binary target/package/focus/bin/focus
+tar czf $target_tarball -C target/package focus || die "Creating release tarball $target_tarball failed"
 
 pushd $mde_repo
-mde-admin edit-package --upload-file $target_tarball --platform MacOSX --channel $channel eng.team.ee.experimental.focus focus || die "Editing package with MDE failed"
+
+# git reset --hard || die "git reset in $mde_repo failed"
+# git pull --quiet || die "git pull in $mde_repo failed"
+mde-admin edit-package --upload-file $target_tarball --git-sha $focus_rev --platform MacOSX --channel $channel eng.team.ee.experimental.focus focus || die "Editing package with MDE failed"
+git add packages/team/ee/experimental/focus
+git commit -am "Update focus $focus_rev $channel channel AUTOMATED_COMMIT=true"
 popd # $mde_repo
 
 popd # $focus_repo
