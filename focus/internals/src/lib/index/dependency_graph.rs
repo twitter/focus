@@ -138,7 +138,7 @@ pub fn update_object_database_from_resolution(
             DependencyKey::BazelBuildFile(_)
             | DependencyKey::Path(_)
             | DependencyKey::DummyForTesting(_) => {
-                warn!(
+                debug!(
                     ?dep_key,
                     "Non-package dependency key returned in `ResolutionResult`"
                 )
