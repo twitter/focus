@@ -24,7 +24,7 @@ use super::DependencyKey;
 
 /// This value is mixed into all content hashes. Update this value when
 /// content-hashing changes in a backward-incompatible way.
-const VERSION: usize = 2;
+const VERSION: usize = 3;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -233,6 +233,17 @@ pub fn content_hash_dependency_key(
                         };
                         for label in loaded_deps {
                             let dep_key = DependencyKey::BazelBuildFile(label);
+
+                            // HACK: one of our `.bzl` files includes a
+                            // reference to its own label in a doc-comment,
+                            // which causes it to be picked up by our naive
+                            // build file parser. Until the build file parser is
+                            // hardened, this suffices to parse the rest of the
+                            // `.bzl` files in our projects.
+                            if key == &dep_key {
+                                continue;
+                            }
+
                             buf.push_str(", ");
                             buf.push_str(&content_hash_dependency_key(ctx, &dep_key)?.to_string());
                         }
@@ -247,12 +258,12 @@ pub fn content_hash_dependency_key(
                 }
             }
 
-            // Every package has an implicit dependency on the `WORKSPACE` file.
-            let workspace_key = DependencyKey::BazelBuildFile(Label {
-                external_repository: None,
-                path_components: Vec::new(),
-                target_name: TargetName::Name("WORKSPACE".to_string()),
-            });
+            // Every `.bzl` file (or similar) has an implicit dependency on the
+            // `WORKSPACE` file. However, the `WORKSPACE` file itself may `load`
+            // `.bzl` files in the repository. To avoid a circular dependency,
+            // use only the textual hash of the WORKSPACE as the dependency key
+            // here.
+            let workspace_key = DependencyKey::Path("WORKSPACE".into());
             buf.push_str(", ");
             buf.push_str(&content_hash_dependency_key(ctx, &workspace_key)?.to_string());
         }
