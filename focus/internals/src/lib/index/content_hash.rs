@@ -126,33 +126,16 @@ pub fn content_hash_dependency_key(
         match cache.get(key) {
             Some(DependencyKeyCacheValue::Done(hash)) => return Ok(hash.to_owned()),
             Some(DependencyKeyCacheValue::Calculating) => {
-                let blob = "<circular>";
-                let hash = git2::Oid::hash_object(git2::ObjectType::Blob, blob.as_bytes())?;
-                return Ok(ContentHash(hash));
-
-                // TODO: re-enable error once the `BUILD` file parser has been hardened.
-                // Currently, we have a `BUILD` file in the repository which has a comment like this:
-                //
-                // ```
-                // """
-                // This is a doc-comment explaining how to use this target:
-                //
-                //     load("//path/to/this:file.bzl", "foo")
-                //
-                // """
-                // ```
-                //
-                // which is picked up by the naive parser as a dependency.
-                #[cfg(target_os = "none")]
                 anyhow::bail!(
-                    "Circular dependency when hashing: {:?}
-                    These are the keys currently being hashed: {:?}",
+                    "\
+Circular dependency when hashing: {:?}
+These are the keys currently being hashed: {:?}",
                     key,
                     cache
                         .iter()
                         .filter_map(|(k, v)| match v {
-                            Some(_) => None,
-                            None => Some(k),
+                            DependencyKeyCacheValue::Done(_) => None,
+                            DependencyKeyCacheValue::Calculating => Some(k),
                         })
                         .collect::<BTreeSet<_>>()
                 );
