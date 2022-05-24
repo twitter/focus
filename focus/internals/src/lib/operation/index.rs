@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,7 +13,7 @@ use focus_util::paths::assert_focused_repo;
 use tracing::{debug, info};
 
 use crate::index::{
-    content_hash_dependency_key, get_files_to_materialize, DependencyKey, HashContext,
+    content_hash_dependency_key, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
     ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
     SimpleGitOdb, FUNCTION_ID,
 };
@@ -205,6 +206,28 @@ pub fn hash(
     debug!(?hash_context, "Finished with this hash context");
 
     Ok(ExitCode(0))
+}
+
+pub fn get(
+    _app: Arc<App>,
+    backend: Backend,
+    sparse_repo_path: &Path,
+    hash: &str,
+) -> anyhow::Result<ExitCode> {
+    let repo = git2::Repository::open(sparse_repo_path)?;
+    let hash = ContentHash::from_str(hash)?;
+    let odb = make_odb(backend, &repo);
+    let value = odb.get_direct(&hash)?;
+    match value {
+        Some(value) => {
+            println!("{hash} {value:#?}");
+            Ok(ExitCode(0))
+        }
+        None => {
+            println!("{hash} <not found>");
+            Ok(ExitCode(1))
+        }
+    }
 }
 
 pub fn generate(
