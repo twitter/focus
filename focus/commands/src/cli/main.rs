@@ -268,6 +268,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear",
             IndexSubcommand::Fetch { .. } => "index-fetch",
+            IndexSubcommand::Get { .. } => "index-get",
             IndexSubcommand::Generate { .. } => "index-generate",
             IndexSubcommand::Hash { .. } => "index-hash",
             IndexSubcommand::Push { .. } => "index-push",
@@ -509,6 +510,10 @@ enum IndexSubcommand {
         /// The Git remote to fetch from.
         #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
+    },
+
+    Get {
+        target: String,
     },
 
     /// Populate the index with entries for all projects.
@@ -974,6 +979,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             } => {
                 let exit_code =
                     operation::index::generate(app, backend, sparse_repo, break_on_missing_keys)?;
+                Ok(exit_code)
+            }
+
+            IndexSubcommand::Get { target } => {
+                let exit_code = operation::index::get(app, backend, Path::new("."), &target)?;
                 Ok(exit_code)
             }
 
