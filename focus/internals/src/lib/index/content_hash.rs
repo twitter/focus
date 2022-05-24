@@ -12,6 +12,7 @@ use anyhow::Context;
 use lazy_static::lazy_static;
 use regex::Regex;
 use tracing::debug;
+use tracing::error;
 use tracing::trace;
 use tracing::warn;
 
@@ -52,10 +53,24 @@ impl FromStr for ContentHash {
     }
 }
 
+/// Used to handle the fact that `load` dependencies might be malformed and have
+/// circular dependencies.
+#[derive(Clone, Debug)]
+enum DependencyKeyCacheValue {
+    /// Indicates that the provided dependency key is already being hashed. If
+    /// we try to compute the dependency key hash while it's already being
+    /// computed, that indicates a dependency cycle, for which we should
+    /// early-exit.
+    Calculating,
+
+    /// Indicates that the provided dependency key has finished hashing.
+    Done(ContentHash),
+}
+
 #[derive(Debug, Default)]
 pub struct Caches {
     /// Cache of hashed dependency keys. These are only valid for the provided `repo`/`head_tree`.
-    dependency_key_cache: HashMap<DependencyKey, Option<ContentHash>>,
+    dependency_key_cache: HashMap<DependencyKey, DependencyKeyCacheValue>,
 
     /// Cache of hashed tree paths, which should be either:
     ///
@@ -109,8 +124,8 @@ pub fn content_hash_dependency_key(
     {
         let cache = &mut ctx.caches.borrow_mut().dependency_key_cache;
         match cache.get(key) {
-            Some(Some(hash)) => return Ok(hash.to_owned()),
-            Some(None) => {
+            Some(DependencyKeyCacheValue::Done(hash)) => return Ok(hash.to_owned()),
+            Some(DependencyKeyCacheValue::Calculating) => {
                 let blob = "<circular>";
                 let hash = git2::Oid::hash_object(git2::ObjectType::Blob, blob.as_bytes())?;
                 return Ok(ContentHash(hash));
@@ -143,7 +158,7 @@ pub fn content_hash_dependency_key(
                 );
             }
             None => {
-                cache.insert(key.clone(), None);
+                cache.insert(key.clone(), DependencyKeyCacheValue::Calculating);
             }
         }
     }
@@ -233,13 +248,13 @@ pub fn content_hash_dependency_key(
             }
 
             // Every package has an implicit dependency on the `WORKSPACE` file.
-            let key = DependencyKey::BazelBuildFile(Label {
+            let workspace_key = DependencyKey::BazelBuildFile(Label {
                 external_repository: None,
                 path_components: Vec::new(),
                 target_name: TargetName::Name("WORKSPACE".to_string()),
             });
             buf.push_str(", ");
-            buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
+            buf.push_str(&content_hash_dependency_key(ctx, &workspace_key)?.to_string());
         }
 
         DependencyKey::Path(path) => {
@@ -256,10 +271,14 @@ pub fn content_hash_dependency_key(
     buf.push(')');
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
     let hash = ContentHash(hash);
-    ctx.caches
+    if let Some(DependencyKeyCacheValue::Done(old_value)) = ctx
+        .caches
         .borrow_mut()
         .dependency_key_cache
-        .insert(key.to_owned(), Some(hash.clone()));
+        .insert(key.to_owned(), DependencyKeyCacheValue::Done(hash.clone()))
+    {
+        error!(?key, ?old_value, new_value = ?hash, "Non-deterministic content hashing for dependency key");
+    }
     Ok(hash)
 }
 
@@ -275,10 +294,14 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<Cont
 
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
     let hash = ContentHash(hash);
-    ctx.caches
+    if let Some(old_value) = ctx
+        .caches
         .borrow_mut()
         .tree_path_cache
-        .insert(path.to_owned(), hash.clone());
+        .insert(path.to_owned(), hash.clone())
+    {
+        error!(key = ?path, ?old_value, new_value = ?hash, "Non-deterministic content hashing for path");
+    }
     Ok(hash)
 }
 
@@ -335,10 +358,14 @@ fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Resul
             }
         }
     }
-    ctx.caches
+    if let Some(old_value) = ctx
+        .caches
         .borrow_mut()
         .load_dependencies_cache
-        .insert(tree.id(), result.clone());
+        .insert(tree.id(), result.clone())
+    {
+        error!(key = ?tree.id(), ?old_value, new_value = ?result, "Non-deterministic content hashing for load dependencies");
+    }
     Ok(result)
 }
 
