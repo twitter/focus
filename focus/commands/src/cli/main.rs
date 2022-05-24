@@ -516,6 +516,10 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// If index keys are found to be missing, pause for debugging.
+        #[clap(long)]
+        break_on_missing_keys: bool,
     },
 
     /// Calculate and print the content hashes of the provided targets.
@@ -538,10 +542,20 @@ enum IndexSubcommand {
         /// When specified, the content is also pushed with the given ref name.
         #[clap(long)]
         additional_ref_name: Option<String>,
+
+        /// If index keys are found to be missing, pause for debugging.
+        #[clap(long)]
+        break_on_missing_keys: bool,
     },
 
     /// Resolve the targets to their resulting pattern sets.
-    Resolve { targets: Vec<String> },
+    Resolve {
+        targets: Vec<String>,
+
+        /// If index keys are found to be missing, pause for debugging.
+        #[clap(long)]
+        break_on_missing_keys: bool,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -954,8 +968,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Generate { sparse_repo } => {
-                let exit_code = operation::index::generate(app, backend, sparse_repo)?;
+            IndexSubcommand::Generate {
+                sparse_repo,
+                break_on_missing_keys,
+            } => {
+                let exit_code =
+                    operation::index::generate(app, backend, sparse_repo, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
@@ -968,6 +986,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 sparse_repo,
                 remote,
                 additional_ref_name: additional_ref_name_name,
+                break_on_missing_keys,
             } => {
                 let exit_code = operation::index::push(
                     app,
@@ -975,12 +994,22 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     sparse_repo,
                     remote,
                     additional_ref_name_name.as_deref(),
+                    break_on_missing_keys,
                 )?;
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Resolve { targets } => {
-                let exit_code = operation::index::resolve(app, backend, Path::new("."), targets)?;
+            IndexSubcommand::Resolve {
+                targets,
+                break_on_missing_keys,
+            } => {
+                let exit_code = operation::index::resolve(
+                    app,
+                    backend,
+                    Path::new("."),
+                    targets,
+                    break_on_missing_keys,
+                )?;
                 Ok(exit_code)
             }
         },

@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer};
@@ -80,6 +81,7 @@ fn resolve_targets(
     backend: Backend,
     sparse_repo_path: &Path,
     targets: HashSet<Target>,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<Result<ResolveTargetResult, ExitCode>> {
     let dep_keys: HashSet<DependencyKey> = targets
         .iter()
@@ -109,7 +111,8 @@ fn resolve_targets(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let (pattern_count, _checked_out) = repo.sync(&targets, true, app, odb.borrow())?;
+            let (pattern_count, _checked_out) =
+                repo.sync(&targets, true, app.clone(), odb.borrow())?;
             println!("Pattern count: {}", pattern_count);
 
             match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {
@@ -123,6 +126,16 @@ fn resolve_targets(
                     for (key, hash) in keys {
                         println!("{} {}", hash, dep_key_to_target(&key));
                     }
+
+                    if break_on_missing_keys {
+                        println!("Breaking for debugging...");
+                        println!("Sandbox path: {}", app.sandbox().path().display());
+                        drop(odb);
+                        loop {
+                            std::thread::sleep(Duration::from_secs(1));
+                        }
+                    }
+
                     Ok(Err(ExitCode(1)))
                 }
             }
@@ -135,6 +148,7 @@ pub fn resolve(
     backend: Backend,
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     assert_focused_repo(sparse_repo_path)?;
     let repo = Repo::open(sparse_repo_path, app.clone())?;
@@ -145,7 +159,13 @@ pub fn resolve(
     }?;
     let targets = TargetSet::try_from(&selection)?;
 
-    let paths = match resolve_targets(app, backend, sparse_repo_path, targets)? {
+    let paths = match resolve_targets(
+        app,
+        backend,
+        sparse_repo_path,
+        targets,
+        break_on_missing_keys,
+    )? {
         Ok(ResolveTargetResult {
             seen_keys: _,
             paths,
@@ -191,6 +211,7 @@ pub fn generate(
     app: Arc<App>,
     backend: Backend,
     sparse_repo_path: PathBuf,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
@@ -202,7 +223,13 @@ pub fn generate(
         targets
     };
 
-    match resolve_targets(app, backend, &sparse_repo_path, all_targets)? {
+    match resolve_targets(
+        app,
+        backend,
+        &sparse_repo_path,
+        all_targets,
+        break_on_missing_keys,
+    )? {
         Ok(_result) => Ok(ExitCode(0)),
         Err(exit_code) => Ok(exit_code),
     }
@@ -243,6 +270,7 @@ pub fn push(
     sparse_repo_path: PathBuf,
     remote: String,
     additional_ref_name: Option<&str>,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
@@ -269,7 +297,13 @@ pub fn push(
     let ResolveTargetResult {
         seen_keys,
         paths: _,
-    } = match resolve_targets(app, backend.clone(), &sparse_repo_path, all_targets)? {
+    } = match resolve_targets(
+        app,
+        backend.clone(),
+        &sparse_repo_path,
+        all_targets,
+        break_on_missing_keys,
+    )? {
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
@@ -330,6 +364,7 @@ mod tests {
                 fixture.sparse_repo_path.clone(),
                 remote.clone(),
                 None,
+                false,
             )?;
             assert_eq!(exit_code, 0);
         }
@@ -427,6 +462,7 @@ mod tests {
             fixture.sparse_repo_path.clone(),
             remote.clone(),
             Some("latest"),
+            false,
         )?;
         assert_eq!(exit_code, 0);
 
