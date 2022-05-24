@@ -262,7 +262,7 @@ impl Builder {
         self
     }
 
-    fn relativize_timestamps(events: &mut Vec<Event>) {
+    fn relativize_timestamps(events: &mut [Event]) {
         if let Some(min) = events.iter().min_by_key(|ev| ev.ts()) {
             let min_ts = min.ts();
             for ev in events.iter_mut() {
@@ -272,7 +272,7 @@ impl Builder {
         }
     }
 
-    fn sort_events(events: &mut Vec<Event>) {
+    fn sort_events(events: &mut [Event]) {
         events.sort_by(|a, b| a.common().cmp(b.common()))
     }
 

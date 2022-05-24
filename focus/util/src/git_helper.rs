@@ -475,7 +475,7 @@ impl FromStr for GitVersion {
 pub trait ConfigExt {
     fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>>;
 
-    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool>;
+    fn is_config_key_set<S: AsRef<str>>(&self, key: S) -> Result<bool>;
     fn set_str_if_not_set<S: AsRef<str>>(&mut self, key: S, value: S) -> Result<()>;
     fn get_bool_with_default<S: AsRef<str>>(&mut self, key: S, default: bool) -> Result<bool>;
     fn get_i64_with_default<S: AsRef<str>>(&mut self, key: S, default: i64) -> Result<i64>;
@@ -517,8 +517,9 @@ impl ConfigExt for git2::Config {
         }
     }
 
-    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool> {
-        match self.snapshot()?.get_bytes(key.as_ref()) {
+    fn is_config_key_set<S: AsRef<str>>(&self, key: S) -> Result<bool> {
+        // Can't use `get_str` due to https://github.com/rust-lang/git2-rs/issues/474
+        match self.get_entry(key.as_ref()) {
             Err(e) if e.code() == git2::ErrorCode::NotFound => Ok(false),
             Err(e) => Err(e.into()),
             Ok(_) => Ok(true),
