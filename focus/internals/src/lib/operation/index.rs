@@ -395,7 +395,7 @@ mod tests {
         let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
         let remote = format!("file://{}", remote_index_store.path().display());
 
-        let app = Arc::new(App::new(false)?);
+        let app = Arc::new(App::new(false, None)?);
         let label: Label = "//project_a/src/main/java/com/example/cmdline:runner".parse()?;
 
         // Populate remote index store.
@@ -496,7 +496,7 @@ mod tests {
         let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
         let remote = format!("file://{}", remote_index_store.path().display());
 
-        let app = Arc::new(App::new(false)?);
+        let app = Arc::new(App::new(false, None)?);
 
         let fixture = RepoPairFixture::new()?;
         fixture.perform_clone()?;

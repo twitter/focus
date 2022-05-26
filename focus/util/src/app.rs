@@ -23,12 +23,19 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new(preserve_sandbox_contents: bool) -> Result<Self> {
+    pub fn new(
+        preserve_sandbox_contents: bool,
+        with_cmd_prefix: Option<&str>,
+    ) -> Result<Self> {
         let invocation_description = std::env::args().collect::<Vec<String>>().join(" ");
 
         let sandbox = Arc::from(
-            Sandbox::new(Some(&invocation_description), preserve_sandbox_contents)
-                .context("Failed to create sandbox")?,
+            Sandbox::new(
+                Some(&invocation_description),
+                preserve_sandbox_contents,
+                with_cmd_prefix,
+            )
+            .context("Failed to create sandbox")?,
         );
         let tool_insights_client = Client::new(
             env!("CARGO_PKG_NAME").to_owned(),
