@@ -267,19 +267,17 @@ pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 fn find_recent_tree_oids(repo: &git2::Repository, count: usize) -> anyhow::Result<Vec<git2::Oid>> {
     let mut results = Vec::<git2::Oid>::new();
 
-    let head_commit = repo
+    let mut commit = repo
         .head()
         .context("Resolving HEAD reference")?
         .peel_to_commit()
         .context("Resolving commit")?;
-    results.push(head_commit.tree_id());
+    results.push(commit.tree_id());
 
-    for i in 0..(count.saturating_sub(1)) {
-        match head_commit.parent(i) {
-            Ok(commit) => {
-                results.push(commit.tree_id());
-            }
-            Err(_) => break,
+    for _ in 0..(count.saturating_sub(1)) {
+        if let Ok(next_commit) = commit.parent(0) {
+            commit = next_commit;
+            results.push(commit.tree_id());
         }
     }
 
