@@ -264,6 +264,28 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
+fn find_recent_tree_oids(repo: &git2::Repository, count: usize) -> anyhow::Result<Vec<git2::Oid>> {
+    let mut results = Vec::<git2::Oid>::new();
+
+    let head_commit = repo
+        .head()
+        .context("Resolving HEAD reference")?
+        .peel_to_commit()
+        .context("Resolving commit")?;
+    results.push(head_commit.tree_id());
+
+    for i in 0..(count.saturating_sub(1)) {
+        match head_commit.parent(i) {
+            Ok(commit) => {
+                results.push(commit.tree_id());
+            }
+            Err(_) => break,
+        }
+    }
+
+    Ok(results)
+}
+
 pub fn fetch(
     app: Arc<App>,
     backend: Backend,
@@ -274,6 +296,7 @@ pub fn fetch(
     let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app)?;
 
     let repo = git2::Repository::open(&sparse_repo_path)?;
+    let tree_oids = find_recent_tree_oids(&repo, 20).context("Determining recent trees")?;
     let odb = match backend {
         Backend::Simple => {
             anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
@@ -281,7 +304,7 @@ pub fn fetch(
         Backend::RocksDb => RocksDBCache::new(&repo),
     };
     synchronizer
-        .fetch_and_populate(&odb)
+        .fetch_and_populate(&odb, tree_oids)
         .context("Fetching index data")?;
 
     Ok(ExitCode(0))
