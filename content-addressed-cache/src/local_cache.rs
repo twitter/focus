@@ -20,6 +20,7 @@ pub type CacheKey = git2::Oid;
 pub trait Cache: Debug {
     fn put(&self, kind: CacheKeyKind, key: CacheKey, value: &[u8]) -> anyhow::Result<()>;
     fn get(&self, kind: CacheKeyKind, key: CacheKey) -> anyhow::Result<Option<Vec<u8>>>;
+    fn contains_key(&self, kind: CacheKeyKind, key: CacheKey) -> anyhow::Result<bool>;
     fn clear(&self) -> anyhow::Result<()>;
 }
 
@@ -171,6 +172,17 @@ impl Cache for RocksDBCache {
         DB::destroy(&Options::default(), &path)?;
         *self.db.borrow_mut() = Some(Self::make_db(&path, self.ttl));
         Ok(())
+    }
+
+    fn contains_key(&self, kind: CacheKeyKind, key: CacheKey) -> anyhow::Result<bool> {
+        let key: &[u8] = &CompositeKey { kind, key }.to_bytes()[..];
+        Ok(self
+            .db
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .get_pinned(key)?
+            .is_some())
     }
 }
 

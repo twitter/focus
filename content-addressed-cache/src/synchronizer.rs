@@ -68,6 +68,7 @@ pub trait CacheSynchronizer: Debug {
     fn fetch_and_populate(
         &self,
         dest_cache: &dyn Cache,
+        tree_oids: Vec<git2::Oid>,
     ) -> Result<(PopulateResult, HashSet<git2::Oid>)>;
     fn share(
         &self,
@@ -162,20 +163,12 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                     continue;
                 }
             };
-            let blob = match object.as_blob() {
-                Some(blob) => blob,
-                None => {
-                    warn!(?object, "Tree entry was not a blob");
-                    continue;
-                }
-            };
-
-            match dest_cache.get(kind, key) {
-                Ok(Some(_)) => {
+            match dest_cache.contains_key(kind, key) {
+                Ok(true) => {
                     // Already present, do nothing.
                     continue;
                 }
-                Ok(None) => {
+                Ok(false) => {
                     // Insert below.
                 }
                 Err(e) => {
@@ -183,7 +176,13 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                     warn!(?kind, ?key, ?e, "Failed to get key from cache");
                 }
             }
-
+            let blob = match object.as_blob() {
+                Some(blob) => blob,
+                None => {
+                    warn!(?object, "Tree entry was not a blob");
+                    continue;
+                }
+            };
             match dest_cache.put(kind, key, blob.content()) {
                 Ok(()) => {
                     new_entry_count += 1;
@@ -205,19 +204,31 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
     fn fetch_and_populate(
         &self,
         dest_cache: &dyn Cache,
+        tree_oids: Vec<git2::Oid>,
     ) -> Result<(PopulateResult, HashSet<git2::Oid>)> {
         let fetched_commits = self.fetch().context("Fetching index updates")?;
         let mut result = PopulateResult::default();
-        for commit_id in fetched_commits.iter() {
-            let commit_id_str = commit_id.to_string();
-            let populate_result = self
-                .populate(commit_id, dest_cache)
-                .with_context(|| format!("Populating cache from commit {}", &commit_id_str))?;
-            if !populate_result.is_noop() {
-                info!(?populate_result, commit_id = %commit_id_str, "Populated index");
+
+        for tree_oid in tree_oids {
+            let tag_name = format!("refs/tags/focus/{}", tree_oid);
+            info!(?tag_name, "Trying tag");
+            if let Ok(tag) = self.repo.find_reference(&tag_name) {
+                let commit = tag
+                    .peel_to_commit()
+                    .with_context(|| format!("Peeling found tag {} to commit", &tag_name))?;
+                let commit_id_str = commit.id().to_string();
+                info!(?tag_name, references_commit=%commit_id_str, "Found it");
+                let populate_result = self
+                    .populate(&commit.id(), dest_cache)
+                    .with_context(|| format!("Populating cache from commit {}", &commit_id_str))?;
+                if !populate_result.is_noop() {
+                    info!(?populate_result, commit_id = %commit_id_str, "Populated index");
+                }
+                result += populate_result;
+                break;
             }
-            result += populate_result;
         }
+
         Ok((result, fetched_commits))
     }
 
@@ -451,8 +462,10 @@ mod tests {
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, kind);
         let commit_2_id =
             memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None, None)?;
-
-        let (_, fetched_commit_ids) = memo_cache_sync_2.fetch_and_populate(&memo_cache_2).unwrap();
+        let tree_oids = vec![keyset_id];
+        let (_, fetched_commit_ids) = memo_cache_sync_2
+            .fetch_and_populate(&memo_cache_2, tree_oids)
+            .unwrap();
         assert_eq!(fetched_commit_ids, hashset! { commit_2_id });
 
         assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
@@ -487,7 +500,10 @@ mod tests {
             None,
         )?;
 
-        let (_, fetched_commit_ids) = memo_cache_sync_2.fetch_and_populate(&memo_cache_2).unwrap();
+        let tree_oids = vec![keyset_id2];
+        let (_, fetched_commit_ids) = memo_cache_sync_2
+            .fetch_and_populate(&memo_cache_2, tree_oids)
+            .unwrap();
 
         assert_eq!(fetched_commit_ids, hashset! {commit_1_id, commit_2_id});
 
@@ -526,8 +542,10 @@ mod tests {
         let commit_2_id =
             memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None, None)?;
 
-        let (results, fetched_commit_ids) =
-            memo_cache_sync_2.fetch_and_populate(&memo_cache_2).unwrap();
+        let tree_oids = vec![keyset_id];
+        let (results, fetched_commit_ids) = memo_cache_sync_2
+            .fetch_and_populate(&memo_cache_2, tree_oids)
+            .unwrap();
         assert_eq!(fetched_commit_ids, hashset! { commit_2_id  });
         assert_eq!(
             results,
