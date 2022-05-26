@@ -1073,6 +1073,18 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     }
 }
 
+// Returns a cmd name for a sandbox.
+// Returns None if cmd hasn't been determined to need a sandbox prefix.
+fn sandbox_name_for_cmd(opts: &FocusOpts) -> Option<&str> {
+    match &opts.cmd {
+        Subcommand::Maintenance {
+            subcommand: MaintenanceSubcommand::Run { .. },
+            ..
+        } => Some("maintenance_"),
+        _ => None,
+    }
+}
+
 /// Run the main and any destructors. Local variables are not guaranteed to be
 /// dropped if `std::process::exit` is called, so make sure to bubble up the
 /// return code to the top level, which is the only place in the code that's
@@ -1094,7 +1106,10 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let preserve_sandbox = true;
 
-    let app = Arc::from(App::new(preserve_sandbox)?);
+    let app = Arc::from(App::new(
+        preserve_sandbox,
+        sandbox_name_for_cmd(&options),
+    )?);
     let ti_context = app.tool_insights_client();
 
     setup_thread_pool(*resolution_threads)?;

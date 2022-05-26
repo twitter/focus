@@ -330,7 +330,7 @@ mod tests {
     fn sandboxed_command_capture_all() -> Result<()> {
         init_logging();
 
-        let app = Arc::from(App::new(false)?);
+        let app = Arc::from(App::new(false, None)?);
         // Make sure to keep the `App` alive until the end of this scope.
         let app = app.clone();
         let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app)?;
@@ -346,7 +346,7 @@ mod tests {
     fn sandboxed_command_specific_stdin() -> Result<()> {
         init_logging();
 
-        let app = Arc::from(App::new(false)?);
+        let app = Arc::from(App::new(false, None)?);
         let sandbox = app.sandbox();
         let path = {
             let (mut file, path, _) = sandbox.create_file(None, None, None)?;
