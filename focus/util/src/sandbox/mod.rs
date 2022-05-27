@@ -172,6 +172,27 @@ mod tests {
     }
 
     #[test]
+    fn sandbox_name_prefix_is_present() -> Result<()> {
+        let unnamed_sandbox = Sandbox::new(None, false, None)?;
+        assert!(unnamed_sandbox
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(&DEFAULT_NAME_PREFIX));
+
+        let named_sandbox = Sandbox::new(None, false, Some("test_"))?;
+        assert!(named_sandbox
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(&DEFAULT_NAME_PREFIX));
+
+        Ok(())
+    }
+
+    #[test]
     fn file_naming() -> Result<()> {
         let sandbox = Sandbox::new(None, true, None)?;
         match sandbox.create_file(Some("hello"), Some("txt"), None) {
