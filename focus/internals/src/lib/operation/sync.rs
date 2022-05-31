@@ -341,16 +341,10 @@ It isn't just one of your holiday games
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
-        assert_eq!(
-            operation::sync::run(&path, fixture.app.clone(), false)?,
-            true,
-        );
+        assert!(operation::sync::run(&path, fixture.app.clone(), false)?);
 
         // Subsequent sync does not perform a checkout.
-        assert_eq!(
-            operation::sync::run(&path, fixture.app.clone(), false)?,
-            false,
-        );
+        assert!(!operation::sync::run(&path, fixture.app.clone(), false)?);
 
         Ok(())
     }

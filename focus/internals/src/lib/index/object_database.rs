@@ -146,7 +146,7 @@ pub mod testing {
 
         fn get_direct(&self, hash: &ContentHash) -> anyhow::Result<Option<DependencyValue>> {
             let entries = self.entries.lock().expect("poisoned mutex");
-            let dep_value = entries.get(&hash).cloned();
+            let dep_value = entries.get(hash).cloned();
             Ok(dep_value)
         }
 
