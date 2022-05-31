@@ -36,9 +36,9 @@ target_tarball=$(mktemp -t "focus.$focus_rev.$os.$arch.tgz")
 scripts/mac-build.sh || die "Build failed"
 test -f target/release/$focus_binary || die "The build succeeded, but produced no binary"
 rm -rf target/package
-mkdir -p target/package/focus/bin
-echo $focus_rev > target/package/focus/bin/FOCUS_VERSION
-cp target/release/$focus_binary target/package/focus/bin/focus
+mkdir -p target/package/focus
+echo $focus_rev > target/package/focus/FOCUS_VERSION
+cp target/release/$focus_binary target/package/focus/focus
 tar czf $target_tarball -C target/package focus || die "Creating release tarball $target_tarball failed"
 
 pushd $mde_repo
