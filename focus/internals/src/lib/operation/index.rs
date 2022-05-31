@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer};
+use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer, KeysetID};
 use focus_util::app::{App, ExitCode};
 use focus_util::git_helper;
 use focus_util::paths::assert_focused_repo;
@@ -20,6 +20,8 @@ use crate::index::{
 use crate::model::repo::Repo;
 use crate::model::selection::OperationAction;
 use crate::target::{Target, TargetSet};
+
+const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
 
 #[derive(
     Clone,
@@ -264,26 +266,6 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
-fn find_recent_tree_oids(repo: &git2::Repository, count: usize) -> anyhow::Result<Vec<git2::Oid>> {
-    let mut results = Vec::<git2::Oid>::new();
-
-    let mut commit = repo
-        .head()
-        .context("Resolving HEAD reference")?
-        .peel_to_commit()
-        .context("Resolving commit")?;
-    results.push(commit.tree_id());
-
-    for _ in 0..(count.saturating_sub(1)) {
-        if let Ok(next_commit) = commit.parent(0) {
-            commit = next_commit;
-            results.push(commit.tree_id());
-        }
-    }
-
-    Ok(results)
-}
-
 pub fn fetch(
     app: Arc<App>,
     backend: Backend,
@@ -291,20 +273,41 @@ pub fn fetch(
     remote: String,
 ) -> anyhow::Result<ExitCode> {
     let index_dir = index_repo_dir(&sparse_repo_path);
-    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app)?;
+    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
 
     let repo = git2::Repository::open(&sparse_repo_path)?;
-    let tree_oids = find_recent_tree_oids(&repo, 20).context("Determining recent trees")?;
     let odb = match backend {
         Backend::Simple => {
             anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
         }
         Backend::RocksDb => RocksDBCache::new(&repo),
     };
-    synchronizer
-        .fetch_and_populate(&odb, tree_oids)
-        .context("Fetching index data")?;
+    let repo = Repo::open(sparse_repo_path.as_path(), app).context("Failed to open repo")?;
+    let mut commit = repo.get_head_commit()?;
 
+    let available_keysets = synchronizer.available_remote_keysets()?;
+
+    let mut found_keyset: Option<KeysetID> = None;
+    for _ in 0..PARENTS_TO_TRY_IN_FETCH {
+        let keyset_id = commit.tree()?.id();
+        debug!(
+            "Fetching index {}... for commit {}...",
+            &keyset_id.to_string()[..10],
+            &commit.id().to_string()[..10]
+        );
+        if available_keysets.contains(&keyset_id) {
+            found_keyset = Some(keyset_id);
+            break;
+        }
+        commit = commit.parent(0)?;
+    }
+    if let Some(keyset_id) = found_keyset {
+        synchronizer
+            .fetch_and_populate(keyset_id, &odb)
+            .context("Fetching index data")?;
+    } else {
+        info!("No index matches the current commit");
+    }
     Ok(ExitCode(0))
 }
 
@@ -313,7 +316,7 @@ pub fn push(
     backend: Backend,
     sparse_repo_path: PathBuf,
     remote: String,
-    additional_ref_name: Option<&str>,
+    _additional_ref_name: Option<&str>,
     break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
@@ -372,7 +375,7 @@ pub fn push(
     };
 
     info!("Pushing index");
-    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None, additional_ref_name)?;
+    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
 
     Ok(ExitCode(0))
 }
@@ -449,20 +452,20 @@ mod tests {
         }
 
         let ExitCode(exit_code) = fetch(
-            app.clone(),
+            app,
             backend.clone(),
             fixture.sparse_repo_path.clone(),
-            remote.clone(),
+            remote,
         )?;
         assert_eq!(exit_code, 0);
 
         // Try to materialize files again -- this should be a cache hit.
         {
-            let odb = make_odb(backend.clone(), repo);
+            let odb = make_odb(backend, repo);
             let materialize_result = get_files_to_materialize(
                 &ctx,
                 odb.borrow(),
-                hashset! {DependencyKey::BazelPackage(label.clone() )},
+                hashset! {DependencyKey::BazelPackage(label )},
             )?;
             insta::assert_debug_snapshot!(materialize_result, @r###"
             Ok {
@@ -510,12 +513,7 @@ mod tests {
         )?;
         assert_eq!(exit_code, 0);
 
-        let ExitCode(exit_code) = fetch(
-            app.clone(),
-            backend.clone(),
-            fixture.sparse_repo_path.clone(),
-            remote.clone(),
-        )?;
+        let ExitCode(exit_code) = fetch(app, backend, fixture.sparse_repo_path.clone(), remote)?;
         assert_eq!(exit_code, 0);
 
         Ok(())

@@ -1,9 +1,12 @@
 use crate::{Cache, CacheKey, CacheKeyKind, CompositeKey};
 use anyhow::{Context, Result};
+
 use core::fmt;
 use focus_util::{app::App, git_helper};
 use git2::Oid;
 use git2::{Commit, Repository};
+use lazy_static::lazy_static;
+use regex::Regex;
 use std::fmt::{Debug, Display};
 use std::ops::AddAssign;
 use std::{collections::HashSet, path::PathBuf, str::FromStr, sync::Arc};
@@ -14,6 +17,10 @@ pub type KeysetID = Oid;
 
 const COMMIT_USER_NAME: &str = "focus";
 const COMMIT_USER_EMAIL: &str = "source-eng-team@twitter.com";
+lazy_static! {
+    static ref LS_REMOTE_REGEX: Regex =
+        Regex::new(r#"^[0-9a-f]{40}\trefs/tags/focus/([0-9a-f]{40})$"#).unwrap();
+}
 
 pub fn refspec_fmt(value: impl Display) -> String {
     return format!("+refs/tags/focus/{}:refs/tags/focus/{}", value, value);
@@ -63,21 +70,21 @@ impl AddAssign for PopulateResult {
 /// most commits don't change most build artifacts, many of the key-value pairs
 /// in the next commit's keyset can be shared with the current commit's keyset.
 pub trait CacheSynchronizer: Debug {
-    fn fetch(&self) -> Result<HashSet<git2::Oid>>;
+    fn fetch(&self, keyset_id: KeysetID) -> Result<KeysetID>;
     fn populate(&self, commit_id: &git2::Oid, dest_cache: &dyn Cache) -> Result<PopulateResult>;
     fn fetch_and_populate(
         &self,
+        keyset_id: KeysetID,
         dest_cache: &dyn Cache,
-        tree_oids: Vec<git2::Oid>,
-    ) -> Result<(PopulateResult, HashSet<git2::Oid>)>;
+    ) -> Result<(PopulateResult, KeysetID)>;
     fn share(
         &self,
         keyset_id: KeysetID,
         keyset: &Keyset,
         cache: &dyn Cache,
         previous_keyset_id: Option<KeysetID>,
-        additional_ref_name: Option<&str>,
     ) -> Result<git2::Oid>;
+    fn available_remote_keysets(&self) -> Result<HashSet<KeysetID>>;
 }
 
 /// Synchronize using Git as a key-value store. Keysets are pushed as tags to
@@ -115,23 +122,25 @@ impl GitBackedCacheSynchronizer {
 
 impl CacheSynchronizer for GitBackedCacheSynchronizer {
     #[instrument]
-    fn fetch(&self) -> Result<HashSet<git2::Oid>> {
-        git_helper::fetch_all_tags(
+    fn fetch(&self, keyset_id: KeysetID) -> Result<KeysetID> {
+        git_helper::fetch_refs(
             self.path.as_path(),
+            [refspec_fmt(keyset_id)].iter(),
             self.remote.as_str(),
             self.app.clone(),
             Some(1),
         )
         .context("Fetching")
+        .map(|_x| keyset_id)
     }
 
     #[instrument]
-    fn populate(&self, commit_id: &git2::Oid, dest_cache: &dyn Cache) -> Result<PopulateResult> {
+    fn populate(&self, keyset_id: &KeysetID, dest_cache: &dyn Cache) -> Result<PopulateResult> {
         let commit = self
             .repo
-            .find_commit(*commit_id)
-            .context("Resolving commit")?;
-        let kv_tree = commit.tree().context("Resolving tree")?;
+            .find_reference(&tag_fmt(keyset_id))
+            .context("Resolving reference")?;
+        let kv_tree = commit.peel_to_tree().context("Resolving tree")?;
 
         let mut entry_count = 0;
         let mut new_entry_count = 0;
@@ -163,19 +172,6 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                     continue;
                 }
             };
-            match dest_cache.contains_key(kind, key) {
-                Ok(true) => {
-                    // Already present, do nothing.
-                    continue;
-                }
-                Ok(false) => {
-                    // Insert below.
-                }
-                Err(e) => {
-                    // Insert below.
-                    warn!(?kind, ?key, ?e, "Failed to get key from cache");
-                }
-            }
             let blob = match object.as_blob() {
                 Some(blob) => blob,
                 None => {
@@ -183,6 +179,21 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                     continue;
                 }
             };
+
+            match dest_cache.get(kind, key) {
+                Ok(Some(_)) => {
+                    // Already present, do nothing.
+                    continue;
+                }
+                Ok(None) => {
+                    // Insert below.
+                }
+                Err(e) => {
+                    // Insert below.
+                    warn!(?kind, ?key, ?e, "Failed to get key from cache");
+                }
+            }
+
             match dest_cache.put(kind, key, blob.content()) {
                 Ok(()) => {
                     new_entry_count += 1;
@@ -203,33 +214,19 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
 
     fn fetch_and_populate(
         &self,
+        keyset_id: KeysetID,
         dest_cache: &dyn Cache,
-        tree_oids: Vec<git2::Oid>,
-    ) -> Result<(PopulateResult, HashSet<git2::Oid>)> {
-        let fetched_commits = self.fetch().context("Fetching index updates")?;
-        let mut result = PopulateResult::default();
+    ) -> Result<(PopulateResult, KeysetID)> {
+        let fetched_keyset_id = self.fetch(keyset_id).context("Fetching index updates")?;
 
-        for tree_oid in tree_oids {
-            let tag_name = format!("refs/tags/focus/{}", tree_oid);
-            info!(?tag_name, "Trying tag");
-            if let Ok(tag) = self.repo.find_reference(&tag_name) {
-                let commit = tag
-                    .peel_to_commit()
-                    .with_context(|| format!("Peeling found tag {} to commit", &tag_name))?;
-                let commit_id_str = commit.id().to_string();
-                info!(?tag_name, references_commit=%commit_id_str, "Found it");
-                let populate_result = self
-                    .populate(&commit.id(), dest_cache)
-                    .with_context(|| format!("Populating cache from commit {}", &commit_id_str))?;
-                if !populate_result.is_noop() {
-                    info!(?populate_result, commit_id = %commit_id_str, "Populated index");
-                }
-                result += populate_result;
-                break;
-            }
+        let populate_result = self
+            .populate(&fetched_keyset_id, dest_cache)
+            .with_context(|| format!("Populating cache from commit {}", fetched_keyset_id))?;
+        if !populate_result.is_noop() {
+            info!(?populate_result, commit_id = %fetched_keyset_id, "Populated index");
         }
 
-        Ok((result, fetched_commits))
+        Ok((populate_result, fetched_keyset_id))
     }
 
     #[instrument(skip(keyset))]
@@ -239,8 +236,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
         keyset: &Keyset,
         cache: &dyn Cache,
         previous_keyset_id: Option<KeysetID>,
-        additional_ref_name: Option<&str>,
-    ) -> Result<git2::Oid> {
+    ) -> Result<KeysetID> {
         let mut kv_tree = self
             .repo
             .treebuilder(None)
@@ -286,10 +282,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
             &vec_of_prev_commit_references[..],
         )?;
 
-        let mut refspecs = vec![refspec_fmt(&keyset_id)];
-        if let Some(additional_ref_name) = additional_ref_name {
-            refspecs.push(refspec_fmt(&additional_ref_name))
-        }
+        let refspecs = vec![refspec_fmt(&keyset_id)];
 
         self.repo
             .reference(
@@ -299,23 +292,32 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
                 "Tree is used as key-value store.",
             )
             .context("updating reference")?;
-        if let Some(ref_name) = additional_ref_name {
-            self.repo
-                .reference(
-                    &tag_fmt(ref_name),
-                    commit_oid,
-                    true,
-                    "Tree is used as key-value store.",
-                )
-                .context("updating additional reference")?;
-        }
         git_helper::push_refs(
             self.path.as_path(),
             refspecs.into_iter(),
             self.remote.as_str(),
             self.app.clone(),
         )?;
-        Ok(commit_oid)
+        Ok(keyset_id)
+    }
+
+    fn available_remote_keysets(&self) -> Result<HashSet<KeysetID>> {
+        let mut available_keys = HashSet::<KeysetID>::new();
+        let result = git_helper::ls_remote(&self.remote, self.app.clone())?;
+        for (_line_number, line) in result.lines().enumerate() {
+            if let Some(captures) = LS_REMOTE_REGEX.captures(line) {
+                if let Ok(keyset_id) = captures
+                    .get(1)
+                    .ok_or_else(|| anyhow::anyhow!("Error parsing '{}'", line))
+                {
+                    let keyset_id = keyset_id.as_str();
+                    let oid = git2::Oid::from_str(keyset_id)
+                        .with_context(|| format!("Parsing identifier '{}'", keyset_id))?;
+                    available_keys.insert(oid);
+                };
+            }
+        }
+        Ok(available_keys)
     }
 }
 
@@ -437,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn test_publish_get() -> anyhow::Result<()> {
+    fn test_publish_fetch() -> anyhow::Result<()> {
         let (_server_dir, server_path) = setup_server_repo_locally().unwrap();
         let server_string = server_path.into_os_string().into_string().unwrap();
         let (_git_cache_dir_1, memo_cache_sync_1) =
@@ -453,20 +455,27 @@ mod tests {
         populate_demo_hashset(&memo_cache_1, kind);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, kind);
-        let commit_1_id =
-            memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None, None)?;
-        let fetched_commit_ids = memo_cache_sync_2.fetch().unwrap();
-        assert_eq!(fetched_commit_ids, hashset! { commit_1_id });
+        let _commit_1_id = memo_cache_sync_1
+            .share(keyset_id, &commit_1_keys, &memo_cache_1, None)
+            .unwrap();
+        let fetched_commit_id = memo_cache_sync_2.fetch(keyset_id).unwrap();
+        assert_eq!(fetched_commit_id, keyset_id);
 
         // Test overwriting an index (force push+pull)
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, kind);
-        let commit_2_id =
-            memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None, None)?;
-        let tree_oids = vec![keyset_id];
-        let (_, fetched_commit_ids) = memo_cache_sync_2
-            .fetch_and_populate(&memo_cache_2, tree_oids)
+        let commit_2_id = memo_cache_sync_1
+            .share(keyset_id, &commit_2_keys, &memo_cache_1, None)
             .unwrap();
-        assert_eq!(fetched_commit_ids, hashset! { commit_2_id });
+        assert_eq!(keyset_id, commit_2_id);
+        assert_eq!(
+            memo_cache_sync_2.available_remote_keysets()?,
+            hashset! {keyset_id}
+        );
+
+        let (_, fetched_commit_id) = memo_cache_sync_2
+            .fetch_and_populate(keyset_id, &memo_cache_2)
+            .unwrap();
+        assert_eq!(fetched_commit_id, commit_2_id);
 
         assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
         assert_cache_doesnt_contain(commit_1_keys, &memo_cache_2);
@@ -487,27 +496,25 @@ mod tests {
         let kind = kind();
         let keyset_id1 = keyset_id_1();
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, kind);
-        let commit_1_id =
-            memo_cache_sync_1.share(keyset_id1, &commit_1_keys, &memo_cache_1, None, None)?;
+        let _commit_1_id =
+            memo_cache_sync_1.share(keyset_id1, &commit_1_keys, &memo_cache_1, None)?;
 
         let keyset_id2 = keyset_id_2();
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, kind);
-        let commit_2_id = memo_cache_sync_1.share(
-            keyset_id2,
-            &commit_2_keys,
-            &memo_cache_1,
-            Some(keyset_id1),
-            None,
-        )?;
+        let commit_2_id =
+            memo_cache_sync_1.share(keyset_id2, &commit_2_keys, &memo_cache_1, Some(keyset_id1))?;
 
-        let tree_oids = vec![keyset_id2];
-        let (_, fetched_commit_ids) = memo_cache_sync_2
-            .fetch_and_populate(&memo_cache_2, tree_oids)
+        let (_, fetched_commit_id) = memo_cache_sync_2
+            .fetch_and_populate(keyset_id2, &memo_cache_2)
             .unwrap();
 
-        assert_eq!(fetched_commit_ids, hashset! {commit_1_id, commit_2_id});
+        assert_eq!(fetched_commit_id, commit_2_id);
 
-        let commit = memo_cache_sync_2.repo.find_commit(commit_2_id).unwrap();
+        let commit = memo_cache_sync_2
+            .repo
+            .find_reference(&tag_fmt(commit_2_id)[..])
+            .unwrap()
+            .peel_to_commit()?;
         assert!(commit.parent_count() == 1);
 
         assert_caches_match(commit_2_keys, &memo_cache_1, &memo_cache_2);
@@ -532,21 +539,20 @@ mod tests {
         populate_demo_hashset(&memo_cache_1, kind);
 
         let commit_1_keys = populate_demo_hashset(&memo_cache_1, kind);
-        let commit_1_id =
-            memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None, None)?;
-        let fetched_commit_ids = memo_cache_sync_2.fetch().unwrap();
-        assert_eq!(fetched_commit_ids, hashset! { commit_1_id  });
+        let _commit_1_id =
+            memo_cache_sync_1.share(keyset_id, &commit_1_keys, &memo_cache_1, None)?;
+        let fetched_commit_id = memo_cache_sync_2.fetch(keyset_id).unwrap();
+        assert_eq!(fetched_commit_id, keyset_id);
 
         // Test overwriting an index (force push+pull)
         let commit_2_keys = populate_demo_hashset(&memo_cache_1, kind);
-        let commit_2_id =
-            memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None, None)?;
+        let _commit_2_id =
+            memo_cache_sync_1.share(keyset_id, &commit_2_keys, &memo_cache_1, None)?;
 
-        let tree_oids = vec![keyset_id];
-        let (results, fetched_commit_ids) = memo_cache_sync_2
-            .fetch_and_populate(&memo_cache_2, tree_oids)
+        let (results, fetched_commit_id) = memo_cache_sync_2
+            .fetch_and_populate(keyset_id, &memo_cache_2)
             .unwrap();
-        assert_eq!(fetched_commit_ids, hashset! { commit_2_id  });
+        assert_eq!(fetched_commit_id, keyset_id);
         assert_eq!(
             results,
             PopulateResult {
