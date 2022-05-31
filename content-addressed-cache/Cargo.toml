@@ -13,8 +13,10 @@ git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b
 ] }
 focus-util = { path = "../focus/util" }
 hex = "0.3.1"
+lazy_static = "1.4.0"
 maplit = "1.0.2"
 rand = "0.6.3"
+regex = "1.5.5"
 rocksdb = "0.18.0"
 tempfile = "3.2.0"
 thiserror = "1.0.30"

@@ -1,8 +1,5 @@
 use std::{
-    collections::HashSet,
     ffi::{OsStr, OsString},
-    fs::File,
-    io::BufReader,
     os::unix::prelude::OsStringExt,
     path::PathBuf,
     process::Stdio,
@@ -114,46 +111,30 @@ pub fn fetch_all_tags<P: AsRef<Path>>(
     remote: &str,
     app: Arc<App>,
     depth: Option<u64>,
-) -> Result<HashSet<git2::Oid>> {
-    use std::io::BufRead;
+) -> Result<String> {
     let description = format!("Fetching from {}", &remote);
-    let (mut cmd, scmd) = git_command(description, app)?;
-    cmd.current_dir(repo_path.as_ref())
-        .arg("fetch")
-        .arg("--prune")
-        .arg("--prune-tags")
-        .arg("--tags")
-        .arg("--force")
-        .arg("-k"); // Keep pack
+    let mut args = vec![
+        String::from("fetch"),
+        String::from("--prune"),
+        String::from("--prune-tags"),
+        String::from("--tags"),
+        String::from("--force"),
+        String::from("-k"),
+    ];
     if let Some(d) = depth {
-        cmd.arg(format!("--depth={}", d));
+        args.push(format!("--depth={}", d));
     }
-    cmd.arg(remote);
-    scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr, "git fetch refspec")
-        .map(|_| ())?;
+    run_consuming_stdout(&description, repo_path.as_ref(), args, app)
+}
 
-    let mut commit_ids = HashSet::<git2::Oid>::new();
-    let fetch_head_path = repo_path.as_ref().join(".git").join("FETCH_HEAD");
-    let file = BufReader::new(File::open(&fetch_head_path).context("Opening FETCH_HEAD")?);
-    for (line_number, line) in file.lines().enumerate() {
-        // The commit ID is the first field.
-        if let Ok(line) = line {
-            let mut tokens = line.split_ascii_whitespace();
-            let oid = tokens.next().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Error parsing {}:{} '{}'",
-                    &fetch_head_path.display(),
-                    line_number + 1,
-                    line
-                )
-            })?;
-            commit_ids.insert(
-                git2::Oid::from_str(oid)
-                    .with_context(|| format!("Parsing identifier '{}'", oid))?,
-            );
-        }
-    }
-    Ok(commit_ids)
+pub fn ls_remote(remote: &str, app: Arc<App>) -> Result<String> {
+    let description = format!("ls-remote on {}", &remote);
+    run_consuming_stdout(
+        &description,
+        std::env::current_dir().unwrap(),
+        vec!["ls-remote", "--tags", remote],
+        app,
+    )
 }
 
 pub fn push_refs<P: AsRef<Path>>(
@@ -475,7 +456,7 @@ impl FromStr for GitVersion {
 pub trait ConfigExt {
     fn multivar_values<S: AsRef<str>>(&self, name: S, regexp: Option<S>) -> Result<Vec<String>>;
 
-    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool>;
+    fn is_config_key_set<S: AsRef<str>>(&self, key: S) -> Result<bool>;
     fn set_str_if_not_set<S: AsRef<str>>(&mut self, key: S, value: S) -> Result<()>;
     fn get_bool_with_default<S: AsRef<str>>(&mut self, key: S, default: bool) -> Result<bool>;
     fn get_i64_with_default<S: AsRef<str>>(&mut self, key: S, default: i64) -> Result<i64>;
@@ -517,8 +498,9 @@ impl ConfigExt for git2::Config {
         }
     }
 
-    fn is_config_key_set<S: AsRef<str>>(&mut self, key: S) -> Result<bool> {
-        match self.snapshot()?.get_bytes(key.as_ref()) {
+    fn is_config_key_set<S: AsRef<str>>(&self, key: S) -> Result<bool> {
+        // Can't use `get_str` due to https://github.com/rust-lang/git2-rs/issues/474
+        match self.get_entry(key.as_ref()) {
             Err(e) if e.code() == git2::ErrorCode::NotFound => Ok(false),
             Err(e) => Err(e.into()),
             Ok(_) => Ok(true),

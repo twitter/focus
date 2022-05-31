@@ -23,7 +23,7 @@ impl Fixture {
         let branch = String::from("main");
         let repo =
             ScratchGitRepo::new_copied_fixture(Path::new("bazel_java_example"), &path, &branch)?;
-        let app = Arc::new(App::new(false)?);
+        let app = Arc::new(App::new(false, None)?);
         Ok(Self {
             dir,
             underlying: repo,
@@ -75,7 +75,7 @@ fn modifying_and_saving_the_selection() -> Result<()> {
 
     {
         let mut selection_manager = repo.selection_manager()?;
-        selection_manager.process(&vec![
+        selection_manager.process(&[
             Operation {
                 action: OperationAction::Add,
                 underlying: Underlying::Project(project_name.clone()),
@@ -105,7 +105,7 @@ fn modifying_and_saving_the_selection() -> Result<()> {
         assert_eq!(computed_selection.targets, hashset! {target.clone()});
 
         // Remove the target
-        selection_manager.process(&vec![Operation {
+        selection_manager.process(&[Operation {
             action: OperationAction::Remove,
             underlying: Underlying::Target(target),
         }])?;
@@ -130,11 +130,11 @@ fn adding_an_unknown_project() -> Result<()> {
 
     let nonexistent_project = Underlying::Project(String::from("blofeld/moonbase"));
     let mut selection_manager = repo.selection_manager()?;
-    let result = selection_manager.process(&vec![Operation {
+    let result = selection_manager.process(&[Operation {
         action: OperationAction::Add,
         underlying: nonexistent_project.clone(),
     }])?;
-    assert_eq!(result.is_success(), false);
+    assert!(!result.is_success());
     assert_eq!(result.absent, hashset! {nonexistent_project});
 
     Ok(())
@@ -149,11 +149,11 @@ fn mandatory_projects_cannot_be_selected() -> Result<()> {
 
     let mandatory_project = Underlying::Project(String::from("mandatory"));
     let mut selection_manager = repo.selection_manager()?;
-    let result = selection_manager.process(&vec![Operation {
+    let result = selection_manager.process(&[Operation {
         action: OperationAction::Add,
         underlying: mandatory_project.clone(),
     }])?;
-    assert_eq!(result.is_success(), false);
+    assert!(!result.is_success());
     assert_eq!(result.absent, hashset! {mandatory_project});
 
     Ok(())
@@ -168,18 +168,18 @@ fn duplicate_projects_are_ignored() -> Result<()> {
 
     let project_b = Underlying::Project(String::from("team_zissou/project_b"));
     let mut selection_manager = repo.selection_manager()?;
-    let result = selection_manager.process(&vec![Operation {
+    let result = selection_manager.process(&[Operation {
         action: OperationAction::Add,
         underlying: project_b.clone(),
     }])?;
-    assert_eq!(result.is_success(), true);
+    assert!(result.is_success());
     assert_eq!(result.added, hashset! {project_b.clone()});
 
-    let result = selection_manager.process(&vec![Operation {
+    let result = selection_manager.process(&[Operation {
         action: OperationAction::Add,
         underlying: project_b.clone(),
     }])?;
-    assert_eq!(result.is_success(), true);
+    assert!(result.is_success());
     assert_eq!(result.ignored, hashset! {project_b});
 
     Ok(())

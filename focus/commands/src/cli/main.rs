@@ -83,6 +83,10 @@ enum Subcommand {
 
     /// Add projects and targets to the selection.
     Add {
+        /// Try to fetch a remote index before syncing.
+        #[clap(long, parse(try_from_str), default_value = "true")]
+        fetch_index: bool,
+
         /// Project and targets to add to the selection.
         projects_and_targets: Vec<String>,
     },
@@ -90,6 +94,10 @@ enum Subcommand {
     /// Remove projects and targets from the selection.
     #[clap(visible_alias("rm"))]
     Remove {
+        /// Try to fetch a remote index before syncing.
+        #[clap(long, parse(try_from_str), default_value = "true")]
+        fetch_index: bool,
+
         /// Project and targets to remove from the selection
         projects_and_targets: Vec<String>,
     },
@@ -260,6 +268,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear",
             IndexSubcommand::Fetch { .. } => "index-fetch",
+            IndexSubcommand::Get { .. } => "index-get",
             IndexSubcommand::Generate { .. } => "index-generate",
             IndexSubcommand::Hash { .. } => "index-hash",
             IndexSubcommand::Push { .. } => "index-push",
@@ -503,11 +512,19 @@ enum IndexSubcommand {
         remote: String,
     },
 
+    Get {
+        target: String,
+    },
+
     /// Populate the index with entries for all projects.
     Generate {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// If index keys are found to be missing, pause for debugging.
+        #[clap(long)]
+        break_on_missing_keys: bool,
     },
 
     /// Calculate and print the content hashes of the provided targets.
@@ -530,10 +547,20 @@ enum IndexSubcommand {
         /// When specified, the content is also pushed with the given ref name.
         #[clap(long)]
         additional_ref_name: Option<String>,
+
+        /// If index keys are found to be missing, pause for debugging.
+        #[clap(long)]
+        break_on_missing_keys: bool,
     },
 
     /// Resolve the targets to their resulting pattern sets.
-    Resolve { targets: Vec<String> },
+    Resolve {
+        targets: Vec<String>,
+
+        /// If index keys are found to be missing, pause for debugging.
+        #[clap(long)]
+        break_on_missing_keys: bool,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -731,6 +758,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         }
 
         Subcommand::Add {
+            fetch_index,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -738,11 +766,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+            operation::selection::add(&sparse_repo, true, projects_and_targets, fetch_index, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Remove {
+            fetch_index,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -750,7 +779,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
+            operation::selection::remove(
+                &sparse_repo,
+                true,
+                projects_and_targets,
+                fetch_index,
+                app,
+            )?;
             Ok(ExitCode(0))
         }
 
@@ -938,8 +973,17 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Generate { sparse_repo } => {
-                let exit_code = operation::index::generate(app, backend, sparse_repo)?;
+            IndexSubcommand::Generate {
+                sparse_repo,
+                break_on_missing_keys,
+            } => {
+                let exit_code =
+                    operation::index::generate(app, backend, sparse_repo, break_on_missing_keys)?;
+                Ok(exit_code)
+            }
+
+            IndexSubcommand::Get { target } => {
+                let exit_code = operation::index::get(app, backend, Path::new("."), &target)?;
                 Ok(exit_code)
             }
 
@@ -952,6 +996,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 sparse_repo,
                 remote,
                 additional_ref_name: additional_ref_name_name,
+                break_on_missing_keys,
             } => {
                 let exit_code = operation::index::push(
                     app,
@@ -959,12 +1004,22 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     sparse_repo,
                     remote,
                     additional_ref_name_name.as_deref(),
+                    break_on_missing_keys,
                 )?;
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Resolve { targets } => {
-                let exit_code = operation::index::resolve(app, backend, Path::new("."), targets)?;
+            IndexSubcommand::Resolve {
+                targets,
+                break_on_missing_keys,
+            } => {
+                let exit_code = operation::index::resolve(
+                    app,
+                    backend,
+                    Path::new("."),
+                    targets,
+                    break_on_missing_keys,
+                )?;
                 Ok(exit_code)
             }
         },
@@ -1018,6 +1073,18 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     }
 }
 
+// Returns a cmd name for a sandbox.
+// Returns None if cmd hasn't been determined to need a sandbox prefix.
+fn sandbox_name_for_cmd(opts: &FocusOpts) -> Option<&str> {
+    match &opts.cmd {
+        Subcommand::Maintenance {
+            subcommand: MaintenanceSubcommand::Run { .. },
+            ..
+        } => Some("maintenance_"),
+        _ => None,
+    }
+}
+
 /// Run the main and any destructors. Local variables are not guaranteed to be
 /// dropped if `std::process::exit` is called, so make sure to bubble up the
 /// return code to the top level, which is the only place in the code that's
@@ -1039,7 +1106,10 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let preserve_sandbox = true;
 
-    let app = Arc::from(App::new(preserve_sandbox)?);
+    let app = Arc::from(App::new(
+        preserve_sandbox,
+        sandbox_name_for_cmd(&options),
+    )?);
     let ti_context = app.tool_insights_client();
 
     setup_thread_pool(*resolution_threads)?;

@@ -117,6 +117,22 @@ impl Tracker {
     pub fn ensure_registered(&self, repo_directory: &Path, app: Arc<App>) -> Result<()> {
         let uuid = TrackedRepo::get_or_generate_uuid(repo_directory, app)?;
         let link_path = self.repos_by_uuid_dir().join(uuid.to_string());
+        if link_path.is_symlink() {
+            if let Ok(path) = std::fs::read_link(&link_path) {
+                let canonical_repo_dir = repo_directory
+                    .canonicalize()
+                    .context("Canonicalizing repo path")?;
+                let canonical_link_target = path
+                    .canonicalize()
+                    .context("Canonicalzing existing symlink path")?;
+                if canonical_repo_dir == canonical_link_target {
+                    // The symlink already exists.
+                    info!(?canonical_repo_dir, "Symlink already exists");
+                    return Ok(());
+                }
+            }
+        }
+
         std::os::unix::fs::symlink(repo_directory, link_path.as_path()).with_context(|| {
             format!(
                 "creating symlink from {} to {}",

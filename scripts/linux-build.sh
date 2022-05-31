@@ -1,11 +1,13 @@
 #!/bin/bash -e
 # fetch and extract the rust toolchain
-
+set -eux
 
 function die() {
     echo "$@" > /dev/stderr
     exit 1
 }
+
+role=${1-"the-focus-indexer"}
 
 ##
 ## Preconditions
@@ -22,7 +24,7 @@ popd
 
 
 cargo_target=x86_64-unknown-linux-gnu
-export PATH=${PATH}:${PWD}/toolchain/rust-dev/bin
+export PATH="${PATH}:${PWD}/toolchain/rust-dev/bin"
 rm -rf focus
 git clone --single-branch -b main --depth 1 http://git.twitter.biz/ro/focus
 pushd focus
@@ -36,14 +38,14 @@ echo "[http]" >> .cargo/config
 echo "proxy = \"${HTTP_PROXY}\"" >> .cargo/config
 # configure git
 echo "Configuring git..."
-git config http.proxy ${HTTP_PROXY}
+git config http.proxy "${HTTP_PROXY}"
 # toolchain info
 echo "Toolchain info:"
 rustc --version
 cargo --version
 # build
 echo "Building..."
-cargo build --release --target $cargo_target
+cargo build --release --target "$cargo_target"
 popd
 
 ##
@@ -58,19 +60,18 @@ cp ../focus/target/$cargo_target/release/focus bin/focus
 tar jcf ../focus.tar.bz2 .
 clusters=("smf1" "atla" "pdxa")
 for cluster in ${clusters[@]}; do
-    packer add_version --cluster=$cluster --use-tfe devprod $file ../focus.tar.bz2
-    packer versions --cluster=$cluster --use-tfe devprod $file
+    packer add_version "--cluster=$cluster" --use-tfe "$role" "$file" ../focus.tar.bz2
+    packer versions "--cluster=$cluster" --use-tfe "$role" "$file"
 done
 popd
 
 ##
 ## Mark latest packer versions live
 ##
-role=devprod
 package="focus.Linux.x86_64"
 clusters=("smf1" "atla" "pdxa")
 for cluster in ${clusters[@]}; do
-    version=$(packer versions --cluster=$cluster --use-tfe $role $package 2>&1 | grep 'Version' | awk '{print $2}' | tail -n1)
+    version=$(packer versions "--cluster=$cluster" --use-tfe "$role" "$package" 2>&1 | grep 'Version' | awk '{print $2}' | tail -n1)
     echo "Latest version in $cluster is $version; marking it as LIVE"
-    packer set_live --cluster=$cluster $role $package $version
+    packer set_live "--cluster=$cluster" "$role" "$package" "$version"
 done

@@ -62,9 +62,9 @@ impl Display for Selection {
             let mut projects: Vec<_> = self
                 .projects
                 .iter()
-                .filter(|project| project.mandatory)
+                .filter(|&project| !project.mandatory)
                 .collect();
-            projects.sort_unstable_by_key(|project| project.name.as_str());
+            projects.sort_unstable_by_key(|&project| project.name.as_str());
             projects
         };
 

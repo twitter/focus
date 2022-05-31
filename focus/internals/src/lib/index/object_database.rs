@@ -18,6 +18,9 @@ pub trait ObjectDatabase {
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)>;
 
+    /// Look up a value by the provided key hash, without hashing it ourselves.
+    fn get_direct(&self, hash: &ContentHash) -> anyhow::Result<Option<DependencyValue>>;
+
     /// Insert a new key-value pair into persistent storage.
     fn put(
         &self,
@@ -40,12 +43,17 @@ impl<T: Cache> ObjectDatabase for T {
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
         let hash = content_hash_dependency_key(ctx, key)?;
+        let result = self.get_direct(&hash)?;
+        Ok((hash, result))
+    }
+
+    fn get_direct(&self, hash: &ContentHash) -> anyhow::Result<Option<DependencyValue>> {
         let result = match self.get(*FUNCTION_ID, hash.0)? {
             Some(content) => serde_json::from_slice(&content[..])
                 .context("deserializing DependencyValue as JSON")?,
             None => None,
         };
-        Ok((hash, result))
+        Ok(result)
     }
 
     fn put(
@@ -132,9 +140,14 @@ pub mod testing {
             key: &DependencyKey,
         ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
             let hash = content_hash_dependency_key(ctx, key)?;
-            let entries = self.entries.lock().expect("poisoned mutex");
-            let dep_value = entries.get(&hash).cloned();
+            let dep_value = self.get_direct(&hash)?;
             Ok((hash, dep_value))
+        }
+
+        fn get_direct(&self, hash: &ContentHash) -> anyhow::Result<Option<DependencyValue>> {
+            let entries = self.entries.lock().expect("poisoned mutex");
+            let dep_value = entries.get(hash).cloned();
+            Ok(dep_value)
         }
 
         fn put(
@@ -191,38 +204,43 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
         ctx: &HashContext,
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
-        let hash @ ContentHash(key_oid) = content_hash_dependency_key(ctx, key)?;
+        let hash = content_hash_dependency_key(ctx, key)?;
+        let result = self.get_direct(&hash)?;
+        Ok((hash, result))
+    }
 
-        let kv_tree = match ctx.repo.find_reference(Self::REF_NAME) {
+    fn get_direct(&self, hash: &ContentHash) -> anyhow::Result<Option<DependencyValue>> {
+        let kv_tree = match self.repo.find_reference(Self::REF_NAME) {
             Ok(reference) => reference
                 .peel_to_tree()
                 .context("peeling kv tree reference")?,
-            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok((hash, None)),
+            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(None),
             Err(e) => return Err(e.into()),
         };
 
+        let ContentHash(key_oid) = hash;
         let tree_entry = match kv_tree.get_name(&key_oid.to_string()) {
             Some(tree_entry) => tree_entry,
-            None => return Ok((hash, None)),
+            None => return Ok(None),
         };
 
-        let object = match tree_entry.to_object(ctx.repo) {
+        let object = match tree_entry.to_object(self.repo) {
             Ok(object) => object,
-            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok((hash, None)),
+            Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(None),
             Err(e) => return Err(e.into()),
         };
         let blob = match object.as_blob() {
             Some(blob) => blob,
             None => {
                 warn!(?object, "Tree entry was not a blob");
-                return Ok((hash, None));
+                return Ok(None);
             }
         };
 
         let content = blob.content();
         let result: DependencyValue =
             serde_json::from_slice(content).context("deserializing DependencyValue as JSON")?;
-        Ok((hash, Some(result)))
+        Ok(Some(result))
     }
 
     fn put(

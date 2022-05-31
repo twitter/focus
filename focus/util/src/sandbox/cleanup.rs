@@ -153,7 +153,7 @@ pub fn run(config: &Config) -> Result<()> {
                 && dirent
                     .file_name()
                     .to_str()
-                    .map(|s| s.starts_with(NAME_PREFIX))
+                    .map(|s| s.starts_with(DEFAULT_NAME_PREFIX))
                     .unwrap_or(false)
         })
         .filter_map(|d| d.ok())
@@ -290,7 +290,7 @@ cleanup = 72
 
             let mut paths: Vec<PathBuf> = (0..7)
                 .into_iter()
-                .map(|i| sb_root.path().join(format!("{}{}", NAME_PREFIX, i)))
+                .map(|i| sb_root.path().join(format!("{}{}", DEFAULT_NAME_PREFIX, i)))
                 .collect();
 
             paths.reverse();

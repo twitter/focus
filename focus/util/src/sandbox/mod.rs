@@ -18,10 +18,14 @@ pub struct Sandbox {
     serial_sequence: AtomicUsize,
 }
 
-const NAME_PREFIX: &str = "focus_sandbox_";
+const DEFAULT_NAME_PREFIX: &str = "focus_sandbox_";
 
 impl Sandbox {
-    pub fn new(description: Option<&str>, preserve_contents: bool) -> Result<Self> {
+    pub fn new(
+        description: Option<&str>,
+        preserve_contents: bool,
+        name_prefix: Option<&str>,
+    ) -> Result<Self> {
         use std::io::Write;
 
         let sandbox_root = paths::focus_sandbox_dir();
@@ -29,7 +33,10 @@ impl Sandbox {
             .with_context(|| format!("creating sandbox root {}", sandbox_root.display()))?;
 
         let underlying: TempDir = tempfile::Builder::new()
-            .prefix(NAME_PREFIX)
+            .prefix(&match name_prefix {
+                Some(prefix) => DEFAULT_NAME_PREFIX.to_string() + prefix,
+                None => DEFAULT_NAME_PREFIX.to_string(),
+            })
             .tempdir_in(sandbox_root)
             .context("creating a temporary directory to house the sandbox")?;
 
@@ -146,7 +153,7 @@ mod tests {
     #[test]
     fn sandbox_deletion() -> Result<()> {
         let path = {
-            let sandbox = Sandbox::new(None, false)?;
+            let sandbox = Sandbox::new(None, false, None)?;
             let owned_path = sandbox.path().to_owned();
             owned_path
         };
@@ -156,7 +163,7 @@ mod tests {
 
     #[test]
     fn sandbox_preservation() -> Result<()> {
-        let sandbox = Sandbox::new(None, true)?;
+        let sandbox = Sandbox::new(None, true, None)?;
         let path = sandbox.path().to_owned();
         drop(sandbox);
         assert!(fs::metadata(&path)?.is_dir());
@@ -165,8 +172,29 @@ mod tests {
     }
 
     #[test]
+    fn sandbox_name_prefix_is_present() -> Result<()> {
+        let unnamed_sandbox = Sandbox::new(None, false, None)?;
+        assert!(unnamed_sandbox
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(&DEFAULT_NAME_PREFIX));
+
+        let named_sandbox = Sandbox::new(None, false, Some("test_"))?;
+        assert!(named_sandbox
+            .path()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(&DEFAULT_NAME_PREFIX));
+
+        Ok(())
+    }
+
+    #[test]
     fn file_naming() -> Result<()> {
-        let sandbox = Sandbox::new(None, true)?;
+        let sandbox = Sandbox::new(None, true, None)?;
         match sandbox.create_file(Some("hello"), Some("txt"), None) {
             Ok((_, path, ser)) => {
                 assert_eq!(ser, 0);
@@ -210,7 +238,7 @@ mod tests {
     #[test]
     fn writing_command_descripton() -> Result<()> {
         let description = "hello";
-        let sandbox = Sandbox::new(Some(description), true)?;
+        let sandbox = Sandbox::new(Some(description), true, None)?;
         assert_eq!(
             fs::read_to_string(sandbox.command_description_path())?,
             format!("{}\n", description)

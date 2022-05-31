@@ -1,23 +1,27 @@
 use std::borrow::Borrow;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
-use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer};
+use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer, KeysetID};
 use focus_util::app::{App, ExitCode};
 use focus_util::git_helper;
 use focus_util::paths::assert_focused_repo;
 use tracing::{debug, info};
 
 use crate::index::{
-    content_hash_dependency_key, get_files_to_materialize, DependencyKey, HashContext,
+    content_hash_dependency_key, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
     ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
     SimpleGitOdb, FUNCTION_ID,
 };
 use crate::model::repo::Repo;
 use crate::model::selection::OperationAction;
 use crate::target::{Target, TargetSet};
+
+const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
 
 #[derive(
     Clone,
@@ -80,6 +84,7 @@ fn resolve_targets(
     backend: Backend,
     sparse_repo_path: &Path,
     targets: HashSet<Target>,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<Result<ResolveTargetResult, ExitCode>> {
     let dep_keys: HashSet<DependencyKey> = targets
         .iter()
@@ -109,7 +114,8 @@ fn resolve_targets(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let (pattern_count, _checked_out) = repo.sync(&targets, true, app, odb.borrow())?;
+            let (pattern_count, _checked_out) =
+                repo.sync(&targets, true, app.clone(), odb.borrow())?;
             println!("Pattern count: {}", pattern_count);
 
             match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {
@@ -123,6 +129,16 @@ fn resolve_targets(
                     for (key, hash) in keys {
                         println!("{} {}", hash, dep_key_to_target(&key));
                     }
+
+                    if break_on_missing_keys {
+                        println!("Breaking for debugging...");
+                        println!("Sandbox path: {}", app.sandbox().path().display());
+                        drop(odb);
+                        loop {
+                            std::thread::sleep(Duration::from_secs(1));
+                        }
+                    }
+
                     Ok(Err(ExitCode(1)))
                 }
             }
@@ -135,6 +151,7 @@ pub fn resolve(
     backend: Backend,
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     assert_focused_repo(sparse_repo_path)?;
     let repo = Repo::open(sparse_repo_path, app.clone())?;
@@ -145,7 +162,13 @@ pub fn resolve(
     }?;
     let targets = TargetSet::try_from(&selection)?;
 
-    let paths = match resolve_targets(app, backend, sparse_repo_path, targets)? {
+    let paths = match resolve_targets(
+        app,
+        backend,
+        sparse_repo_path,
+        targets,
+        break_on_missing_keys,
+    )? {
         Ok(ResolveTargetResult {
             seen_keys: _,
             paths,
@@ -187,10 +210,33 @@ pub fn hash(
     Ok(ExitCode(0))
 }
 
+pub fn get(
+    _app: Arc<App>,
+    backend: Backend,
+    sparse_repo_path: &Path,
+    hash: &str,
+) -> anyhow::Result<ExitCode> {
+    let repo = git2::Repository::open(sparse_repo_path)?;
+    let hash = ContentHash::from_str(hash)?;
+    let odb = make_odb(backend, &repo);
+    let value = odb.get_direct(&hash)?;
+    match value {
+        Some(value) => {
+            println!("{hash} {value:#?}");
+            Ok(ExitCode(0))
+        }
+        None => {
+            println!("{hash} <not found>");
+            Ok(ExitCode(1))
+        }
+    }
+}
+
 pub fn generate(
     app: Arc<App>,
     backend: Backend,
     sparse_repo_path: PathBuf,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
@@ -202,7 +248,13 @@ pub fn generate(
         targets
     };
 
-    match resolve_targets(app, backend, &sparse_repo_path, all_targets)? {
+    match resolve_targets(
+        app,
+        backend,
+        &sparse_repo_path,
+        all_targets,
+        break_on_missing_keys,
+    )? {
         Ok(_result) => Ok(ExitCode(0)),
         Err(exit_code) => Ok(exit_code),
     }
@@ -221,7 +273,7 @@ pub fn fetch(
     remote: String,
 ) -> anyhow::Result<ExitCode> {
     let index_dir = index_repo_dir(&sparse_repo_path);
-    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app)?;
+    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
 
     let repo = git2::Repository::open(&sparse_repo_path)?;
     let odb = match backend {
@@ -230,10 +282,32 @@ pub fn fetch(
         }
         Backend::RocksDb => RocksDBCache::new(&repo),
     };
-    synchronizer
-        .fetch_and_populate(&odb)
-        .context("Fetching index data")?;
+    let repo = Repo::open(sparse_repo_path.as_path(), app).context("Failed to open repo")?;
+    let mut commit = repo.get_head_commit()?;
 
+    let available_keysets = synchronizer.available_remote_keysets()?;
+
+    let mut found_keyset: Option<KeysetID> = None;
+    for _ in 0..PARENTS_TO_TRY_IN_FETCH {
+        let keyset_id = commit.tree()?.id();
+        debug!(
+            "Fetching index {}... for commit {}...",
+            &keyset_id.to_string()[..10],
+            &commit.id().to_string()[..10]
+        );
+        if available_keysets.contains(&keyset_id) {
+            found_keyset = Some(keyset_id);
+            break;
+        }
+        commit = commit.parent(0)?;
+    }
+    if let Some(keyset_id) = found_keyset {
+        synchronizer
+            .fetch_and_populate(keyset_id, &odb)
+            .context("Fetching index data")?;
+    } else {
+        info!("No index matches the current commit");
+    }
     Ok(ExitCode(0))
 }
 
@@ -242,7 +316,8 @@ pub fn push(
     backend: Backend,
     sparse_repo_path: PathBuf,
     remote: String,
-    additional_ref_name: Option<&str>,
+    _additional_ref_name: Option<&str>,
+    break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
@@ -269,7 +344,13 @@ pub fn push(
     let ResolveTargetResult {
         seen_keys,
         paths: _,
-    } = match resolve_targets(app, backend.clone(), &sparse_repo_path, all_targets)? {
+    } = match resolve_targets(
+        app,
+        backend.clone(),
+        &sparse_repo_path,
+        all_targets,
+        break_on_missing_keys,
+    )? {
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
@@ -294,7 +375,7 @@ pub fn push(
     };
 
     info!("Pushing index");
-    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None, additional_ref_name)?;
+    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
 
     Ok(ExitCode(0))
 }
@@ -317,7 +398,7 @@ mod tests {
         let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
         let remote = format!("file://{}", remote_index_store.path().display());
 
-        let app = Arc::new(App::new(false)?);
+        let app = Arc::new(App::new(false, None)?);
         let label: Label = "//project_a/src/main/java/com/example/cmdline:runner".parse()?;
 
         // Populate remote index store.
@@ -330,6 +411,7 @@ mod tests {
                 fixture.sparse_repo_path.clone(),
                 remote.clone(),
                 None,
+                false,
             )?;
             assert_eq!(exit_code, 0);
         }
@@ -361,7 +443,7 @@ mod tests {
                             Label("//project_a/src/main/java/com/example/cmdline:runner"),
                         ),
                         ContentHash(
-                            ca3400ca51b0961f57a8bac6f8b5280dc02012ef,
+                            c31c95867b703cb343a04d99a8909eb17f8ba9ee,
                         ),
                     ),
                 },
@@ -370,20 +452,20 @@ mod tests {
         }
 
         let ExitCode(exit_code) = fetch(
-            app.clone(),
+            app,
             backend.clone(),
             fixture.sparse_repo_path.clone(),
-            remote.clone(),
+            remote,
         )?;
         assert_eq!(exit_code, 0);
 
         // Try to materialize files again -- this should be a cache hit.
         {
-            let odb = make_odb(backend.clone(), repo);
+            let odb = make_odb(backend, repo);
             let materialize_result = get_files_to_materialize(
                 &ctx,
                 odb.borrow(),
-                hashset! {DependencyKey::BazelPackage(label.clone() )},
+                hashset! {DependencyKey::BazelPackage(label )},
             )?;
             insta::assert_debug_snapshot!(materialize_result, @r###"
             Ok {
@@ -417,7 +499,7 @@ mod tests {
         let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
         let remote = format!("file://{}", remote_index_store.path().display());
 
-        let app = Arc::new(App::new(false)?);
+        let app = Arc::new(App::new(false, None)?);
 
         let fixture = RepoPairFixture::new()?;
         fixture.perform_clone()?;
@@ -427,15 +509,11 @@ mod tests {
             fixture.sparse_repo_path.clone(),
             remote.clone(),
             Some("latest"),
+            false,
         )?;
         assert_eq!(exit_code, 0);
 
-        let ExitCode(exit_code) = fetch(
-            app.clone(),
-            backend.clone(),
-            fixture.sparse_repo_path.clone(),
-            remote.clone(),
-        )?;
+        let ExitCode(exit_code) = fetch(app, backend, fixture.sparse_repo_path.clone(), remote)?;
         assert_eq!(exit_code, 0);
 
         Ok(())
