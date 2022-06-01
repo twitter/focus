@@ -348,4 +348,31 @@ It isn't just one of your holiday games
 
         Ok(())
     }
+
+    #[test]
+    fn sync_configures_working_and_outlining_trees() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        // Check working tree
+        let working_tree_config = fixture.sparse_repo()?.underlying().config()?.snapshot()?;
+        assert!(working_tree_config.get_bool("index.sparse")?);
+        assert!(working_tree_config.get_bool("core.untrackedCache")?);
+
+        // Check outlining tree
+        let outlining_tree_config = fixture
+            .sparse_repo()?
+            .outlining_tree()
+            .unwrap()
+            .underlying()
+            .git_repo()
+            .config()?
+            .snapshot()?;
+        assert!(outlining_tree_config.get_bool("index.sparse")?);
+        assert!(outlining_tree_config.get_bool("core.untrackedCache")?);
+
+        Ok(())
+    }
 }
