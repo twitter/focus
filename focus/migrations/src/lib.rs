@@ -108,7 +108,7 @@ impl Runner {
         for migration in self
             .migrations
             .iter()
-            .skip_while(|&m| m.as_ref().id() < previous_version.get())
+            .skip_while(|&m| m.as_ref().id() <= previous_version.get())
         {
             let migration = migration.as_ref();
             let identifier = migration.id();
@@ -173,6 +173,21 @@ mod tests {
 
         fn description(&self) -> &str {
             "A migration that succeeds for use in tests"
+        }
+
+        fn upgrade(&self, _path: &Path) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    struct FailureMigrationWithOldID;
+    impl Migration for FailureMigrationWithOldID {
+        fn id(&self) -> Identifier {
+            Identifier::Serial(0)
+        }
+
+        fn description(&self) -> &str {
+            "A migration that fails, but has the same ID as the default value for the manifest. It is used to detect when a migration shouldn't have been run."
         }
 
         fn upgrade(&self, _path: &Path) -> Result<()> {
@@ -256,6 +271,18 @@ mod tests {
                 fixture.new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})])?;
             assert!(!runner.is_upgrade_required()?);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn migrations_are_skipped_when_identifier_is_less_equal_version() -> Result<()> {
+        let failing_migration = FailureMigrationWithOldID {};
+        let migrations: Vec<Box<dyn Migration>> = vec![Box::new(failing_migration)];
+        let fixture = Fixture::new()?;
+        let runner = fixture.new_runner_with_migrations(migrations)?;
+        assert!(!runner.is_upgrade_required()?);
+        assert!(!runner.perform_pending_migrations().is_err()); // Try running it anyways, it should get skipped so there's no error
 
         Ok(())
     }
