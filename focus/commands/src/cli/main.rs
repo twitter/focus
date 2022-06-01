@@ -1106,10 +1106,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let preserve_sandbox = true;
 
-    let app = Arc::from(App::new(
-        preserve_sandbox,
-        sandbox_name_for_cmd(&options),
-    )?);
+    let app = Arc::from(App::new(preserve_sandbox, sandbox_name_for_cmd(&options))?);
     let ti_context = app.tool_insights_client();
 
     setup_thread_pool(*resolution_threads)?;
