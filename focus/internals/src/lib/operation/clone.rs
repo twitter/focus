@@ -1,5 +1,6 @@
 use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::selection::{Operation, OperationAction};
+use crate::operation::event;
 use crate::operation::index::{fetch, Backend};
 use crate::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
@@ -72,7 +73,8 @@ pub fn run(
         ),
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, app, index_remote)
+    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, app, index_remote)?;
+    set_up_hooks(&sparse_repo_path)
 }
 
 /// Clone from a local path on disk.
@@ -428,6 +430,11 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
     Ok(())
 }
 
+fn set_up_hooks(sparse_repo: &Path) -> Result<()> {
+    event::init(sparse_repo)?;
+    Ok(())
+}
+
 fn copy_local_branches(
     dense_repo: &Repository,
     sparse_repo: &Repository,
@@ -638,6 +645,14 @@ mod test {
                 }
             }
         }
+
+        // Check post-merge hook
+        let focus_exe = &std::env::current_exe().unwrap_or(PathBuf::from("focus"));
+        let focus_exe_path = focus_exe.file_name().unwrap().to_string_lossy();
+        let post_merge_hook_contents =
+            std::fs::read_to_string(git_repo.path().join("hooks").join("post-merge"))
+                .expect("Something went wrong reading the file");
+        assert_eq!(post_merge_hook_contents, format!("{} event post-merge\n", focus_exe_path));
 
         git_repo
             .find_branch("branch_two", git2::BranchType::Local)
