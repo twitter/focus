@@ -19,7 +19,7 @@ pub fn init(repo_path: &Path) -> Result<()> {
 
 fn write_hooks_to_dir(hooks: &[&str], dir: &Path) -> Result<()> {
     for hook in hooks {
-        let focus_exe = &std::env::current_exe().unwrap_or(PathBuf::from("focus"));
+        let focus_exe = &std::env::current_exe().unwrap_or_else(|_| PathBuf::from("focus"));
         let focus_exe_path = focus_exe.file_name().unwrap().to_string_lossy();
         let contents = format!("{} event {}", focus_exe_path, hook);
 
