@@ -51,4 +51,28 @@ pub fn post_checkout(_app: Arc<App>) -> Result<ExitCode> {
 }
 
 #[cfg(test)]
-mod testing {}
+mod testing {
+    use anyhow::Result;
+    use std::fs;
+
+    use super::*;
+
+    #[test]
+    fn write_hooks_to_dir_produces_correct_scripts() -> Result<()> {
+        let focus_exe = &std::env::current_exe().unwrap_or_else(|_| PathBuf::from("focus"));
+        let focus_exe_path = focus_exe.file_name().unwrap().to_string_lossy();
+        let hook_names = vec!["fancy-hook", "boring-hook"];
+        let temp_dir = tempfile::tempdir()?;
+        let temp_dir_path = temp_dir.path();
+
+        write_hooks_to_dir(&hook_names, temp_dir_path)?;
+
+        for hook in hook_names {
+            let expected_content = format!("{} event {}\n", focus_exe_path, hook);
+            let content = fs::read_to_string(temp_dir_path.join(hook))
+                .context(format!("Could not read hook {}", hook))?;
+            assert_eq!(content, expected_content);
+        }
+        Ok(())
+    }
+}
