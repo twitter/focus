@@ -28,6 +28,7 @@ use crate::{
 };
 
 use super::{
+    configuration::{Configuration, IndexConfig},
     outlining::{PatternContainer, PatternSet, PatternSetWriter, BASELINE_PATTERNS},
     selection::{Selection, SelectionManager},
 };
@@ -491,6 +492,7 @@ pub struct Repo {
     working_tree: Option<WorkingTree>,
     outlining_tree: Option<OutliningTree>,
     repo: git2::Repository,
+    config: Configuration,
     app: Arc<App>,
 }
 
@@ -520,6 +522,8 @@ impl Repo {
         } else {
             None
         };
+
+        let config = Configuration::new(path).context("Loading configuration")?;
         let path = path.to_owned();
 
         Ok(Self {
@@ -528,12 +532,17 @@ impl Repo {
             working_tree,
             outlining_tree,
             repo,
+            config,
             app,
         })
     }
 
     pub fn underlying(&self) -> &git2::Repository {
         &self.repo
+    }
+
+    pub fn config(&self) -> &Configuration {
+        &self.config
     }
 
     pub fn focus_git_dir_path(git_dir: &Path) -> PathBuf {
@@ -549,7 +558,7 @@ impl Repo {
         &self,
         targets: &TargetSet,
         skip_pattern_application: bool,
-        index_remote: Option<String>,
+        index_config: &IndexConfig,
         app: Arc<App>,
         cache: &RocksDBCache,
     ) -> Result<(usize, bool)> {
@@ -587,7 +596,7 @@ impl Repo {
             let mut paths_to_materialize =
                 get_files_to_materialize(&hash_context, cache, dependency_keys.clone())?;
 
-            if let Some(index_remote) = index_remote {
+            if index_config.enabled {
                 if let PathsToMaterializeResult::MissingKeys { .. } = paths_to_materialize {
                     info!(
                         "Cache miss for sparse checkout patterns; fetching from the remote index"
@@ -596,7 +605,7 @@ impl Repo {
                         app.clone(),
                         cache,
                         working_tree.work_dir().to_path_buf(),
-                        index_remote,
+                        index_config,
                     );
                     // Query again now that the index is populated.
                     paths_to_materialize =
