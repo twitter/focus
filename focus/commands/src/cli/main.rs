@@ -545,10 +545,6 @@ enum IndexSubcommand {
         #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
 
-        /// When specified, the content is also pushed with the given ref name.
-        #[clap(long)]
-        additional_ref_name: Option<String>,
-
         /// If index keys are found to be missing, pause for debugging.
         #[clap(long)]
         break_on_missing_keys: bool,
@@ -1000,7 +996,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             IndexSubcommand::Push {
                 sparse_repo,
                 remote,
-                additional_ref_name: additional_ref_name_name,
                 break_on_missing_keys,
             } => {
                 let exit_code = operation::index::push(
@@ -1008,7 +1003,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     backend,
                     sparse_repo,
                     remote,
-                    additional_ref_name_name.as_deref(),
                     break_on_missing_keys,
                 )?;
                 Ok(exit_code)

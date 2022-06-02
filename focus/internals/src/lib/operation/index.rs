@@ -323,7 +323,6 @@ pub fn push(
     backend: Backend,
     sparse_repo_path: PathBuf,
     remote: String,
-    _additional_ref_name: Option<&str>,
     break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
@@ -417,7 +416,6 @@ mod tests {
                 backend.clone(),
                 fixture.sparse_repo_path.clone(),
                 remote.clone(),
-                None,
                 false,
             )?;
             assert_eq!(exit_code, 0);
@@ -499,34 +497,6 @@ mod tests {
             }
             "###);
         }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_index_push_additional_ref_name() -> anyhow::Result<()> {
-        let backend = Backend::RocksDb;
-
-        let temp_dir = tempfile::tempdir()?;
-        let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
-        let remote = format!("file://{}", remote_index_store.path().display());
-
-        let app = Arc::new(App::new(false, None)?);
-
-        let fixture = RepoPairFixture::new()?;
-        fixture.perform_clone()?;
-        let ExitCode(exit_code) = push(
-            app.clone(),
-            backend.clone(),
-            fixture.sparse_repo_path.clone(),
-            remote.clone(),
-            Some("latest"),
-            false,
-        )?;
-        assert_eq!(exit_code, 0);
-
-        let ExitCode(exit_code) = fetch(app, backend, fixture.sparse_repo_path.clone(), remote)?;
-        assert_eq!(exit_code, 0);
 
         Ok(())
     }
