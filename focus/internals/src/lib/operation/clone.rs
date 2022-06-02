@@ -1,7 +1,7 @@
 use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::selection::{Operation, OperationAction};
 use crate::operation::event;
-use crate::operation::index::{fetch, Backend};
+use crate::operation::index::fetch;
 use crate::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
@@ -197,12 +197,7 @@ fn clone_remote(
 }
 
 fn fetch_initial_index(sparse_repo_path: &Path, remote: String, app: Arc<App>) -> Result<ExitCode> {
-    fetch(
-        app,
-        Backend::RocksDb,
-        sparse_repo_path.to_path_buf(),
-        remote,
-    )
+    fetch(app, sparse_repo_path.to_path_buf(), remote)
 }
 
 fn set_up_sparse_repo(

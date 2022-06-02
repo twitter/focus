@@ -209,16 +209,6 @@ enum Subcommand {
 
     /// Interact with the on-disk focus index.
     Index {
-        #[clap(
-            short,
-            long,
-            global = true,
-            required = false,
-            possible_values = operation::index::Backend::VARIANTS,
-            default_value = "rocks-db",
-        )]
-        backend: operation::index::Backend,
-
         #[clap(subcommand)]
         subcommand: IndexSubcommand,
     },
@@ -263,10 +253,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         },
         Subcommand::GitTrace { .. } => "git-trace",
         Subcommand::Upgrade { .. } => "upgrade",
-        Subcommand::Index {
-            backend: _,
-            subcommand,
-        } => match subcommand {
+        Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear",
             IndexSubcommand::Fetch { .. } => "index-fetch",
             IndexSubcommand::Get { .. } => "index-get",
@@ -957,12 +944,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             Ok(ExitCode(0))
         }
 
-        Subcommand::Index {
-            backend,
-            subcommand,
-        } => match subcommand {
+        Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { sparse_repo } => {
-                operation::index::clear(backend, sparse_repo)?;
+                operation::index::clear(sparse_repo)?;
                 Ok(ExitCode(0))
             }
 
@@ -970,7 +954,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 sparse_repo,
                 remote,
             } => {
-                let exit_code = operation::index::fetch(app, backend, sparse_repo, remote)?;
+                let exit_code = operation::index::fetch(app, sparse_repo, remote)?;
                 Ok(exit_code)
             }
 
@@ -979,12 +963,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 break_on_missing_keys,
             } => {
                 let exit_code =
-                    operation::index::generate(app, backend, sparse_repo, break_on_missing_keys)?;
+                    operation::index::generate(app, sparse_repo, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Get { target } => {
-                let exit_code = operation::index::get(app, backend, Path::new("."), &target)?;
+                let exit_code = operation::index::get(app, Path::new("."), &target)?;
                 Ok(exit_code)
             }
 
@@ -998,13 +982,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 remote,
                 break_on_missing_keys,
             } => {
-                let exit_code = operation::index::push(
-                    app,
-                    backend,
-                    sparse_repo,
-                    remote,
-                    break_on_missing_keys,
-                )?;
+                let exit_code =
+                    operation::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
@@ -1012,13 +991,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 targets,
                 break_on_missing_keys,
             } => {
-                let exit_code = operation::index::resolve(
-                    app,
-                    backend,
-                    Path::new("."),
-                    targets,
-                    break_on_missing_keys,
-                )?;
+                let exit_code =
+                    operation::index::resolve(app, Path::new("."), targets, break_on_missing_keys)?;
                 Ok(exit_code)
             }
         },
