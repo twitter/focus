@@ -282,7 +282,7 @@ mod tests {
         let fixture = Fixture::new()?;
         let runner = fixture.new_runner_with_migrations(migrations)?;
         assert!(!runner.is_upgrade_required()?);
-        assert!(!runner.perform_pending_migrations().is_err()); // Try running it anyways, it should get skipped so there's no error
+        assert!(runner.perform_pending_migrations().is_ok()); // Try running it anyways, it should get skipped so there's no error
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow};
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -6,11 +6,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use content_addressed_cache::{CacheSynchronizer, GitBackedCacheSynchronizer, KeysetID};
+use content_addressed_cache::{Cache, CacheSynchronizer, GitBackedCacheSynchronizer, KeysetID};
 use focus_util::app::{App, ExitCode};
 use focus_util::git_helper;
 use focus_util::paths::assert_focused_repo;
-use tracing::{debug, info};
+use tracing::{debug, debug_span, info};
 
 use crate::index::{
     content_hash_dependency_key, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
@@ -23,14 +23,11 @@ use crate::target::{Target, TargetSet};
 
 const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
 
-fn make_odb<'a>(repo: &'a git2::Repository) -> Box<dyn ObjectDatabase + 'a> {
-    Box::new(RocksDBCache::new(repo))
-}
-
 pub fn clear(sparse_repo_path: PathBuf) -> anyhow::Result<()> {
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
-    let odb = make_odb(&repo);
-    odb.clear()?;
+    let odb = RocksDBCache::new(&repo);
+    let cache: &dyn Cache = &odb;
+    cache.clear()?;
     Ok(())
 }
 
@@ -62,6 +59,7 @@ fn resolve_targets(
     sparse_repo_path: &Path,
     targets: HashSet<Target>,
     break_on_missing_keys: bool,
+    index_remote: Option<String>,
 ) -> anyhow::Result<Result<ResolveTargetResult, ExitCode>> {
     let dep_keys: HashSet<DependencyKey> = targets
         .iter()
@@ -76,9 +74,10 @@ fn resolve_targets(
         head_tree: &head_tree,
         caches: Default::default(),
     };
-    let odb = make_odb(&repo);
+    let odb = RocksDBCache::new(&repo);
 
-    let materialize_result = get_files_to_materialize(&ctx, odb.borrow(), dep_keys.clone())?;
+    let borrowed_odb = odb.borrow();
+    let materialize_result = get_files_to_materialize(&ctx, borrowed_odb, dep_keys.clone())?;
     match materialize_result {
         PathsToMaterializeResult::Ok { seen_keys, paths } => {
             Ok(Ok(ResolveTargetResult { seen_keys, paths }))
@@ -92,10 +91,10 @@ fn resolve_targets(
 
             let repo = Repo::open(repo.path(), app.clone())?;
             let (pattern_count, _checked_out) =
-                repo.sync(&targets, true, app.clone(), odb.borrow())?;
+                repo.sync(&targets, true, index_remote, app.clone(), borrowed_odb)?;
             println!("Pattern count: {}", pattern_count);
 
-            match get_files_to_materialize(&ctx, odb.borrow(), dep_keys)? {
+            match get_files_to_materialize(&ctx, borrowed_odb, dep_keys)? {
                 PathsToMaterializeResult::Ok { seen_keys, paths } => Ok(Ok(ResolveTargetResult {
                     seen_keys,
                     paths: paths.into_iter().collect(),
@@ -139,7 +138,8 @@ pub fn resolve(
     }?;
     let targets = TargetSet::try_from(&selection)?;
 
-    let paths = match resolve_targets(app, sparse_repo_path, targets, break_on_missing_keys)? {
+    let paths = match resolve_targets(app, sparse_repo_path, targets, break_on_missing_keys, None)?
+    {
         Ok(ResolveTargetResult {
             seen_keys: _,
             paths,
@@ -184,7 +184,7 @@ pub fn hash(
 pub fn get(_app: Arc<App>, sparse_repo_path: &Path, hash: &str) -> anyhow::Result<ExitCode> {
     let repo = git2::Repository::open(sparse_repo_path)?;
     let hash = ContentHash::from_str(hash)?;
-    let odb = make_odb(&repo);
+    let odb = RocksDBCache::new(&repo);
     let value = odb.get_direct(&hash)?;
     match value {
         Some(value) => {
@@ -214,7 +214,13 @@ pub fn generate(
         targets
     };
 
-    match resolve_targets(app, &sparse_repo_path, all_targets, break_on_missing_keys)? {
+    match resolve_targets(
+        app,
+        &sparse_repo_path,
+        all_targets,
+        break_on_missing_keys,
+        None,
+    )? {
         Ok(_result) => Ok(ExitCode(0)),
         Err(exit_code) => Ok(exit_code),
     }
@@ -227,11 +233,20 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
 pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf, remote: String) -> anyhow::Result<ExitCode> {
+    let repo = git2::Repository::open(&sparse_repo_path)
+        .with_context(|| format!("Opening repository at {}", &sparse_repo_path.display()))?;
+    let cache = RocksDBCache::new(&repo);
+    fetch_internal(app, &cache, sparse_repo_path, remote)
+}
+
+pub(crate) fn fetch_internal(
+    app: Arc<App>,
+    cache: &RocksDBCache,
+    sparse_repo_path: PathBuf,
+    remote: String,
+) -> anyhow::Result<ExitCode> {
     let index_dir = index_repo_dir(&sparse_repo_path);
     let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
-
-    let repo = git2::Repository::open(&sparse_repo_path)?;
-    let odb = RocksDBCache::new(&repo);
     let repo = Repo::open(sparse_repo_path.as_path(), app).context("Failed to open repo")?;
     let mut commit = repo.get_head_commit()?;
 
@@ -240,11 +255,7 @@ pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf, remote: String) -> anyhow
     let mut found_keyset: Option<KeysetID> = None;
     for _ in 0..PARENTS_TO_TRY_IN_FETCH {
         let keyset_id = commit.tree()?.id();
-        debug!(
-            "Fetching index {}... for commit {}...",
-            &keyset_id.to_string()[..10],
-            &commit.id().to_string()[..10]
-        );
+
         if available_keysets.contains(&keyset_id) {
             found_keyset = Some(keyset_id);
             break;
@@ -252,8 +263,12 @@ pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf, remote: String) -> anyhow
         commit = commit.parent(0)?;
     }
     if let Some(keyset_id) = found_keyset {
+        let keyset_id_str = keyset_id.to_string();
+        let span = debug_span!("Fetching index");
+        info!(tag = %keyset_id_str, "Fetching index");
+        let _guard = span.enter();
         synchronizer
-            .fetch_and_populate(keyset_id, &odb)
+            .fetch_and_populate(keyset_id, cache)
             .context("Fetching index data")?;
     } else {
         info!("No index matches the current commit");
@@ -263,7 +278,6 @@ pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf, remote: String) -> anyhow
 
 pub fn push(
     app: Arc<App>,
-
     sparse_repo_path: PathBuf,
     remote: String,
     break_on_missing_keys: bool,
@@ -293,17 +307,24 @@ pub fn push(
     let ResolveTargetResult {
         seen_keys,
         paths: _,
-    } = match resolve_targets(app, &sparse_repo_path, all_targets, break_on_missing_keys)? {
+    } = match resolve_targets(
+        app,
+        &sparse_repo_path,
+        all_targets,
+        break_on_missing_keys,
+        None,
+    )? {
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
 
     let odb = RocksDBCache::new(repo.underlying());
+    let cache: &dyn ObjectDatabase = &odb;
 
     let keyset = {
         let mut result = HashSet::new();
         for key in seen_keys {
-            let (hash, value) = odb.get(&ctx, &key)?;
+            let (hash, value) = cache.get(&ctx, &key)?;
             if value.is_none() {
                 panic!("Value not found for key: {key:?}");
             }
@@ -363,7 +384,7 @@ mod tests {
 
         // Try to materialize files -- this should be a cache miss.
         {
-            let odb = make_odb(repo);
+            let odb = RocksDBCache::new(repo);
             let materialize_result = get_files_to_materialize(
                 &ctx,
                 odb.borrow(),
@@ -395,7 +416,7 @@ mod tests {
 
         // Try to materialize files again -- this should be a cache hit.
         {
-            let odb = make_odb(repo);
+            let odb = RocksDBCache::new(repo);
             let materialize_result = get_files_to_materialize(
                 &ctx,
                 odb.borrow(),

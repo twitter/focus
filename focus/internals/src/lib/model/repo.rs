@@ -1,5 +1,6 @@
+use content_addressed_cache::RocksDBCache;
 use focus_util::{
-    app::App,
+    app::{App, ExitCode},
     git_helper::{self, get_head_commit},
     paths,
     sandbox_command::SandboxCommandOutput,
@@ -16,9 +17,10 @@ use crate::{
     hashing,
     index::{
         get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
-        HashContext, ObjectDatabase, PathsToMaterializeResult,
+        HashContext, PathsToMaterializeResult,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
+    operation::index,
     target::TargetSet,
     target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
@@ -547,8 +549,9 @@ impl Repo {
         &self,
         targets: &TargetSet,
         skip_pattern_application: bool,
+        index_remote: Option<String>,
         app: Arc<App>,
-        odb: &dyn ObjectDatabase,
+        cache: &RocksDBCache,
     ) -> Result<(usize, bool)> {
         let head_commit = self.get_head_commit()?;
         let head_tree = head_commit.tree().context("Failed to resolve head tree")?;
@@ -577,12 +580,30 @@ impl Repo {
 
         let ti_client = app.tool_insights_client();
         let mut outline_patterns = {
+            let dependency_keys: HashSet<DependencyKey> =
+                targets.iter().cloned().map(DependencyKey::from).collect();
+
             info!("Checking cache for sparse checkout patterns");
-            let paths_to_materialize = get_files_to_materialize(
-                &hash_context,
-                odb,
-                targets.iter().cloned().map(DependencyKey::from).collect(),
-            )?;
+            let mut paths_to_materialize =
+                get_files_to_materialize(&hash_context, cache, dependency_keys.clone())?;
+
+            if let Some(index_remote) = index_remote {
+                if let PathsToMaterializeResult::MissingKeys { .. } = paths_to_materialize {
+                    info!("Cache miss for sparse checkout patterns; fetching from the remote index");
+                    let _: Result<ExitCode> = index::fetch_internal(
+                        app.clone(),
+                        cache,
+                        working_tree.work_dir().to_path_buf(),
+                        index_remote,
+                    );
+                    // Query again now that the index is populated.
+                    paths_to_materialize = get_files_to_materialize(
+                        &hash_context,
+                        cache,
+                        dependency_keys,
+                    )?;
+                }
+            }
 
             match paths_to_materialize {
                 PathsToMaterializeResult::Ok { seen_keys, paths } => {
@@ -628,7 +649,11 @@ impl Repo {
                         .context("Failed to outline")?;
 
                     debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
-                    update_object_database_from_resolution(&hash_context, odb, &resolution_result)?;
+                    update_object_database_from_resolution(
+                        &hash_context,
+                        cache,
+                        &resolution_result,
+                    )?;
                     outline_patterns
                 }
             }
