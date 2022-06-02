@@ -37,6 +37,8 @@ use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
+const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
+const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
 const VERSION_CONFIG_KEY: &str = "focus.version";
 const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
 const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
@@ -324,6 +326,24 @@ impl WorkingTree {
     pub fn get_head_commit(&self) -> Result<git2::Commit> {
         get_head_commit(&self.repo)
     }
+
+    pub fn configure(&self, app: Arc<App>) -> Result<()> {
+        let config_snapshot = self.repo.config()?.snapshot()?;
+
+        if config_snapshot.get_str(INDEX_SPARSE_CONFIG_KEY).is_err() {
+            git_helper::write_config(self.git_dir(), INDEX_SPARSE_CONFIG_KEY, "true", app.clone())
+                .context("Configuring sparse index")?;
+        }
+        if config_snapshot
+            .get_str(CORE_UNTRACKED_CACHE_CONFIG_KEY)
+            .is_err()
+        {
+            git_helper::write_config(self.git_dir(), CORE_UNTRACKED_CACHE_CONFIG_KEY, "true", app)
+                .context("Configuring untracked cache")?;
+        }
+
+        Ok(())
+    }
 }
 
 /// A specialization of a WorkingTree used for outlining tasks, containing only files related to, and necessary for querying, the build graph.
@@ -545,6 +565,15 @@ impl Repo {
                 bail!("Synchronization is only possible in a repo with both working and outlining trees");
             }
         };
+
+        // Ensure that the trees are properly configured
+        working_tree
+            .configure(app.clone())
+            .context("Configuring the working tree")?;
+        outlining_tree
+            .underlying()
+            .configure(app.clone())
+            .context("Configuring the outlining tree")?;
 
         let mut outline_patterns = {
             info!("Checking cache for sparse checkout patterns");

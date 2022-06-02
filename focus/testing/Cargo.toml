@@ -1,13 +1,13 @@
 [package]
 name = "focus-testing"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
-  "vendored-libgit2",
+  "vendored-libgit2", "vendored-openssl",
 ] }
 tempfile = "3.2.0"
 termion = "1.5.6"

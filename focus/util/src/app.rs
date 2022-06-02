@@ -23,10 +23,7 @@ impl Debug for App {
 }
 
 impl App {
-    pub fn new(
-        preserve_sandbox_contents: bool,
-        with_cmd_prefix: Option<&str>,
-    ) -> Result<Self> {
+    pub fn new(preserve_sandbox_contents: bool, with_cmd_prefix: Option<&str>) -> Result<Self> {
         let invocation_description = std::env::args().collect::<Vec<String>>().join(" ");
 
         let sandbox = Arc::from(

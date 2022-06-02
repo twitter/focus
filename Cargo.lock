@@ -314,7 +314,7 @@ dependencies = [
 
 [[package]]
 name = "content-addressed-cache"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "ciborium",
@@ -539,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "focus-commands"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "focus-internals"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "focus-migrations"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "focus-internals",
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "focus-testing"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "git2",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "focus-tracing"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -688,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "focus-util"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1152,6 +1152,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
+name = "openssl-src"
+version = "111.18.0+1.1.1n"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7897a926e1e8d00219127dc020130eca4292e5ca666dd592480d72c3eca2ff6c"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1160,6 +1169,7 @@ dependencies = [
  "autocfg 1.1.0",
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -1875,7 +1885,7 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tool-insights-client"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "libc",
