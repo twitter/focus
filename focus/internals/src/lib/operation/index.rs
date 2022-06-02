@@ -42,6 +42,13 @@ pub enum Backend {
     RocksDb,
 }
 
+struct SyncResult {
+    cache_misses: u32,
+    cache_queries: u32,
+    paths_materialized: u32
+
+}
+
 fn make_odb<'a>(backend: Backend, repo: &'a git2::Repository) -> Box<dyn ObjectDatabase + 'a> {
     match backend {
         Backend::Simple => Box::new(SimpleGitOdb::new(repo)),
@@ -107,9 +114,9 @@ fn resolve_targets(
             Ok(Ok(ResolveTargetResult { seen_keys, paths }))
         }
 
-        PathsToMaterializeResult::MissingKeys { keys } => {
+        PathsToMaterializeResult::MissingKeys { seen_keys, missing_keys } => {
             println!("Missing keys:");
-            for (key, hash) in keys {
+            for (key, hash) in missing_keys {
                 println!("{} {}", hash, dep_key_to_target(&key));
             }
 
@@ -124,9 +131,9 @@ fn resolve_targets(
                     paths: paths.into_iter().collect(),
                 })),
 
-                PathsToMaterializeResult::MissingKeys { keys } => {
+                PathsToMaterializeResult::MissingKeys { seen_keys, missing_keys } => {
                     println!("Keys STILL missing, this is a bug:");
-                    for (key, hash) in keys {
+                    for (key, hash) in missing_keys {
                         println!("{} {}", hash, dep_key_to_target(&key));
                     }
 
@@ -437,7 +444,7 @@ mod tests {
             )?;
             insta::assert_debug_snapshot!(materialize_result, @r###"
             MissingKeys {
-                keys: {
+                missing_keys: {
                     (
                         BazelPackage(
                             Label("//project_a/src/main/java/com/example/cmdline:runner"),
@@ -445,6 +452,11 @@ mod tests {
                         ContentHash(
                             c31c95867b703cb343a04d99a8909eb17f8ba9ee,
                         ),
+                    ),
+                },
+                seen_keys: {
+                    BazelPackage(
+                        Label("//project_a/src/main/java/com/example/cmdline:runner"),
                     ),
                 },
             }

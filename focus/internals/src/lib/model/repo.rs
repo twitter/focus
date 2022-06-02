@@ -575,6 +575,7 @@ impl Repo {
             .configure(app.clone())
             .context("Configuring the outlining tree")?;
 
+        let ti_client = app.tool_insights_client();
         let mut outline_patterns = {
             info!("Checking cache for sparse checkout patterns");
             let paths_to_materialize = get_files_to_materialize(
@@ -589,6 +590,14 @@ impl Repo {
                         num_seen_keys = seen_keys.len(),
                         "Cache hit for sparse checkout patterns"
                     );
+                    ti_client.get_context().add_to_custom_map(
+                        "index_miss_count",
+                        "0",
+                    );
+                    ti_client.get_context().add_to_custom_map(
+                        "index_hit_count",
+                        seen_keys.len().to_string(),
+                    );
                     paths
                         .into_iter()
                         .map(|path| Pattern::Directory {
@@ -599,11 +608,20 @@ impl Repo {
                         .collect()
                 }
 
-                PathsToMaterializeResult::MissingKeys { keys: missing_keys } => {
+                PathsToMaterializeResult::MissingKeys { seen_keys: seen_keys, missing_keys: missing_keys } => {
                     info!(
                         num_missing_keys = ?missing_keys.len(),
                         "Cache miss for sparse checkout patterns; querying Bazel"
                     );
+                    ti_client.get_context().add_to_custom_map(
+                        "index_miss_count",
+                        missing_keys.len().to_string(),
+                    );
+                    ti_client.get_context().add_to_custom_map(
+                        "index_hit_count",
+                        seen_keys.len().to_string(),
+                    );
+
                     debug!(?missing_keys, "These are the missing keys");
                     let (outline_patterns, resolution_result) = outlining_tree
                         .outline(head_commit.id(), targets, app.clone())

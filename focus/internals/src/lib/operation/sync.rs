@@ -35,13 +35,13 @@ pub fn run(sparse_repo: &Path, app: Arc<App>, fetch_index: bool) -> Result<bool>
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
     let ti_client = app_for_ti_client.tool_insights_client();
-    let mut ti_context = ti_client.get_context();
-    ti_context.add_to_custom_map("total_target_count", targets.len().to_string());
-    ti_context.add_to_custom_map(
+
+    ti_client.get_context().add_to_custom_map("total_target_count", targets.len().to_string());
+    ti_client.get_context().add_to_custom_map(
         "user_selected_project_count",
         selection.projects.len().to_string(),
     );
-    ti_context.add_to_custom_map(
+    ti_client.get_context().add_to_custom_map(
         "user_selected_target_count",
         selection.targets.len().to_string(),
     );
@@ -60,7 +60,7 @@ pub fn run(sparse_repo: &Path, app: Arc<App>, fetch_index: bool) -> Result<bool>
         repo.sync(&targets, false, app.clone(), &odb)
             .context("Sync failed")
     })?;
-    ti_context.add_to_custom_map("pattern_count", pattern_count.to_string());
+    ti_client.get_context().add_to_custom_map("pattern_count", pattern_count.to_string());
 
     perform("Updating the sync point", || {
         repo.working_tree().unwrap().write_sync_point_ref()
