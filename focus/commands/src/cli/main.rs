@@ -10,6 +10,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use clap::Parser;
+use focus_migrations::production::perform_pending_migrations;
 use git2::Repository;
 
 use focus_util::{
@@ -649,7 +650,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
             operation::clone::run(
                 origin,
-                sparse_repo,
+                sparse_repo.clone(),
                 branch,
                 projects_and_targets,
                 copy_branches,
@@ -661,6 +662,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 },
                 app,
             )?;
+
+            perform_pending_migrations(&sparse_repo)
+                .context("Performing initial migrations after clone")?;
+
             Ok(ExitCode(0))
         }
 
