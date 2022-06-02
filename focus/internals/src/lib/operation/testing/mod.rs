@@ -280,7 +280,7 @@ pub(in crate::operation) mod integration {
 
         #[allow(dead_code)]
         pub fn perform_sync(&self) -> Result<bool> {
-            operation::sync::run(&self.sparse_repo_path, self.app.clone(), false)
+            operation::sync::run(&self.sparse_repo_path, self.app.clone(), None)
         }
 
         #[allow(dead_code)]
