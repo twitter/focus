@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0.56"
 ciborium = "0.2.0"
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
-    "vendored-libgit2",
+    "vendored-libgit2", "vendored-openssl"
 ] }
 focus-util = { path = "../focus/util" }
 hex = "0.3.1"

@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 focus-internals = { path = "../internals" }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
-    "vendored-libgit2",
+    "vendored-libgit2", "vendored-openssl",
 ] }
 lazy_static = "1.4.0"
 serde = "1.0.130"
