@@ -169,7 +169,10 @@ pub enum PathsToMaterializeResult {
     /// paths to materialize could not be determined using only index lookups.
     MissingKeys {
         /// The keys which were queried but absent.
-        keys: BTreeSet<(DependencyKey, ContentHash)>,
+        missing_keys: BTreeSet<(DependencyKey, ContentHash)>,
+
+        /// All the keys which were queried.
+        seen_keys: BTreeSet<DependencyKey>,
     },
 }
 
@@ -319,7 +322,8 @@ pub fn get_files_to_materialize(
         })
     } else {
         Ok(PathsToMaterializeResult::MissingKeys {
-            keys: missing_keys.into_iter().collect(),
+            missing_keys: missing_keys.into_iter().collect(),
+            seen_keys: seen_keys.into_iter().collect(),
         })
     }
 }
@@ -411,7 +415,7 @@ sh_binary(
         // Confirm that the object for package1 is not yet in the database.
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
-            keys: {
+            missing_keys: {
                 (
                     BazelPackage(
                         Label("//package1:foo"),
@@ -419,6 +423,11 @@ sh_binary(
                     ContentHash(
                         fe52529478fee0bc3eb667cfd4fd4e6927d5bcac,
                     ),
+                ),
+            },
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
                 ),
             },
         }
@@ -642,7 +651,7 @@ def my_macro_inner(name):
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
-            keys: {
+            missing_keys: {
                 (
                     BazelPackage(
                         Label("//package1:foo"),
@@ -650,6 +659,11 @@ def my_macro_inner(name):
                     ContentHash(
                         6a2af318ce7453abddc4b128e014e552599c6881,
                     ),
+                ),
+            },
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
                 ),
             },
         }
@@ -788,7 +802,7 @@ def some_macro():
         };
         insta::assert_debug_snapshot!(files_to_materialize, @r###"
         MissingKeys {
-            keys: {
+            missing_keys: {
                 (
                     BazelPackage(
                         Label("//package1:foo"),
@@ -796,6 +810,11 @@ def some_macro():
                     ContentHash(
                         2fc26d30b28a7b0b2b695d05052c161915b9da16,
                     ),
+                ),
+            },
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
                 ),
             },
         }
