@@ -15,7 +15,7 @@ use tracing::{debug, info};
 use crate::index::{
     content_hash_dependency_key, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
     ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
-    SimpleGitOdb, FUNCTION_ID,
+    FUNCTION_ID,
 };
 use crate::model::repo::Repo;
 use crate::model::selection::OperationAction;
@@ -23,42 +23,13 @@ use crate::target::{Target, TargetSet};
 
 const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
 
-#[derive(
-    Clone,
-    Debug,
-    clap::ArgEnum,
-    strum_macros::Display,
-    strum_macros::EnumString,
-    strum_macros::EnumVariantNames,
-    strum_macros::IntoStaticStr,
-    strum_macros::EnumIter,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Backend {
-    /// Use `SimpleGitOdb` as the back-end. Not for production use.
-    Simple,
-
-    /// Use RocksDB an the back-end.
-    RocksDb,
+fn make_odb<'a>(repo: &'a git2::Repository) -> Box<dyn ObjectDatabase + 'a> {
+    Box::new(RocksDBCache::new(repo))
 }
 
-struct SyncResult {
-    cache_misses: u32,
-    cache_queries: u32,
-    paths_materialized: u32
-
-}
-
-fn make_odb<'a>(backend: Backend, repo: &'a git2::Repository) -> Box<dyn ObjectDatabase + 'a> {
-    match backend {
-        Backend::Simple => Box::new(SimpleGitOdb::new(repo)),
-        Backend::RocksDb => Box::new(RocksDBCache::new(repo)),
-    }
-}
-
-pub fn clear(backend: Backend, sparse_repo_path: PathBuf) -> anyhow::Result<()> {
+pub fn clear(sparse_repo_path: PathBuf) -> anyhow::Result<()> {
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
-    let odb = make_odb(backend, &repo);
+    let odb = make_odb(&repo);
     odb.clear()?;
     Ok(())
 }
@@ -88,7 +59,6 @@ struct ResolveTargetResult {
 
 fn resolve_targets(
     app: Arc<App>,
-    backend: Backend,
     sparse_repo_path: &Path,
     targets: HashSet<Target>,
     break_on_missing_keys: bool,
@@ -106,7 +76,7 @@ fn resolve_targets(
         head_tree: &head_tree,
         caches: Default::default(),
     };
-    let odb = make_odb(backend, &repo);
+    let odb = make_odb(&repo);
 
     let materialize_result = get_files_to_materialize(&ctx, odb.borrow(), dep_keys.clone())?;
     match materialize_result {
@@ -155,7 +125,7 @@ fn resolve_targets(
 
 pub fn resolve(
     app: Arc<App>,
-    backend: Backend,
+
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
     break_on_missing_keys: bool,
@@ -169,13 +139,7 @@ pub fn resolve(
     }?;
     let targets = TargetSet::try_from(&selection)?;
 
-    let paths = match resolve_targets(
-        app,
-        backend,
-        sparse_repo_path,
-        targets,
-        break_on_missing_keys,
-    )? {
+    let paths = match resolve_targets(app, sparse_repo_path, targets, break_on_missing_keys)? {
         Ok(ResolveTargetResult {
             seen_keys: _,
             paths,
@@ -217,15 +181,10 @@ pub fn hash(
     Ok(ExitCode(0))
 }
 
-pub fn get(
-    _app: Arc<App>,
-    backend: Backend,
-    sparse_repo_path: &Path,
-    hash: &str,
-) -> anyhow::Result<ExitCode> {
+pub fn get(_app: Arc<App>, sparse_repo_path: &Path, hash: &str) -> anyhow::Result<ExitCode> {
     let repo = git2::Repository::open(sparse_repo_path)?;
     let hash = ContentHash::from_str(hash)?;
-    let odb = make_odb(backend, &repo);
+    let odb = make_odb(&repo);
     let value = odb.get_direct(&hash)?;
     match value {
         Some(value) => {
@@ -241,7 +200,7 @@ pub fn get(
 
 pub fn generate(
     app: Arc<App>,
-    backend: Backend,
+
     sparse_repo_path: PathBuf,
     break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
@@ -255,13 +214,7 @@ pub fn generate(
         targets
     };
 
-    match resolve_targets(
-        app,
-        backend,
-        &sparse_repo_path,
-        all_targets,
-        break_on_missing_keys,
-    )? {
+    match resolve_targets(app, &sparse_repo_path, all_targets, break_on_missing_keys)? {
         Ok(_result) => Ok(ExitCode(0)),
         Err(exit_code) => Ok(exit_code),
     }
@@ -273,22 +226,12 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
-pub fn fetch(
-    app: Arc<App>,
-    backend: Backend,
-    sparse_repo_path: PathBuf,
-    remote: String,
-) -> anyhow::Result<ExitCode> {
+pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf, remote: String) -> anyhow::Result<ExitCode> {
     let index_dir = index_repo_dir(&sparse_repo_path);
     let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
 
     let repo = git2::Repository::open(&sparse_repo_path)?;
-    let odb = match backend {
-        Backend::Simple => {
-            anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
-        }
-        Backend::RocksDb => RocksDBCache::new(&repo),
-    };
+    let odb = RocksDBCache::new(&repo);
     let repo = Repo::open(sparse_repo_path.as_path(), app).context("Failed to open repo")?;
     let mut commit = repo.get_head_commit()?;
 
@@ -320,7 +263,7 @@ pub fn fetch(
 
 pub fn push(
     app: Arc<App>,
-    backend: Backend,
+
     sparse_repo_path: PathBuf,
     remote: String,
     break_on_missing_keys: bool,
@@ -350,23 +293,12 @@ pub fn push(
     let ResolveTargetResult {
         seen_keys,
         paths: _,
-    } = match resolve_targets(
-        app,
-        backend.clone(),
-        &sparse_repo_path,
-        all_targets,
-        break_on_missing_keys,
-    )? {
+    } = match resolve_targets(app, &sparse_repo_path, all_targets, break_on_missing_keys)? {
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
 
-    let odb = match backend {
-        Backend::Simple => {
-            anyhow::bail!("Backend not supported, as it does not implement `Cache`: {backend:?}")
-        }
-        Backend::RocksDb => RocksDBCache::new(repo.underlying()),
-    };
+    let odb = RocksDBCache::new(repo.underlying());
 
     let keyset = {
         let mut result = HashSet::new();
@@ -398,8 +330,6 @@ mod tests {
 
     #[test]
     fn test_index_push_and_fetch() -> anyhow::Result<()> {
-        let backend = Backend::RocksDb;
-
         let temp_dir = tempfile::tempdir()?;
         let remote_index_store = ScratchGitRepo::new_static_fixture(temp_dir.path())?;
         let remote = format!("file://{}", remote_index_store.path().display());
@@ -413,7 +343,6 @@ mod tests {
             fixture.perform_clone()?;
             let ExitCode(exit_code) = push(
                 app.clone(),
-                backend.clone(),
                 fixture.sparse_repo_path.clone(),
                 remote.clone(),
                 false,
@@ -434,7 +363,7 @@ mod tests {
 
         // Try to materialize files -- this should be a cache miss.
         {
-            let odb = make_odb(backend.clone(), repo);
+            let odb = make_odb(repo);
             let materialize_result = get_files_to_materialize(
                 &ctx,
                 odb.borrow(),
@@ -461,17 +390,12 @@ mod tests {
             "###);
         }
 
-        let ExitCode(exit_code) = fetch(
-            app,
-            backend.clone(),
-            fixture.sparse_repo_path.clone(),
-            remote,
-        )?;
+        let ExitCode(exit_code) = fetch(app, fixture.sparse_repo_path.clone(), remote)?;
         assert_eq!(exit_code, 0);
 
         // Try to materialize files again -- this should be a cache hit.
         {
-            let odb = make_odb(backend, repo);
+            let odb = make_odb(repo);
             let materialize_result = get_files_to_materialize(
                 &ctx,
                 odb.borrow(),

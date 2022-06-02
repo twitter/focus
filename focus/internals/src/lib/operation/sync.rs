@@ -49,7 +49,6 @@ pub fn run(sparse_repo: &Path, app: Arc<App>, fetch_index: bool) -> Result<bool>
     if fetch_index {
         let _: Result<ExitCode> = index::fetch(
             app.clone(),
-            index::Backend::RocksDb,
             sparse_repo.to_path_buf(),
             index::INDEX_DEFAULT_REMOTE.to_string(),
         );
