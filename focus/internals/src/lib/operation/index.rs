@@ -17,6 +17,7 @@ use crate::index::{
     ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
     FUNCTION_ID,
 };
+use crate::model::configuration::IndexConfig;
 use crate::model::repo::Repo;
 use crate::model::selection::OperationAction;
 use crate::target::{Target, TargetSet};
@@ -59,7 +60,6 @@ fn resolve_targets(
     sparse_repo_path: &Path,
     targets: HashSet<Target>,
     break_on_missing_keys: bool,
-    index_remote: Option<String>,
 ) -> anyhow::Result<Result<ResolveTargetResult, ExitCode>> {
     let dep_keys: HashSet<DependencyKey> = targets
         .iter()
@@ -93,8 +93,13 @@ fn resolve_targets(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let (pattern_count, _checked_out) =
-                repo.sync(&targets, true, index_remote, app.clone(), borrowed_odb)?;
+            let (pattern_count, _checked_out) = repo.sync(
+                &targets,
+                true,
+                &repo.config().index,
+                app.clone(),
+                borrowed_odb,
+            )?;
             println!("Pattern count: {}", pattern_count);
 
             match get_files_to_materialize(&ctx, borrowed_odb, dep_keys)? {
@@ -130,7 +135,6 @@ fn resolve_targets(
 
 pub fn resolve(
     app: Arc<App>,
-
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
     break_on_missing_keys: bool,
@@ -144,8 +148,7 @@ pub fn resolve(
     }?;
     let targets = TargetSet::try_from(&selection)?;
 
-    let paths = match resolve_targets(app, sparse_repo_path, targets, break_on_missing_keys, None)?
-    {
+    let paths = match resolve_targets(app, sparse_repo_path, targets, break_on_missing_keys)? {
         Ok(ResolveTargetResult {
             seen_keys: _,
             paths,
@@ -219,14 +222,7 @@ pub fn generate(
         )?);
         targets
     };
-
-    match resolve_targets(
-        app,
-        &sparse_repo_path,
-        all_targets,
-        break_on_missing_keys,
-        None,
-    )? {
+    match resolve_targets(app, &sparse_repo_path, all_targets, break_on_missing_keys)? {
         Ok(_result) => Ok(ExitCode(0)),
         Err(exit_code) => Ok(exit_code),
     }
@@ -238,21 +234,26 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
-pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf, remote: String) -> anyhow::Result<ExitCode> {
-    let repo = git2::Repository::open(&sparse_repo_path)
+pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf) -> anyhow::Result<ExitCode> {
+    let repo = Repo::open(&sparse_repo_path, app.clone())
         .with_context(|| format!("Opening repository at {}", &sparse_repo_path.display()))?;
-    let cache = RocksDBCache::new(&repo);
-    fetch_internal(app, &cache, sparse_repo_path, remote)
+    let cache = RocksDBCache::new(repo.underlying());
+    fetch_internal(app, &cache, sparse_repo_path, &repo.config().index)
 }
 
 pub(crate) fn fetch_internal(
     app: Arc<App>,
     cache: &RocksDBCache,
     sparse_repo_path: PathBuf,
-    remote: String,
+    index_config: &IndexConfig,
 ) -> anyhow::Result<ExitCode> {
+    if !index_config.enabled {
+        return Ok(ExitCode(0));
+    }
+
     let index_dir = index_repo_dir(&sparse_repo_path);
-    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
+    let synchronizer =
+        GitBackedCacheSynchronizer::create(index_dir, index_config.remote.clone(), app.clone())?;
     let repo = Repo::open(sparse_repo_path.as_path(), app).context("Failed to open repo")?;
     let mut commit = repo.get_head_commit()?;
 
@@ -279,6 +280,7 @@ pub(crate) fn fetch_internal(
     } else {
         info!("No index matches the current commit");
     }
+
     Ok(ExitCode(0))
 }
 
@@ -313,13 +315,7 @@ pub fn push(
     let ResolveTargetResult {
         seen_keys,
         paths: _,
-    } = match resolve_targets(
-        app,
-        &sparse_repo_path,
-        all_targets,
-        break_on_missing_keys,
-        None,
-    )? {
+    } = match resolve_targets(app, &sparse_repo_path, all_targets, break_on_missing_keys)? {
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
@@ -350,6 +346,8 @@ mod tests {
     use focus_testing::ScratchGitRepo;
     use maplit::hashset;
 
+    use crate::model::configuration::{Configuration, INDEX_CONFIG_FILENAME};
+    use crate::model::selection::store_model;
     use crate::operation::testing::integration::RepoPairFixture;
     use crate::target::Label;
 
@@ -379,6 +377,15 @@ mod tests {
 
         let fixture = RepoPairFixture::new()?;
         fixture.perform_clone()?;
+
+        let index_config = IndexConfig {
+            enabled: true,
+            remote,
+        };
+        let config_dir = Configuration::config_dir(&fixture.sparse_repo_path);
+        std::fs::create_dir_all(&config_dir)?;
+        store_model(config_dir.join(INDEX_CONFIG_FILENAME), &index_config)?;
+
         let repo = fixture.sparse_repo()?;
         let repo = repo.underlying();
         let head_tree = repo.head()?.peel_to_commit()?.tree()?;
@@ -417,7 +424,7 @@ mod tests {
             "###);
         }
 
-        let ExitCode(exit_code) = fetch(app, fixture.sparse_repo_path.clone(), remote)?;
+        let ExitCode(exit_code) = fetch(app, fixture.sparse_repo_path.clone())?;
         assert_eq!(exit_code, 0);
 
         // Try to materialize files again -- this should be a cache hit.

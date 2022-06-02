@@ -53,14 +53,6 @@ enum Subcommand {
         #[clap(long, parse(try_from_str), default_value = "true")]
         copy_branches: bool,
 
-        /// The repository to fetch the index from.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
-        index_remote: String,
-
-        /// Whether to fetch the index.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
-
         /// Initial projects and targets to add to the repo.
         projects_and_targets: Vec<String>,
     },
@@ -70,14 +62,6 @@ enum Subcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
-
-        /// Try to fetch a remote index before syncing.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
-
-        /// The repository to fetch the index from.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
-        index_remote: String,
     },
 
     /// Interact with repos configured on this system. Run `focus repo help` for more information.
@@ -88,14 +72,6 @@ enum Subcommand {
 
     /// Add projects and targets to the selection.
     Add {
-        /// Try to fetch a remote index before syncing.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
-
-        /// The repository to fetch the index from.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
-        index_remote: String,
-
         /// Project and targets to add to the selection.
         projects_and_targets: Vec<String>,
     },
@@ -103,14 +79,6 @@ enum Subcommand {
     /// Remove projects and targets from the selection.
     #[clap(visible_alias("rm"))]
     Remove {
-        /// Try to fetch a remote index before syncing.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
-
-        /// The repository to fetch the index from.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
-        index_remote: String,
-
         /// Project and targets to remove from the selection
         projects_and_targets: Vec<String>,
     },
@@ -506,10 +474,6 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
-
-        /// The Git remote to fetch from.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
-        remote: String,
     },
 
     Get {
@@ -622,8 +586,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             branch,
             days_of_history,
             copy_branches,
-            fetch_index,
-            index_remote,
             projects_and_targets,
         } => {
             let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
@@ -650,11 +612,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 projects_and_targets,
                 copy_branches,
                 days_of_history,
-                if fetch_index {
-                    Some(index_remote)
-                } else {
-                    None
-                },
                 app,
             )?;
 
@@ -664,22 +621,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             Ok(ExitCode(0))
         }
 
-        Subcommand::Sync {
-            sparse_repo,
-            fetch_index,
-            index_remote,
-        } => {
+        Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            let index_remote = if fetch_index {
-                Some(index_remote)
-            } else {
-                None
-            };
-            operation::sync::run(&sparse_repo, app, index_remote)?;
+            operation::sync::run(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
 
@@ -764,8 +712,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         }
 
         Subcommand::Add {
-            fetch_index,
-            index_remote,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -773,18 +719,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            let index_remote = if fetch_index {
-                Some(index_remote)
-            } else {
-                None
-            };
-            operation::selection::add(&sparse_repo, true, projects_and_targets, index_remote, app)?;
+            operation::selection::add(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Remove {
-            fetch_index,
-            index_remote,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -792,18 +731,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            let index_remote = if fetch_index {
-                Some(index_remote)
-            } else {
-                None
-            };
-            operation::selection::remove(
-                &sparse_repo,
-                true,
-                projects_and_targets,
-                index_remote,
-                app,
-            )?;
+            operation::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
@@ -980,11 +908,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(ExitCode(0))
             }
 
-            IndexSubcommand::Fetch {
-                sparse_repo,
-                remote,
-            } => {
-                let exit_code = operation::index::fetch(app, sparse_repo, remote)?;
+            IndexSubcommand::Fetch { sparse_repo } => {
+                let exit_code = operation::index::fetch(app, sparse_repo)?;
                 Ok(exit_code)
             }
 
