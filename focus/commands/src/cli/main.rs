@@ -1025,8 +1025,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         },
 
         Subcommand::Event { subcommand } => match subcommand {
-            EventSubcommand::PostCheckout => todo!("not implemented"),
-            EventSubcommand::PostMerge => todo!("not implemented"),
+            EventSubcommand::PostCheckout => Ok(ExitCode(0)),
+            EventSubcommand::PostMerge => Ok(ExitCode(0)),
         },
     }
 }

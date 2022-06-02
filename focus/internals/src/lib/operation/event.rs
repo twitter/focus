@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use focus_util::app::App;
+use focus_util::app::{App, ExitCode};
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
@@ -37,14 +37,17 @@ fn write_hooks_to_dir(hooks: &[&str], dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// TODO
-pub fn post_merge(_app: Arc<App>) -> Result<()> {
-    Ok(())
+pub fn post_merge(app: Arc<App>) -> Result<ExitCode> {
+    let current_dir = std::env::current_dir().context("Failed to obtain current directory")?;
+    debug!(sparse_repo = ?current_dir.display(), "Running post-merge hook");
+    super::sync::run(&current_dir, app, true)?;
+    Ok(ExitCode(0))
 }
 
-/// TODO
-pub fn post_checkout(_app: Arc<App>) -> Result<()> {
-    Ok(())
+pub fn post_checkout(_app: Arc<App>) -> Result<ExitCode> {
+    let current_dir = std::env::current_dir().context("Failed to obtain current directory")?;
+    debug!(sparse_repo = ?current_dir.display(), "Running post-checkout hook");
+    Ok(ExitCode(0))
 }
 
 #[cfg(test)]
