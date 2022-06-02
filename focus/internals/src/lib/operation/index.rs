@@ -1,4 +1,4 @@
-use std::borrow::{Borrow};
+use std::borrow::Borrow;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -83,7 +83,10 @@ fn resolve_targets(
             Ok(Ok(ResolveTargetResult { seen_keys, paths }))
         }
 
-        PathsToMaterializeResult::MissingKeys { seen_keys, missing_keys } => {
+        PathsToMaterializeResult::MissingKeys {
+            seen_keys: _,
+            missing_keys,
+        } => {
             println!("Missing keys:");
             for (key, hash) in missing_keys {
                 println!("{} {}", hash, dep_key_to_target(&key));
@@ -100,7 +103,10 @@ fn resolve_targets(
                     paths: paths.into_iter().collect(),
                 })),
 
-                PathsToMaterializeResult::MissingKeys { seen_keys, missing_keys } => {
+                PathsToMaterializeResult::MissingKeys {
+                    seen_keys: _,
+                    missing_keys,
+                } => {
                     println!("Keys STILL missing, this is a bug:");
                     for (key, hash) in missing_keys {
                         println!("{} {}", hash, dep_key_to_target(&key));

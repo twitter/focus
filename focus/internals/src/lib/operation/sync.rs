@@ -35,7 +35,9 @@ pub fn run(sparse_repo: &Path, app: Arc<App>, index_remote: Option<String>) -> R
     let app_for_ti_client = app.clone();
     let ti_client = app_for_ti_client.tool_insights_client();
 
-    ti_client.get_context().add_to_custom_map("total_target_count", targets.len().to_string());
+    ti_client
+        .get_context()
+        .add_to_custom_map("total_target_count", targets.len().to_string());
     ti_client.get_context().add_to_custom_map(
         "user_selected_project_count",
         selection.projects.len().to_string(),
@@ -50,7 +52,9 @@ pub fn run(sparse_repo: &Path, app: Arc<App>, index_remote: Option<String>) -> R
         repo.sync(&targets, false, index_remote, app.clone(), &odb)
             .context("Sync failed")
     })?;
-    ti_client.get_context().add_to_custom_map("pattern_count", pattern_count.to_string());
+    ti_client
+        .get_context()
+        .add_to_custom_map("pattern_count", pattern_count.to_string());
 
     perform("Updating the sync point", || {
         repo.working_tree().unwrap().write_sync_point_ref()
