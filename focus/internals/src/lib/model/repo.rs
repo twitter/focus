@@ -1,5 +1,6 @@
+use content_addressed_cache::RocksDBCache;
 use focus_util::{
-    app::App,
+    app::{App, ExitCode},
     git_helper::{self, get_head_commit},
     paths,
     sandbox_command::SandboxCommandOutput,
@@ -16,9 +17,10 @@ use crate::{
     hashing,
     index::{
         get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
-        HashContext, ObjectDatabase, PathsToMaterializeResult,
+        HashContext, PathsToMaterializeResult,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
+    operation::index,
     target::TargetSet,
     target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
@@ -26,6 +28,7 @@ use crate::{
 };
 
 use super::{
+    configuration::{Configuration, IndexConfig},
     outlining::{PatternContainer, PatternSet, PatternSetWriter, BASELINE_PATTERNS},
     selection::{Selection, SelectionManager},
 };
@@ -489,6 +492,7 @@ pub struct Repo {
     working_tree: Option<WorkingTree>,
     outlining_tree: Option<OutliningTree>,
     repo: git2::Repository,
+    config: Configuration,
     app: Arc<App>,
 }
 
@@ -518,6 +522,8 @@ impl Repo {
         } else {
             None
         };
+
+        let config = Configuration::new(path).context("Loading configuration")?;
         let path = path.to_owned();
 
         Ok(Self {
@@ -526,12 +532,17 @@ impl Repo {
             working_tree,
             outlining_tree,
             repo,
+            config,
             app,
         })
     }
 
     pub fn underlying(&self) -> &git2::Repository {
         &self.repo
+    }
+
+    pub fn config(&self) -> &Configuration {
+        &self.config
     }
 
     pub fn focus_git_dir_path(git_dir: &Path) -> PathBuf {
@@ -547,8 +558,9 @@ impl Repo {
         &self,
         targets: &TargetSet,
         skip_pattern_application: bool,
+        index_config: &IndexConfig,
         app: Arc<App>,
-        odb: &dyn ObjectDatabase,
+        cache: &RocksDBCache,
     ) -> Result<(usize, bool)> {
         let head_commit = self.get_head_commit()?;
         let head_tree = head_commit.tree().context("Failed to resolve head tree")?;
@@ -577,12 +589,29 @@ impl Repo {
 
         let ti_client = app.tool_insights_client();
         let mut outline_patterns = {
+            let dependency_keys: HashSet<DependencyKey> =
+                targets.iter().cloned().map(DependencyKey::from).collect();
+
             info!("Checking cache for sparse checkout patterns");
-            let paths_to_materialize = get_files_to_materialize(
-                &hash_context,
-                odb,
-                targets.iter().cloned().map(DependencyKey::from).collect(),
-            )?;
+            let mut paths_to_materialize =
+                get_files_to_materialize(&hash_context, cache, dependency_keys.clone())?;
+
+            if index_config.enabled {
+                if let PathsToMaterializeResult::MissingKeys { .. } = paths_to_materialize {
+                    info!(
+                        "Cache miss for sparse checkout patterns; fetching from the remote index"
+                    );
+                    let _: Result<ExitCode> = index::fetch_internal(
+                        app.clone(),
+                        cache,
+                        working_tree.work_dir().to_path_buf(),
+                        index_config,
+                    );
+                    // Query again now that the index is populated.
+                    paths_to_materialize =
+                        get_files_to_materialize(&hash_context, cache, dependency_keys)?;
+                }
+            }
 
             match paths_to_materialize {
                 PathsToMaterializeResult::Ok { seen_keys, paths } => {
@@ -590,14 +619,12 @@ impl Repo {
                         num_seen_keys = seen_keys.len(),
                         "Cache hit for sparse checkout patterns"
                     );
-                    ti_client.get_context().add_to_custom_map(
-                        "index_miss_count",
-                        "0",
-                    );
-                    ti_client.get_context().add_to_custom_map(
-                        "index_hit_count",
-                        seen_keys.len().to_string(),
-                    );
+                    ti_client
+                        .get_context()
+                        .add_to_custom_map("index_miss_count", "0");
+                    ti_client
+                        .get_context()
+                        .add_to_custom_map("index_hit_count", seen_keys.len().to_string());
                     paths
                         .into_iter()
                         .map(|path| Pattern::Directory {
@@ -608,19 +635,20 @@ impl Repo {
                         .collect()
                 }
 
-                PathsToMaterializeResult::MissingKeys { seen_keys: seen_keys, missing_keys: missing_keys } => {
+                PathsToMaterializeResult::MissingKeys {
+                    seen_keys,
+                    missing_keys,
+                } => {
                     info!(
                         num_missing_keys = ?missing_keys.len(),
                         "Cache miss for sparse checkout patterns; querying Bazel"
                     );
-                    ti_client.get_context().add_to_custom_map(
-                        "index_miss_count",
-                        missing_keys.len().to_string(),
-                    );
-                    ti_client.get_context().add_to_custom_map(
-                        "index_hit_count",
-                        seen_keys.len().to_string(),
-                    );
+                    ti_client
+                        .get_context()
+                        .add_to_custom_map("index_miss_count", missing_keys.len().to_string());
+                    ti_client
+                        .get_context()
+                        .add_to_custom_map("index_hit_count", seen_keys.len().to_string());
 
                     debug!(?missing_keys, "These are the missing keys");
                     let (outline_patterns, resolution_result) = outlining_tree
@@ -628,7 +656,11 @@ impl Repo {
                         .context("Failed to outline")?;
 
                     debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
-                    update_object_database_from_resolution(&hash_context, odb, &resolution_result)?;
+                    update_object_database_from_resolution(
+                        &hash_context,
+                        cache,
+                        &resolution_result,
+                    )?;
                     outline_patterns
                 }
             }

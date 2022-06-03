@@ -273,14 +273,13 @@ pub(in crate::operation) mod integration {
                 self.projects_and_targets.clone(),
                 true,
                 90,
-                None,
                 self.app.clone(),
             )
         }
 
         #[allow(dead_code)]
         pub fn perform_sync(&self) -> Result<bool> {
-            operation::sync::run(&self.sparse_repo_path, self.app.clone(), false)
+            operation::sync::run(&self.sparse_repo_path, self.app.clone())
         }
 
         #[allow(dead_code)]

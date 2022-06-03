@@ -1,12 +1,12 @@
 use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::selection::{Operation, OperationAction};
 use crate::operation::event;
-use crate::operation::index::{fetch, Backend};
+
 use crate::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
 use content_addressed_cache::RocksDBCache;
-use focus_util::app::ExitCode;
+
 use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
 use git2::Repository;
 
@@ -52,7 +52,6 @@ pub fn run(
     projects_and_targets: Vec<String>,
     copy_branches: bool,
     days_of_history: u64,
-    index_remote: Option<String>,
     app: Arc<App>,
 ) -> Result<()> {
     match origin {
@@ -73,7 +72,7 @@ pub fn run(
         ),
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, app, index_remote)?;
+    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, app)?;
     set_up_hooks(&sparse_repo_path)
 }
 
@@ -196,20 +195,10 @@ fn clone_remote(
     .context("Failed to clone the repository")
 }
 
-fn fetch_initial_index(sparse_repo_path: &Path, remote: String, app: Arc<App>) -> Result<ExitCode> {
-    fetch(
-        app,
-        Backend::RocksDb,
-        sparse_repo_path.to_path_buf(),
-        remote,
-    )
-}
-
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
     app: Arc<App>,
-    index_remote: Option<String>,
 ) -> Result<()> {
     {
         let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
@@ -226,16 +215,13 @@ fn set_up_sparse_repo(
             .ensure_registered(sparse_repo_path, app.clone())
             .context("Registering repo")?;
     }
-    if let Some(remote) = index_remote {
-        fetch_initial_index(sparse_repo_path, remote, app.clone()).ok();
-    }
     // N.B. we must re-open the repo because otherwise it has no trees...
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
 
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
 
     let odb = RocksDBCache::new(repo.underlying());
-    repo.sync(&target_set, false, app.clone(), &odb)
+    repo.sync(&target_set, false, &repo.config().index, app.clone(), &odb)
         .context("Sync failed")?;
 
     repo.working_tree().unwrap().write_sync_point_ref()?;

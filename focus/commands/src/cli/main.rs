@@ -53,14 +53,6 @@ enum Subcommand {
         #[clap(long, parse(try_from_str), default_value = "true")]
         copy_branches: bool,
 
-        /// The repository to fetch the index from.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
-        index_remote: String,
-
-        /// Whether to fetch the index.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
-
         /// Initial projects and targets to add to the repo.
         projects_and_targets: Vec<String>,
     },
@@ -70,10 +62,6 @@ enum Subcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
-
-        /// Try to fetch a remote index before syncing.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
     },
 
     /// Interact with repos configured on this system. Run `focus repo help` for more information.
@@ -84,10 +72,6 @@ enum Subcommand {
 
     /// Add projects and targets to the selection.
     Add {
-        /// Try to fetch a remote index before syncing.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
-
         /// Project and targets to add to the selection.
         projects_and_targets: Vec<String>,
     },
@@ -95,10 +79,6 @@ enum Subcommand {
     /// Remove projects and targets from the selection.
     #[clap(visible_alias("rm"))]
     Remove {
-        /// Try to fetch a remote index before syncing.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        fetch_index: bool,
-
         /// Project and targets to remove from the selection
         projects_and_targets: Vec<String>,
     },
@@ -209,16 +189,6 @@ enum Subcommand {
 
     /// Interact with the on-disk focus index.
     Index {
-        #[clap(
-            short,
-            long,
-            global = true,
-            required = false,
-            possible_values = operation::index::Backend::VARIANTS,
-            default_value = "rocks-db",
-        )]
-        backend: operation::index::Backend,
-
         #[clap(subcommand)]
         subcommand: IndexSubcommand,
     },
@@ -263,10 +233,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         },
         Subcommand::GitTrace { .. } => "git-trace",
         Subcommand::Upgrade { .. } => "upgrade",
-        Subcommand::Index {
-            backend: _,
-            subcommand,
-        } => match subcommand {
+        Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear",
             IndexSubcommand::Fetch { .. } => "index-fetch",
             IndexSubcommand::Get { .. } => "index-get",
@@ -278,6 +245,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Event { subcommand } => match subcommand {
             EventSubcommand::PostCheckout => "event-post-checkout",
             EventSubcommand::PostMerge => "event-post-merge",
+            EventSubcommand::PostCommit => "event-post-commit",
         },
     };
     subcommand_name.into()
@@ -507,10 +475,6 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
-
-        /// The Git remote to fetch from.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
-        remote: String,
     },
 
     Get {
@@ -545,10 +509,6 @@ enum IndexSubcommand {
         #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
 
-        /// When specified, the content is also pushed with the given ref name.
-        #[clap(long)]
-        additional_ref_name: Option<String>,
-
         /// If index keys are found to be missing, pause for debugging.
         #[clap(long)]
         break_on_missing_keys: bool,
@@ -567,6 +527,7 @@ enum IndexSubcommand {
 #[derive(Parser, Debug)]
 enum EventSubcommand {
     PostCheckout,
+    PostCommit,
     PostMerge,
 }
 
@@ -627,8 +588,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             branch,
             days_of_history,
             copy_branches,
-            fetch_index,
-            index_remote,
             projects_and_targets,
         } => {
             let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
@@ -655,11 +614,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 projects_and_targets,
                 copy_branches,
                 days_of_history,
-                if fetch_index {
-                    Some(index_remote)
-                } else {
-                    None
-                },
                 app,
             )?;
 
@@ -669,16 +623,13 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             Ok(ExitCode(0))
         }
 
-        Subcommand::Sync {
-            sparse_repo,
-            fetch_index,
-        } => {
+        Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::sync::run(&sparse_repo, app, fetch_index)?;
+            operation::sync::run(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
 
@@ -763,7 +714,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         }
 
         Subcommand::Add {
-            fetch_index,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -771,12 +721,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::add(&sparse_repo, true, projects_and_targets, fetch_index, app)?;
+            operation::selection::add(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Remove {
-            fetch_index,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -784,13 +733,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             operation::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::remove(
-                &sparse_repo,
-                true,
-                projects_and_targets,
-                fetch_index,
-                app,
-            )?;
+            operation::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
@@ -961,20 +904,14 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             Ok(ExitCode(0))
         }
 
-        Subcommand::Index {
-            backend,
-            subcommand,
-        } => match subcommand {
+        Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { sparse_repo } => {
-                operation::index::clear(backend, sparse_repo)?;
+                operation::index::clear(sparse_repo)?;
                 Ok(ExitCode(0))
             }
 
-            IndexSubcommand::Fetch {
-                sparse_repo,
-                remote,
-            } => {
-                let exit_code = operation::index::fetch(app, backend, sparse_repo, remote)?;
+            IndexSubcommand::Fetch { sparse_repo } => {
+                let exit_code = operation::index::fetch(app, sparse_repo)?;
                 Ok(exit_code)
             }
 
@@ -983,12 +920,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 break_on_missing_keys,
             } => {
                 let exit_code =
-                    operation::index::generate(app, backend, sparse_repo, break_on_missing_keys)?;
+                    operation::index::generate(app, sparse_repo, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Get { target } => {
-                let exit_code = operation::index::get(app, backend, Path::new("."), &target)?;
+                let exit_code = operation::index::get(app, Path::new("."), &target)?;
                 Ok(exit_code)
             }
 
@@ -1000,17 +937,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             IndexSubcommand::Push {
                 sparse_repo,
                 remote,
-                additional_ref_name: additional_ref_name_name,
                 break_on_missing_keys,
             } => {
-                let exit_code = operation::index::push(
-                    app,
-                    backend,
-                    sparse_repo,
-                    remote,
-                    additional_ref_name_name.as_deref(),
-                    break_on_missing_keys,
-                )?;
+                let exit_code =
+                    operation::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
@@ -1018,19 +948,15 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 targets,
                 break_on_missing_keys,
             } => {
-                let exit_code = operation::index::resolve(
-                    app,
-                    backend,
-                    Path::new("."),
-                    targets,
-                    break_on_missing_keys,
-                )?;
+                let exit_code =
+                    operation::index::resolve(app, Path::new("."), targets, break_on_missing_keys)?;
                 Ok(exit_code)
             }
         },
 
         Subcommand::Event { subcommand } => match subcommand {
             EventSubcommand::PostCheckout => Ok(ExitCode(0)),
+            EventSubcommand::PostCommit => Ok(ExitCode(0)),
             EventSubcommand::PostMerge => Ok(ExitCode(0)),
         },
     }
