@@ -50,6 +50,12 @@ pub fn post_checkout(_app: Arc<App>) -> Result<ExitCode> {
     Ok(ExitCode(0))
 }
 
+pub fn post_commit(_app: Arc<App>) -> Result<ExitCode> {
+    let current_dir = std::env::current_dir().context("Failed to obtain current directory")?;
+    debug!(sparse_repo = ?current_dir.display(), "Running post-commit hook");
+    Ok(ExitCode(0))
+}
+
 #[cfg(test)]
 mod testing {
     use anyhow::Result;

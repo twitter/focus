@@ -245,6 +245,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Event { subcommand } => match subcommand {
             EventSubcommand::PostCheckout => "event-post-checkout",
             EventSubcommand::PostMerge => "event-post-merge",
+            EventSubcommand::PostCommit => "event-post-commit",
         },
     };
     subcommand_name.into()
@@ -526,6 +527,7 @@ enum IndexSubcommand {
 #[derive(Parser, Debug)]
 enum EventSubcommand {
     PostCheckout,
+    PostCommit,
     PostMerge,
 }
 
@@ -954,6 +956,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Event { subcommand } => match subcommand {
             EventSubcommand::PostCheckout => Ok(ExitCode(0)),
+            EventSubcommand::PostCommit => Ok(ExitCode(0)),
             EventSubcommand::PostMerge => Ok(ExitCode(0)),
         },
     }
