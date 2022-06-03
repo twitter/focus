@@ -369,7 +369,7 @@ mod tests {
         let memocache = GitBackedCacheSynchronizer::create(
             file_path,
             remote_repo.to_string(),
-            Arc::new(App::new(false, None).unwrap()),
+            Arc::new(App::new_for_testing().unwrap()),
         )
         .unwrap();
         (tmp_dir, memocache)
@@ -384,7 +384,7 @@ mod tests {
         let memocache = GitBackedCacheSynchronizer::create(
             file_path,
             remote_repo.to_string(),
-            Arc::new(App::new(false, None).unwrap()),
+            Arc::new(App::new_for_testing().unwrap()),
         )
         .unwrap();
         (tmp_dir, memocache)
