@@ -67,11 +67,11 @@ fn resolve_targets(
         .collect();
 
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
-    let head_commit = git_helper::get_head_commit(&repo)?;
-    let head_tree = head_commit.tree().context("resolving HEAD to tree")?;
+    let head_commit = git_helper::get_head_commit(&repo).context("Resolving head commit")?;
+    let tree = head_commit.tree().context("Resolving tree")?;
     let ctx = HashContext {
         repo: &repo,
-        head_tree: &head_tree,
+        head_tree: &tree,
         caches: Default::default(),
     };
     let odb = RocksDBCache::new(&repo);
@@ -94,6 +94,7 @@ fn resolve_targets(
 
             let repo = Repo::open(repo.path(), app.clone())?;
             let (pattern_count, _checked_out) = repo.sync(
+                head_commit.id(),
                 &targets,
                 true,
                 &repo.config().index,

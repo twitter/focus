@@ -215,14 +215,22 @@ fn set_up_sparse_repo(
             .ensure_registered(sparse_repo_path, app.clone())
             .context("Registering repo")?;
     }
+
     // N.B. we must re-open the repo because otherwise it has no trees...
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
-
+    let head_commit = repo.get_head_commit().context("Resolving head commit")?;
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
 
     let odb = RocksDBCache::new(repo.underlying());
-    repo.sync(&target_set, false, &repo.config().index, app.clone(), &odb)
-        .context("Sync failed")?;
+    repo.sync(
+        head_commit.id(),
+        &target_set,
+        false,
+        &repo.config().index,
+        app.clone(),
+        &odb,
+    )
+    .context("Sync failed")?;
 
     repo.working_tree().unwrap().write_sync_point_ref()?;
 
