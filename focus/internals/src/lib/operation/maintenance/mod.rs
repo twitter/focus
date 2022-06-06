@@ -1,6 +1,5 @@
 pub mod launchd;
 pub mod scheduling;
-
 use std::{
     ffi::OsString,
     fmt::Debug,
@@ -10,6 +9,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::operation;
 use crate::tracker::Tracker;
 
 use anyhow::{bail, Context, Result};
@@ -226,15 +226,7 @@ impl Runner {
     }
 
     #[tracing::instrument]
-    fn run_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
-        let _lock = match Self::hold_lock_for(repo_path) {
-            Ok(lock) => lock,
-            Err(e) => {
-                error!(?e, "failed to acquire lock");
-                return Ok(MaintResult::LockFailed);
-            }
-        };
-
+    fn run_git_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
         let exec_path: PathBuf = git_helper::git_exec_path(&self.git_binary_path)?;
 
         let (mut cmd, sb_cmd) =
@@ -264,6 +256,33 @@ impl Runner {
                     )
                 })?,
         ))
+    }
+
+    #[tracing::instrument]
+    fn run_internal_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<()> {
+        operation::sync::run(repo_path, true, self.app.clone())
+            .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))
+            .map(|_| ())
+    }
+
+    #[tracing::instrument]
+    fn run_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
+        let _lock = match Self::hold_lock_for(repo_path) {
+            Ok(lock) => lock,
+            Err(e) => {
+                error!(?e, "failed to acquire lock");
+                return Ok(MaintResult::LockFailed);
+            }
+        };
+
+        let git_maint_result = self
+            .run_git_maint(time_period, repo_path)
+            .with_context(|| format!("Running internal maintenance in {}", repo_path.display()))?;
+
+        self.run_internal_maint(time_period, repo_path)
+            .with_context(|| format!("Running internal maintenance in {}", repo_path.display()))?;
+
+        Ok(git_maint_result)
     }
 
     #[tracing::instrument]

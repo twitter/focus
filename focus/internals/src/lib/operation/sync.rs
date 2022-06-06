@@ -6,6 +6,7 @@ use crate::target::TargetSet;
 use content_addressed_cache::RocksDBCache;
 use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;
+use tracing::warn;
 
 use std::convert::TryFrom;
 
@@ -15,18 +16,18 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
+pub struct SyncResult {
+    checked_out: bool,
+    commit_id: git2::Oid,
+}
+
 /// Synchronize the sparse repo's contents with the build graph. Returns whether a checkout actually occured.
-pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
+pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncResult> {
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
     if !sparse_profile_path.is_file() {
         bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
     }
-    super::ensure_clean::run(sparse_repo, app.clone())
-        .context("Failed trying to determine whether working trees were clean")?;
-
-    let backed_up_sparse_profile = BackedUpFile::new(&sparse_profile_path)?;
-
     let selections = repo.selection_manager()?;
     let selection = selections.computed_selection()?;
     let targets = TargetSet::try_from(&selection).context("constructing target set")?;
@@ -35,23 +36,58 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
     let app_for_ti_client = app.clone();
     let ti_client = app_for_ti_client.tool_insights_client();
 
-    ti_client
-        .get_context()
-        .add_to_custom_map("total_target_count", targets.len().to_string());
-    ti_client.get_context().add_to_custom_map(
-        "user_selected_project_count",
-        selection.projects.len().to_string(),
-    );
-    ti_client.get_context().add_to_custom_map(
-        "user_selected_target_count",
-        selection.targets.len().to_string(),
-    );
+    let backed_up_sparse_profile: Option<BackedUpFile> = if preemptive {
+        None
+    } else {
+        super::ensure_clean::run(sparse_repo, app.clone())
+            .context("Failed trying to determine whether working trees were clean")?;
+
+        ti_client
+            .get_context()
+            .add_to_custom_map("total_target_count", targets.len().to_string());
+        ti_client.get_context().add_to_custom_map(
+            "user_selected_project_count",
+            selection.projects.len().to_string(),
+        );
+        ti_client.get_context().add_to_custom_map(
+            "user_selected_target_count",
+            selection.targets.len().to_string(),
+        );
+
+        Some(BackedUpFile::new(&sparse_profile_path)?)
+    };
 
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
+    let commit = if preemptive {
+        if let Some(prefetch_commit) = repo
+            .get_prefetch_head_commit("origin", "master")
+            .context("Resolving prefetch head commit")?
+        {
+            prefetch_commit
+        } else {
+            bail!("No prefetch commit found for preemptive sync");
+        }
+    } else {
+        head_commit
+    };
+
+    if let Some(working_tree) = repo.working_tree() {
+        if let Ok(Some(sync_point)) = working_tree.read_sync_point_ref() {
+            if sync_point == commit.id() {
+                // The sync point is already set to this ref. We don't need to bother.
+                warn!("Skipping synchronization because the commit to sync is the same as that of the sync point");
+                return Ok(SyncResult {
+                    checked_out: false,
+                    commit_id: commit.id(),
+                });
+            }
+        }
+    }
+
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
         repo.sync(
-            head_commit.id(),
+            commit.id(),
             &targets,
             false,
             &repo.config().index,
@@ -60,18 +96,23 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
         )
         .context("Sync failed")
     })?;
-    ti_client
-        .get_context()
-        .add_to_custom_map("pattern_count", pattern_count.to_string());
 
-    perform("Updating the sync point", || {
-        repo.working_tree().unwrap().write_sync_point_ref()
-    })?;
+    if !preemptive {
+        ti_client
+            .get_context()
+            .add_to_custom_map("pattern_count", pattern_count.to_string());
+        perform("Updating the sync point", || {
+            repo.working_tree().unwrap().write_sync_point_ref()
+        })?;
 
-    // The profile was successfully applied, so do not restore the backup.
-    backed_up_sparse_profile.set_restore(false);
+        // The profile was successfully applied, so do not restore the backup.
+        backed_up_sparse_profile.unwrap().set_restore(false);
+    }
 
-    Ok(checked_out)
+    Ok(SyncResult {
+        checked_out,
+        commit_id: commit.id(),
+    })
 }
 
 #[cfg(test)]
@@ -81,16 +122,42 @@ mod testing {
     use anyhow::Result;
     use maplit::hashset;
 
-    use focus_testing::init_logging;
+    use focus_testing::{init_logging, ScratchGitRepo};
     use focus_util::app;
 
     use crate::{
-        model::selection::OperationAction,
+        model::{repo::Repo, selection::OperationAction},
         operation::{
             self,
             testing::integration::{RepoDisposition, RepoPairFixture},
         },
     };
+
+    fn add_updated_content(scratch_repo: &ScratchGitRepo) -> Result<git2::Oid> {
+        // Commit new files affecting the build graph to the dense repo
+        let build_bazel_content = r#"filegroup(
+            name = "excerpts",
+            srcs = [
+                "catz.txt",
+            ],
+            visibility = [
+                "//visibility:public",
+            ],
+        )"#;
+        scratch_repo.write_and_commit_file(
+            Path::new("x/BUILD.bazel"),
+            build_bazel_content.as_bytes(),
+            "Add excerpts",
+        )?;
+        let catz_txt_content = r#"The Naming of Cats is a difficult matter,
+        It isn't just one of your holiday games
+                )"#;
+        Ok(scratch_repo.write_and_commit_file(
+            Path::new("x/catz.txt"),
+            catz_txt_content.as_bytes(),
+            "Add excerpts",
+        )?)
+    }
 
     #[test]
     fn sync_upstream_changes() -> Result<()> {
@@ -99,30 +166,7 @@ mod testing {
         let fixture = RepoPairFixture::new()?;
 
         fixture.perform_clone()?;
-
-        // Commit new files affecting the build graph to the dense repo
-        let build_bazel_content = r#"filegroup(
-    name = "excerpts",
-    srcs = [
-        "catz.txt",
-    ],
-    visibility = [
-        "//visibility:public",
-    ],
-)"#;
-        fixture.dense_repo.write_and_commit_file(
-            Path::new("x/BUILD.bazel"),
-            build_bazel_content.as_bytes(),
-            "Add excerpts",
-        )?;
-        let catz_txt_content = r#"The Naming of Cats is a difficult matter,
-It isn't just one of your holiday games
-        )"#;
-        fixture.dense_repo.write_and_commit_file(
-            Path::new("x/catz.txt"),
-            catz_txt_content.as_bytes(),
-            "Add excerpts",
-        )?;
+        let _ = add_updated_content(&fixture.dense_repo)?;
 
         // Fetch in the sparse repo from the dense repo
         fixture.perform_pull(RepoDisposition::Sparse, "origin", "main")?;
@@ -362,4 +406,35 @@ It isn't just one of your holiday games
 
         Ok(())
     }
+
+    #[test]
+    fn preemptive_sync() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+
+        fixture.perform_clone()?;
+        add_updated_content(&fixture.dense_repo);
+
+        // Fetch in the sparse repo from the dense repo
+        fixture.perform_fetch(RepoDisposition::Sparse, "origin", "main")?;
+        let repo = Repo::open(&fixture.dense_repo_path, fixture.app.clone())?;
+        let upstream_ref = repo
+            .underlying()
+            .find_reference("refs/remotes/origin/master")?;
+        // Set the prefetch ref
+        repo.underlying().reference(
+            "refs/prefetch/remotes/origin/master",
+            upstream_ref.peel_to_commit()?.id(),
+            true,
+            "Emulated prefetch ref",
+        )?;
+
+        // Sync preemptively
+        operation::sync::run(&fixture.sparse_repo_path, true, fixture.app.clone())?;
+
+        Ok(())
+    }
+
+    // Test for already being on the commit.
 }

@@ -19,7 +19,7 @@ fn mutate(
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
-            super::sync::run(sparse_repo.as_ref(), app)?;
+            super::sync::run(sparse_repo.as_ref(), false, app)?;
         }
     }
 
