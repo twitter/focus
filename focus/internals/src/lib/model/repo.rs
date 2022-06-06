@@ -35,7 +35,7 @@ use super::{
 
 use anyhow::{bail, Context, Result};
 use git2::{Oid, Repository, TreeWalkMode, TreeWalkResult};
-use tracing::{debug, info, info_span, trace};
+use tracing::{debug, info, info_span, trace, warn};
 use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
@@ -761,6 +761,25 @@ impl Repo {
     // We expose the computed selection here for use in benchmarks since `SelectionManager` exposes types not visible outside the crate.
     pub fn computed_selection(&self) -> Result<Selection> {
         self.selection_manager()?.computed_selection()
+    }
+
+    pub fn get_prefetch_head_commit(
+        &self,
+        remote_name: &str,
+        branch_name: &str,
+    ) -> Result<Option<git2::Commit>> {
+        let ref_name = format!("refs/prefetch/remotes/{}/{}", remote_name, branch_name);
+        match self.repo.find_reference(&ref_name) {
+            Ok(prefetch_head_reference) => {
+                Ok(Some(prefetch_head_reference
+                                    .peel_to_commit()
+                                    .context("Resolving commit")?))
+            },
+            Err(e) => {
+                warn!("Could not find prefetch head commit (ref {})", &ref_name);
+                Ok(None)
+            }
+        }
     }
 
     pub fn get_head_commit(&self) -> Result<git2::Commit> {

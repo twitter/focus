@@ -283,6 +283,29 @@ pub(in crate::operation) mod integration {
         }
 
         #[allow(dead_code)]
+        pub fn perform_fetch(
+            &self,
+            repo: RepoDisposition,
+            remote_name: &str,
+            branch: &str,
+        ) -> Result<()> {
+            let path = match repo {
+                RepoDisposition::Dense => &self.dense_repo_path,
+                RepoDisposition::Sparse => &self.sparse_repo_path,
+            };
+
+            Command::new("git")
+                .arg("fetch")
+                .arg(remote_name)
+                .arg(branch)
+                .current_dir(&path)
+                .status()
+                .expect("git pull failed");
+
+            Ok(())
+        }
+
+        #[allow(dead_code)]
         pub fn perform_pull(
             &self,
             repo: RepoDisposition,
