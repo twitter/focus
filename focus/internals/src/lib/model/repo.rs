@@ -556,17 +556,21 @@ impl Repo {
     /// Run a sync, returning the number of patterns that were applied and whether a checkout occured as a result of the profile changing.
     pub fn sync(
         &self,
+        commit_id: git2::Oid,
         targets: &TargetSet,
         skip_pattern_application: bool,
         index_config: &IndexConfig,
         app: Arc<App>,
         cache: &RocksDBCache,
     ) -> Result<(usize, bool)> {
-        let head_commit = self.get_head_commit()?;
-        let head_tree = head_commit.tree().context("Failed to resolve head tree")?;
+        let commit = self
+            .underlying()
+            .find_commit(commit_id)
+            .with_context(|| format!("Resolving commit {}", commit_id.to_string()))?;
+        let tree = commit.tree().context("Resolving tree")?;
         let hash_context = HashContext {
             repo: &self.repo,
-            head_tree: &head_tree,
+            head_tree: &tree,
             caches: Default::default(),
         };
 
@@ -652,7 +656,7 @@ impl Repo {
 
                     debug!(?missing_keys, "These are the missing keys");
                     let (outline_patterns, resolution_result) = outlining_tree
-                        .outline(head_commit.id(), targets, app.clone())
+                        .outline(commit_id, targets, app.clone())
                         .context("Failed to outline")?;
 
                     debug!(?resolution_result, ?outline_patterns, "Resolved patterns");

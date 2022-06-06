@@ -47,10 +47,18 @@ pub fn run(sparse_repo: &Path, app: Arc<App>) -> Result<bool> {
         selection.targets.len().to_string(),
     );
 
+    let head_commit = repo.get_head_commit().context("Resolving head commit")?;
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         let odb = RocksDBCache::new(repo.underlying());
-        repo.sync(&targets, false, &repo.config().index, app.clone(), &odb)
-            .context("Sync failed")
+        repo.sync(
+            head_commit.id(),
+            &targets,
+            false,
+            &repo.config().index,
+            app.clone(),
+            &odb,
+        )
+        .context("Sync failed")
     })?;
     ti_client
         .get_context()

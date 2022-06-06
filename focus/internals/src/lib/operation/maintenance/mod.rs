@@ -419,7 +419,7 @@ mod tests {
             Ok(ConfigFixture {
                 tempdir,
                 config_path: path,
-                app: Arc::new(App::new_for_testing()?),
+                app: Arc::new(App::new(true, None)?),
             })
         }
 
