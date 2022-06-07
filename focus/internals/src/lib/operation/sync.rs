@@ -86,16 +86,18 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
         head_commit
     };
 
-    if let Some(working_tree) = repo.working_tree() {
-        if let Ok(Some(sync_point)) = working_tree.read_sync_point_ref() {
-            if sync_point == commit.id() {
-                // The sync point is already set to this ref. We don't need to bother.
-                warn!("Skipping synchronization because the commit to sync is the same as that of the sync point");
-                return Ok(SyncResult {
-                    checked_out: false,
-                    commit_id: Some(commit.id()),
-                    skipped: true,
-                });
+    if preemptive {
+        if let Some(working_tree) = repo.working_tree() {
+            if let Ok(Some(sync_point)) = working_tree.read_sync_point_ref() {
+                if sync_point == commit.id() {
+                    // The sync point is already set to this ref. We don't need to bother.
+                    warn!("Skipping preemptive synchronization because the commit to sync is the same as that of the sync point");
+                    return Ok(SyncResult {
+                        checked_out: false,
+                        commit_id: Some(commit.id()),
+                        skipped: true,
+                    });
+                }
             }
         }
     }
@@ -400,10 +402,18 @@ mod testing {
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
-        assert!(operation::sync::run(&path, false, fixture.app.clone())?.checked_out);
+        {
+            let result = operation::sync::run(&path, false, fixture.app.clone())?;
+            assert!(!result.skipped);
+            assert!(result.checked_out);
+        }
 
         // Subsequent sync does not perform a checkout.
-        assert!(!operation::sync::run(&path, false, fixture.app.clone())?.checked_out);
+        {
+            let result = operation::sync::run(&path, false, fixture.app.clone())?;
+            assert!(!result.skipped);
+            assert!(!result.checked_out);
+        }
 
         Ok(())
     }
