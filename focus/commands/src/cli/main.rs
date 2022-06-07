@@ -528,6 +528,7 @@ enum IndexSubcommand {
 }
 
 #[derive(Parser, Debug)]
+#[allow(clippy::enum_variant_names)]
 enum EventSubcommand {
     PostCheckout,
     PostCommit,
