@@ -40,6 +40,8 @@ use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
+const PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY: &str = "focus.preemptive-sync.enabled";
+
 const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
 const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
 const VERSION_CONFIG_KEY: &str = "focus.version";
@@ -791,6 +793,35 @@ impl Repo {
             .peel_to_commit()
             .context("resolving HEAD commit")?;
         Ok(head_commit)
+    }
+
+    pub fn get_preemptive_sync_enabled(&self) -> Result<bool> {
+        let snapshot = self
+            .underlying()
+            .config()
+            .context("Reading config")?
+            .snapshot()
+            .context("Snapshotting config")?;
+
+        snapshot
+            .get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
+        let working_tree = self
+            .working_tree()
+            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+
+        git_helper::write_config(
+            working_tree.work_dir(),
+            PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY,
+            if enabled { "true" } else { "false" },
+            self.app.clone(),
+        )
+        .context("Writing preemptive sync enabled key")?;
+
+        Ok(())
     }
 
     pub fn primary_branch_name(&self) -> Result<String> {

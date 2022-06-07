@@ -18,7 +18,8 @@ use anyhow::{bail, Context, Result};
 
 pub struct SyncResult {
     pub checked_out: bool,
-    pub commit_id: git2::Oid,
+    pub commit_id: Option<git2::Oid>,
+    pub skipped: bool,
 }
 
 /// Synchronize the sparse repo's contents with the build graph. Returns whether a checkout actually occured.
@@ -28,6 +29,15 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
     if !sparse_profile_path.is_file() {
         bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
     }
+
+    if preemptive && !repo.get_preemptive_sync_enabled()? {
+        return Ok(SyncResult {
+            checked_out: false,
+            commit_id: None,
+            skipped: true,
+        });
+    }
+
     let selections = repo.selection_manager()?;
     let selection = selections.computed_selection()?;
     let targets = TargetSet::try_from(&selection).context("constructing target set")?;
@@ -60,7 +70,6 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
 
     // Figure out if this repo has a "master" branch or "main" branch.
-
     let primary_branch_name =
         primary_branch_name(&repo).context("Determining primary branch name")?;
 
@@ -84,7 +93,8 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
                 warn!("Skipping synchronization because the commit to sync is the same as that of the sync point");
                 return Ok(SyncResult {
                     checked_out: false,
-                    commit_id: commit.id(),
+                    commit_id: Some(commit.id()),
+                    skipped: true,
                 });
             }
         }
@@ -117,7 +127,8 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
 
     Ok(SyncResult {
         checked_out,
-        commit_id: commit.id(),
+        commit_id: Some(commit.id()),
+        skipped: false,
     })
 }
 
@@ -141,7 +152,6 @@ mod testing {
 
     use focus_testing::{init_logging, ScratchGitRepo};
     use focus_util::app;
-    use tracing::info;
 
     use crate::{
         model::{repo::Repo, selection::OperationAction},
@@ -425,33 +435,75 @@ mod testing {
         Ok(())
     }
 
+    struct PreemptiveSyncFixture {
+        pub underlying: RepoPairFixture,
+        pub repo: Repo,
+        pub commit_id: git2::Oid,
+    }
+
+    impl PreemptiveSyncFixture {
+        fn new() -> Result<Self> {
+            let fixture = RepoPairFixture::new()?;
+
+            fixture.perform_clone()?;
+            add_updated_content(&fixture.dense_repo)?;
+
+            let fetched_commits = fixture.perform_fetch(RepoDisposition::Sparse, "origin")?;
+            assert_eq!(fetched_commits.len(), 1);
+            let commit_id = fetched_commits[0];
+
+            let repo = Repo::open(&fixture.sparse_repo_path, fixture.app.clone())?;
+            repo.set_preemptive_sync_enabled(true)?;
+
+            // Set the prefetch ref
+            repo.underlying().reference(
+                "refs/prefetch/remotes/origin/main",
+                commit_id,
+                true,
+                "Emulated prefetch ref",
+            )?;
+
+            Ok(PreemptiveSyncFixture {
+                underlying: fixture,
+                repo,
+                commit_id,
+            })
+        }
+    }
+
     #[test]
     fn preemptive_sync() -> Result<()> {
         init_logging();
 
-        let fixture = RepoPairFixture::new()?;
-
-        fixture.perform_clone()?;
-        add_updated_content(&fixture.dense_repo)?;
-
-        let fetched_commits = fixture.perform_fetch(RepoDisposition::Sparse, "origin")?;
-        assert_eq!(fetched_commits.len(), 1);
-        let commit_id = fetched_commits[0];
-
-        let repo = Repo::open(&fixture.sparse_repo_path, fixture.app.clone())?;
-
-        // Set the prefetch ref
-        repo.underlying().reference(
-            "refs/prefetch/remotes/origin/main",
-            commit_id,
-            true,
-            "Emulated prefetch ref",
-        )?;
+        let fixture = PreemptiveSyncFixture::new()?;
 
         // Sync preemptively
-        let result = operation::sync::run(&fixture.sparse_repo_path, true, fixture.app.clone())?;
+        let result = operation::sync::run(
+            &fixture.underlying.sparse_repo_path,
+            true,
+            fixture.underlying.app.clone(),
+        )?;
         assert!(!result.checked_out);
-        assert_eq!(result.commit_id, commit_id);
+        assert!(!result.skipped);
+
+        assert_eq!(result.commit_id.unwrap(), fixture.commit_id);
+
+        Ok(())
+    }
+
+    #[test]
+    fn preemptive_sync_skips_if_disabled() -> Result<()> {
+        init_logging();
+
+        let fixture = PreemptiveSyncFixture::new()?;
+
+        fixture.repo.set_preemptive_sync_enabled(false)?;
+        let result = operation::sync::run(
+            &fixture.underlying.sparse_repo_path,
+            true,
+            fixture.underlying.app.clone(),
+        )?;
+        assert!(result.skipped);
 
         Ok(())
     }
