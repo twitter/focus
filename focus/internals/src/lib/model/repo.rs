@@ -770,13 +770,16 @@ impl Repo {
     ) -> Result<Option<git2::Commit>> {
         let ref_name = format!("refs/prefetch/remotes/{}/{}", remote_name, branch_name);
         match self.repo.find_reference(&ref_name) {
-            Ok(prefetch_head_reference) => {
-                Ok(Some(prefetch_head_reference
-                                    .peel_to_commit()
-                                    .context("Resolving commit")?))
-            },
+            Ok(prefetch_head_reference) => Ok(Some(
+                prefetch_head_reference
+                    .peel_to_commit()
+                    .context("Resolving commit")?,
+            )),
             Err(e) => {
-                warn!("Could not find prefetch head commit (ref {})", &ref_name);
+                warn!(
+                    "Could not find prefetch head commit (ref {}): {}",
+                    &ref_name, e
+                );
                 Ok(None)
             }
         }
@@ -788,5 +791,16 @@ impl Repo {
             .peel_to_commit()
             .context("resolving HEAD commit")?;
         Ok(head_commit)
+    }
+
+    pub fn primary_branch_name(&self) -> Result<String> {
+        let repo = self.underlying();
+        if repo.find_reference("refs/heads/master").is_ok() {
+            Ok(String::from("master"))
+        } else if repo.find_reference("refs/heads/main").is_ok() {
+            Ok(String::from("main"))
+        } else {
+            bail!("Could not determine primary branch name");
+        }
     }
 }

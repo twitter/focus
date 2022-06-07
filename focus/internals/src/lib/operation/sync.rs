@@ -17,8 +17,8 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 pub struct SyncResult {
-    checked_out: bool,
-    commit_id: git2::Oid,
+    pub checked_out: bool,
+    pub commit_id: git2::Oid,
 }
 
 /// Synchronize the sparse repo's contents with the build graph. Returns whether a checkout actually occured.
@@ -58,9 +58,15 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
     };
 
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
+
+    // Figure out if this repo has a "master" branch or "main" branch.
+
+    let primary_branch_name =
+        primary_branch_name(&repo).context("Determining primary branch name")?;
+
     let commit = if preemptive {
         if let Some(prefetch_commit) = repo
-            .get_prefetch_head_commit("origin", "master")
+            .get_prefetch_head_commit("origin", primary_branch_name.as_str())
             .context("Resolving prefetch head commit")?
         {
             prefetch_commit
@@ -115,6 +121,17 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
     })
 }
 
+fn primary_branch_name(repo: &Repo) -> Result<String> {
+    let underlying = repo.underlying();
+    if let Ok(_) = underlying.find_reference("refs/heads/master") {
+        Ok(String::from("master"))
+    } else if let Ok(_) = underlying.find_reference("refs/heads/main") {
+        Ok(String::from("main"))
+    } else {
+        bail!("Could not determine primary branch name")
+    }
+}
+
 #[cfg(test)]
 mod testing {
     use std::{collections::HashSet, path::Path};
@@ -124,6 +141,7 @@ mod testing {
 
     use focus_testing::{init_logging, ScratchGitRepo};
     use focus_util::app;
+    use tracing::info;
 
     use crate::{
         model::{repo::Repo, selection::OperationAction},
@@ -182,7 +200,7 @@ mod testing {
         );
 
         // Sync in the sparse repo
-        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone())?;
+        let _ = operation::sync::run(&fixture.sparse_repo_path, false, fixture.app.clone())?;
 
         let x_dir = fixture.sparse_repo_path.join("x");
         assert!(!x_dir.is_dir());
@@ -196,7 +214,7 @@ mod testing {
         )?;
 
         // Sync
-        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone())?;
+        let _ = operation::sync::run(&fixture.sparse_repo_path, false, fixture.app.clone())?;
 
         assert!(x_dir.is_dir());
 
@@ -255,7 +273,7 @@ mod testing {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, false, fixture.app.clone())?;
 
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_b_dir.is_dir());
@@ -276,7 +294,7 @@ mod testing {
                 hashset! { project_a_label.clone(), project_b_label.clone() }
             )
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, false, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
@@ -286,7 +304,7 @@ mod testing {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, false, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
@@ -296,7 +314,7 @@ mod testing {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! {});
         }
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, false, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
 
         assert!(!library_b_dir.is_dir());
@@ -319,13 +337,13 @@ mod testing {
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, false, fixture.app.clone())?;
         assert!(library_b_dir.is_dir());
 
         // operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
         assert!(selections.mutate(OperationAction::Remove, &targets)?);
         selections.save()?;
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::sync::run(&path, false, fixture.app.clone())?;
         assert!(!library_b_dir.is_dir());
 
         Ok(())
@@ -372,10 +390,10 @@ mod testing {
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
         selections.save()?;
-        assert!(operation::sync::run(&path, fixture.app.clone())?);
+        assert!(operation::sync::run(&path, false, fixture.app.clone())?.checked_out);
 
         // Subsequent sync does not perform a checkout.
-        assert!(!operation::sync::run(&path, fixture.app.clone())?);
+        assert!(!operation::sync::run(&path, false, fixture.app.clone())?.checked_out);
 
         Ok(())
     }
@@ -414,24 +432,26 @@ mod testing {
         let fixture = RepoPairFixture::new()?;
 
         fixture.perform_clone()?;
-        add_updated_content(&fixture.dense_repo);
+        add_updated_content(&fixture.dense_repo)?;
 
-        // Fetch in the sparse repo from the dense repo
-        fixture.perform_fetch(RepoDisposition::Sparse, "origin", "main")?;
-        let repo = Repo::open(&fixture.dense_repo_path, fixture.app.clone())?;
-        let upstream_ref = repo
-            .underlying()
-            .find_reference("refs/remotes/origin/master")?;
+        let fetched_commits = fixture.perform_fetch(RepoDisposition::Sparse, "origin")?;
+        assert_eq!(fetched_commits.len(), 1);
+        let commit_id = fetched_commits[0];
+
+        let repo = Repo::open(&fixture.sparse_repo_path, fixture.app.clone())?;
+
         // Set the prefetch ref
         repo.underlying().reference(
-            "refs/prefetch/remotes/origin/master",
-            upstream_ref.peel_to_commit()?.id(),
+            "refs/prefetch/remotes/origin/main",
+            commit_id,
             true,
             "Emulated prefetch ref",
         )?;
 
         // Sync preemptively
-        operation::sync::run(&fixture.sparse_repo_path, true, fixture.app.clone())?;
+        let result = operation::sync::run(&fixture.sparse_repo_path, true, fixture.app.clone())?;
+        assert!(!result.checked_out);
+        assert_eq!(result.commit_id, commit_id);
 
         Ok(())
     }
