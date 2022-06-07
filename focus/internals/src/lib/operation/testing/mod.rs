@@ -316,13 +316,6 @@ pub(in crate::operation) mod integration {
                 RepoDisposition::Sparse => &self.sparse_repo_path,
             };
             Command::new("git")
-                .arg("remote")
-                .arg("-v")
-                .current_dir(&path)
-                .status()
-                .expect("git remote failed");
-
-            Command::new("git")
                 .arg("fetch")
                 .arg(remote_name)
                 .current_dir(&path)
