@@ -9,14 +9,13 @@ use std::{
     sync::Arc,
 };
 
-use crate::operation;
 use crate::tracker::Tracker;
+use crate::{locking, operation};
 
 use anyhow::{bail, Context, Result};
 use focus_util::{
     app::App,
     git_helper::{self, ConfigExt},
-    lock_file::LockFile,
     sandbox_command::{SandboxCommand, SandboxCommandOutput},
 };
 use strum_macros;
@@ -217,14 +216,6 @@ impl Runner {
         })
     }
 
-    fn hold_lock_for(path: &Path) -> Result<LockFile> {
-        let git_dir = git_helper::git_dir(path)?;
-        let focus_dir = git_dir.join(".focus");
-        std::fs::create_dir_all(&focus_dir)?;
-        let lock_path = focus_dir.join("maint.lock");
-        LockFile::new(&lock_path)
-    }
-
     #[tracing::instrument]
     fn run_git_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
         let exec_path: PathBuf = git_helper::git_exec_path(&self.git_binary_path)?;
@@ -267,7 +258,7 @@ impl Runner {
 
     #[tracing::instrument]
     fn run_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
-        let _lock = match Self::hold_lock_for(repo_path) {
+        let _lock = match locking::hold_lock(repo_path, Path::new("maint.lock")) {
             Ok(lock) => lock,
             Err(e) => {
                 error!(?e, "failed to acquire lock");

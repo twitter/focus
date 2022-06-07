@@ -1,5 +1,5 @@
-use crate::index::RocksDBMemoizationCacheExt;
 use crate::model::repo::Repo;
+use crate::{index::RocksDBMemoizationCacheExt, locking};
 
 use crate::operation::util::perform;
 use crate::target::TargetSet;
@@ -25,6 +25,10 @@ pub struct SyncResult {
 /// Synchronize the sparse repo's contents with the build graph. Returns whether a checkout actually occured.
 pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncResult> {
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
+
+    let _lock = locking::hold_lock(sparse_repo, Path::new("sync.lock"))
+        .context("Failed to obtain synchronization lock")?;
+
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
     if !sparse_profile_path.is_file() {
         bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
