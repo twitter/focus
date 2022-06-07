@@ -568,7 +568,7 @@ impl Repo {
         let commit = self
             .underlying()
             .find_commit(commit_id)
-            .with_context(|| format!("Resolving commit {}", commit_id.to_string()))?;
+            .with_context(|| format!("Resolving commit {}", commit_id))?;
         let tree = commit.tree().context("Resolving tree")?;
         let hash_context = HashContext {
             repo: &self.repo,
