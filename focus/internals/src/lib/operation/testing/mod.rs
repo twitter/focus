@@ -295,12 +295,10 @@ pub(in crate::operation) mod integration {
                 File::open(path).with_context(|| format!("Opening {}", path.display()))?,
             );
 
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    let mut tokens = line.split_ascii_whitespace();
-                    if let Some(token) = tokens.next() {
-                        results.push(git2::Oid::from_str(token).context("Parsing OID")?);
-                    }
+            for line in reader.lines().flatten() {
+                let mut tokens = line.split_ascii_whitespace();
+                if let Some(token) = tokens.next() {
+                    results.push(git2::Oid::from_str(token).context("Parsing OID")?);
                 }
             }
 

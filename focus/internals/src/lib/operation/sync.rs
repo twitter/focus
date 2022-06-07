@@ -134,9 +134,9 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
 
 fn primary_branch_name(repo: &Repo) -> Result<String> {
     let underlying = repo.underlying();
-    if let Ok(_) = underlying.find_reference("refs/heads/master") {
+    if underlying.find_reference("refs/heads/master").is_ok() {
         Ok(String::from("master"))
-    } else if let Ok(_) = underlying.find_reference("refs/heads/main") {
+    } else if underlying.find_reference("refs/heads/main").is_ok() {
         Ok(String::from("main"))
     } else {
         bail!("Could not determine primary branch name")
@@ -180,11 +180,11 @@ mod testing {
         let catz_txt_content = r#"The Naming of Cats is a difficult matter,
         It isn't just one of your holiday games
                 )"#;
-        Ok(scratch_repo.write_and_commit_file(
+        scratch_repo.write_and_commit_file(
             Path::new("x/catz.txt"),
             catz_txt_content.as_bytes(),
             "Add excerpts",
-        )?)
+        )
     }
 
     #[test]
