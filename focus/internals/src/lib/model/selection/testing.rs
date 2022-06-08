@@ -23,7 +23,7 @@ impl Fixture {
         let branch = String::from("main");
         let repo =
             ScratchGitRepo::new_copied_fixture(Path::new("bazel_java_example"), &path, &branch)?;
-        let app = Arc::new(App::new(false, None)?);
+        let app = Arc::new(App::new_for_testing()?);
         Ok(Self {
             dir,
             underlying: repo,

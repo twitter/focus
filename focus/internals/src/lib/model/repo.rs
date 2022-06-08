@@ -35,13 +35,11 @@ use super::{
 
 use anyhow::{bail, Context, Result};
 use git2::{Oid, Repository, TreeWalkMode, TreeWalkResult};
-use tracing::{debug, info, info_span, trace, warn};
+use tracing::{debug, info, info_span, trace};
 use uuid::Uuid;
 
 const SYNC_REF_NAME: &str = "refs/focus/sync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
-const PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY: &str = "focus.preemptive-sync.enabled";
-
 const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
 const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
 const VERSION_CONFIG_KEY: &str = "focus.version";
@@ -558,21 +556,17 @@ impl Repo {
     /// Run a sync, returning the number of patterns that were applied and whether a checkout occured as a result of the profile changing.
     pub fn sync(
         &self,
-        commit_id: git2::Oid,
         targets: &TargetSet,
         skip_pattern_application: bool,
         index_config: &IndexConfig,
         app: Arc<App>,
         cache: &RocksDBCache,
     ) -> Result<(usize, bool)> {
-        let commit = self
-            .underlying()
-            .find_commit(commit_id)
-            .with_context(|| format!("Resolving commit {}", commit_id))?;
-        let tree = commit.tree().context("Resolving tree")?;
+        let head_commit = self.get_head_commit()?;
+        let head_tree = head_commit.tree().context("Failed to resolve head tree")?;
         let hash_context = HashContext {
             repo: &self.repo,
-            head_tree: &tree,
+            head_tree: &head_tree,
             caches: Default::default(),
         };
 
@@ -658,7 +652,7 @@ impl Repo {
 
                     debug!(?missing_keys, "These are the missing keys");
                     let (outline_patterns, resolution_result) = outlining_tree
-                        .outline(commit_id, targets, app.clone())
+                        .outline(head_commit.id(), targets, app.clone())
                         .context("Failed to outline")?;
 
                     debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
@@ -765,73 +759,11 @@ impl Repo {
         self.selection_manager()?.computed_selection()
     }
 
-    pub fn get_prefetch_head_commit(
-        &self,
-        remote_name: &str,
-        branch_name: &str,
-    ) -> Result<Option<git2::Commit>> {
-        let ref_name = format!("refs/prefetch/remotes/{}/{}", remote_name, branch_name);
-        match self.repo.find_reference(&ref_name) {
-            Ok(prefetch_head_reference) => Ok(Some(
-                prefetch_head_reference
-                    .peel_to_commit()
-                    .context("Resolving commit")?,
-            )),
-            Err(e) => {
-                warn!(
-                    "Could not find prefetch head commit (ref {}): {}",
-                    &ref_name, e
-                );
-                Ok(None)
-            }
-        }
-    }
-
     pub fn get_head_commit(&self) -> Result<git2::Commit> {
         let head_reference = self.repo.head().context("resolving HEAD reference")?;
         let head_commit = head_reference
             .peel_to_commit()
             .context("resolving HEAD commit")?;
         Ok(head_commit)
-    }
-
-    pub fn get_preemptive_sync_enabled(&self) -> Result<bool> {
-        let snapshot = self
-            .underlying()
-            .config()
-            .context("Reading config")?
-            .snapshot()
-            .context("Snapshotting config")?;
-
-        snapshot
-            .get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)
-            .map_err(|e| anyhow::anyhow!(e))
-    }
-
-    pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
-        let working_tree = self
-            .working_tree()
-            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
-
-        git_helper::write_config(
-            working_tree.work_dir(),
-            PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY,
-            if enabled { "true" } else { "false" },
-            self.app.clone(),
-        )
-        .context("Writing preemptive sync enabled key")?;
-
-        Ok(())
-    }
-
-    pub fn primary_branch_name(&self) -> Result<String> {
-        let repo = self.underlying();
-        if repo.find_reference("refs/heads/master").is_ok() {
-            Ok(String::from("master"))
-        } else if repo.find_reference("refs/heads/main").is_ok() {
-            Ok(String::from("main"))
-        } else {
-            bail!("Could not determine primary branch name");
-        }
     }
 }
