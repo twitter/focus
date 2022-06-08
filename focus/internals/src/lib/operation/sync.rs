@@ -266,15 +266,35 @@ It isn't just one of your holiday games
         let mut selections = fixture.sparse_repo()?.selection_manager()?;
 
         assert!(selections.mutate(OperationAction::Add, &targets)?);
-        selections.save()?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(library_b_dir.is_dir());
 
-        // operation::adhoc::pop(fixture.sparse_repo_path.clone(), 1)?;
         assert!(selections.mutate(OperationAction::Remove, &targets)?);
-        selections.save()?;
         operation::sync::run(&path, fixture.app.clone())?;
         assert!(!library_b_dir.is_dir());
+
+        Ok(())
+    }
+
+    #[test]
+    fn failed_selection_mutations_are_reverted() -> Result<()> {
+        init_logging();
+
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let mut selections = fixture.sparse_repo()?.selection_manager()?;
+        let selection_before = selections.selection()?;
+        let targets = vec![String::from("bazel://library_z/...")];
+        assert!(operation::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            targets,
+            fixture.app.clone()
+        )
+        .is_err());
+        let selection_after = selections.selection()?;
+        assert_eq!(selection_before, selection_after);
 
         Ok(())
     }
