@@ -39,14 +39,8 @@ impl BackedUpFile {
         })
     }
 
-    /// Sets whether the backup should be restored.
     pub fn set_restore(&self, new_value: bool) {
         self.restore.set(new_value);
-    }
-
-    /// Prevent the backup from being restored.
-    pub fn discard(&self) {
-        self.set_restore(false);
     }
 }
 

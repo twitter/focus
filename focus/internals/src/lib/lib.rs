@@ -2,7 +2,6 @@
 
 pub mod hashing;
 pub mod index;
-pub mod locking;
 pub mod model;
 pub mod operation;
 pub mod target;

@@ -190,14 +190,12 @@ pub(in crate::operation) mod refs {
 #[cfg(test)]
 pub(in crate::operation) mod integration {
     use std::{
-        fs::File,
-        io::{BufRead, BufReader},
         path::{Path, PathBuf},
         process::Command,
         sync::Arc,
     };
 
-    use anyhow::{Context, Result};
+    use anyhow::Result;
 
     use tempfile::TempDir;
 
@@ -281,48 +279,7 @@ pub(in crate::operation) mod integration {
 
         #[allow(dead_code)]
         pub fn perform_sync(&self) -> Result<bool> {
-            operation::sync::run(&self.sparse_repo_path, false, self.app.clone())
-                .map(|result| result.checked_out)
-        }
-
-        #[allow(dead_code)]
-        pub fn parse_fetch_head(path: impl AsRef<Path>) -> Result<Vec<git2::Oid>> {
-            let mut results: Vec<git2::Oid> = Vec::new();
-
-            let path = path.as_ref();
-
-            let reader = BufReader::new(
-                File::open(path).with_context(|| format!("Opening {}", path.display()))?,
-            );
-
-            for line in reader.lines().flatten() {
-                let mut tokens = line.split_ascii_whitespace();
-                if let Some(token) = tokens.next() {
-                    results.push(git2::Oid::from_str(token).context("Parsing OID")?);
-                }
-            }
-
-            Ok(results)
-        }
-
-        #[allow(dead_code)]
-        pub fn perform_fetch(
-            &self,
-            repo: RepoDisposition,
-            remote_name: &str,
-        ) -> Result<Vec<git2::Oid>> {
-            let path = match repo {
-                RepoDisposition::Dense => &self.dense_repo_path,
-                RepoDisposition::Sparse => &self.sparse_repo_path,
-            };
-            Command::new("git")
-                .arg("fetch")
-                .arg(remote_name)
-                .current_dir(&path)
-                .status()
-                .expect("git pull failed");
-            let fetch_head_path = path.join(".git").join("FETCH_HEAD");
-            Self::parse_fetch_head(fetch_head_path)
+            operation::sync::run(&self.sparse_repo_path, self.app.clone())
         }
 
         #[allow(dead_code)]

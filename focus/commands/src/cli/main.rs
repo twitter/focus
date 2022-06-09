@@ -194,7 +194,10 @@ enum Subcommand {
     },
     /// Called by a git hook to trigger certain actions after a git event such as
     /// merge completion or checkout
-    Event { args: Vec<String> },
+    Event {
+        #[clap(subcommand)]
+        subcommand: EventSubcommand,
+    },
     /// Print the version of Focus
     Version,
 }
@@ -202,60 +205,53 @@ enum Subcommand {
 /// Helper method to extract subcommand name. Tool insights client uses this to set
 /// feature name.
 fn feature_name_for(subcommand: &Subcommand) -> String {
-    match subcommand {
-        Subcommand::Clone { .. } => "clone".to_string(),
-        Subcommand::Sync { .. } => "sync".to_string(),
+    let subcommand_name = match subcommand {
+        Subcommand::Clone { .. } => "clone",
+        Subcommand::Sync { .. } => "sync",
         Subcommand::Repo { subcommand } => match subcommand {
-            RepoSubcommand::List { .. } => "repo-list".to_string(),
-            RepoSubcommand::Repair { .. } => "repo-repair".to_string(),
+            RepoSubcommand::List { .. } => "repo-list",
+            RepoSubcommand::Repair { .. } => "repo-repair",
         },
-        Subcommand::Add { .. } => "add".to_string(),
-        Subcommand::Remove { .. } => "remove".to_string(),
-        Subcommand::Status { .. } => "status".to_string(),
-        Subcommand::Projects { .. } => "projects".to_string(),
-        Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes".to_string(),
+        Subcommand::Add { .. } => "add",
+        Subcommand::Remove { .. } => "remove",
+        Subcommand::Status { .. } => "status",
+        Subcommand::Projects { .. } => "projects",
+        Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes",
         Subcommand::Refs { subcommand, .. } => match subcommand {
-            RefsSubcommand::Delete { .. } => "refs-delete".to_string(),
-            RefsSubcommand::ListExpired { .. } => "refs-list-expired".to_string(),
-            RefsSubcommand::ListCurrent { .. } => "refs-list-current".to_string(),
+            RefsSubcommand::Delete { .. } => "refs-delete",
+            RefsSubcommand::ListExpired { .. } => "refs-list-expired",
+            RefsSubcommand::ListCurrent { .. } => "refs-list-current",
         },
-        Subcommand::Init { .. } => "init".to_string(),
+        Subcommand::Init { .. } => "init",
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
-            MaintenanceSubcommand::Run { .. } => "maintenance-run".to_string(),
-            MaintenanceSubcommand::Register { .. } => "maintenance-register".to_string(),
-            MaintenanceSubcommand::SetDefaultConfig { .. } => {
-                "maintenance-set-default-config".to_string()
-            }
-            MaintenanceSubcommand::SandboxCleanup { .. } => {
-                "maintenance-sandbox-cleanup".to_string()
-            }
+            MaintenanceSubcommand::Run { .. } => "maintenance-run",
+            MaintenanceSubcommand::Register { .. } => "maintenance-register",
+            MaintenanceSubcommand::SetDefaultConfig { .. } => "maintenance-set-default-config",
+            MaintenanceSubcommand::SandboxCleanup { .. } => "maintenance-sandbox-cleanup",
             MaintenanceSubcommand::Schedule { subcommand } => match subcommand {
-                MaintenanceScheduleSubcommand::Enable { .. } => {
-                    "maintenance-schedule-enable".to_string()
-                }
-                MaintenanceScheduleSubcommand::Disable { .. } => {
-                    "maintenance-schedule-disable".to_string()
-                }
+                MaintenanceScheduleSubcommand::Enable { .. } => "maintenance-schedule-enable",
+                MaintenanceScheduleSubcommand::Disable { .. } => "maintenance-schedule-disable",
             },
         },
-        Subcommand::GitTrace { .. } => "git-trace".to_string(),
-        Subcommand::Upgrade { .. } => "upgrade".to_string(),
+        Subcommand::GitTrace { .. } => "git-trace",
+        Subcommand::Upgrade { .. } => "upgrade",
         Subcommand::Index { subcommand } => match subcommand {
-            IndexSubcommand::Clear { .. } => "index-clear".to_string(),
-            IndexSubcommand::Fetch { .. } => "index-fetch".to_string(),
-            IndexSubcommand::Get { .. } => "index-get".to_string(),
-            IndexSubcommand::Generate { .. } => "index-generate".to_string(),
-            IndexSubcommand::Hash { .. } => "index-hash".to_string(),
-            IndexSubcommand::Push { .. } => "index-push".to_string(),
-            IndexSubcommand::Resolve { .. } => "index-resolve".to_string(),
+            IndexSubcommand::Clear { .. } => "index-clear",
+            IndexSubcommand::Fetch { .. } => "index-fetch",
+            IndexSubcommand::Get { .. } => "index-get",
+            IndexSubcommand::Generate { .. } => "index-generate",
+            IndexSubcommand::Hash { .. } => "index-hash",
+            IndexSubcommand::Push { .. } => "index-push",
+            IndexSubcommand::Resolve { .. } => "index-resolve",
         },
-        Subcommand::Event { args } => {
-            let mut temp_args = args.to_owned();
-            temp_args.insert(0, "event".to_string());
-            temp_args.join("-")
-        }
-        Subcommand::Version => "version".to_string(),
-    }
+        Subcommand::Event { subcommand } => match subcommand {
+            EventSubcommand::PostCheckout => "event-post-checkout",
+            EventSubcommand::PostMerge => "event-post-merge",
+            EventSubcommand::PostCommit => "event-post-commit",
+        },
+        Subcommand::Version => "version",
+    };
+    subcommand_name.into()
 }
 
 #[derive(Parser, Debug)]
@@ -532,7 +528,6 @@ enum IndexSubcommand {
 }
 
 #[derive(Parser, Debug)]
-#[allow(clippy::enum_variant_names)]
 enum EventSubcommand {
     PostCheckout,
     PostCommit,
@@ -637,7 +632,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::sync::run(&sparse_repo, false, app)?;
+            operation::sync::run(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
 
@@ -962,7 +957,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
         },
 
-        Subcommand::Event { args: _ } => Ok(ExitCode(0)),
+        Subcommand::Event { subcommand } => match subcommand {
+            EventSubcommand::PostCheckout => Ok(ExitCode(0)),
+            EventSubcommand::PostCommit => Ok(ExitCode(0)),
+            EventSubcommand::PostMerge => Ok(ExitCode(0)),
+        },
 
         Subcommand::Version => {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
@@ -1013,6 +1012,18 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     }
 }
 
+// Returns a cmd name for a sandbox.
+// Returns None if cmd hasn't been determined to need a sandbox prefix.
+fn sandbox_name_for_cmd(opts: &FocusOpts) -> Option<&str> {
+    match &opts.cmd {
+        Subcommand::Maintenance {
+            subcommand: MaintenanceSubcommand::Run { .. },
+            ..
+        } => Some("maintenance_"),
+        _ => None,
+    }
+}
+
 /// Run the main and any destructors. Local variables are not guaranteed to be
 /// dropped if `std::process::exit` is called, so make sure to bubble up the
 /// return code to the top level, which is the only place in the code that's
@@ -1036,7 +1047,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let app = Arc::from(App::new(
         preserve_sandbox,
-        Some(&feature_name_for(&options.cmd)),
+        sandbox_name_for_cmd(&options),
         Some(env!("CARGO_PKG_NAME").to_owned()),
         Some(env!("CARGO_PKG_VERSION").to_owned()),
     )?);
@@ -1088,26 +1099,4 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 fn main() -> Result<()> {
     let ExitCode(exit_code) = main_and_drop_locals()?;
     std::process::exit(exit_code);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn event_cmd_feature_name_for_is_in_right_format() -> Result<()> {
-        let event_cmd = Subcommand::Event {
-            args: vec![
-                "this".to_string(),
-                "is".to_string(),
-                "an".to_string(),
-                "event".to_string(),
-                "subcommand".to_string(),
-                "teehee".to_string(),
-            ],
-        };
-        let feature_name = feature_name_for(&event_cmd);
-        assert_eq!(feature_name, "event-this-is-an-event-subcommand-teehee");
-        Ok(())
-    }
 }

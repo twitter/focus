@@ -34,7 +34,7 @@ impl Sandbox {
 
         let underlying: TempDir = tempfile::Builder::new()
             .prefix(&match name_prefix {
-                Some(prefix) => DEFAULT_NAME_PREFIX.to_string() + prefix + "_",
+                Some(prefix) => DEFAULT_NAME_PREFIX.to_string() + prefix,
                 None => DEFAULT_NAME_PREFIX.to_string(),
             })
             .tempdir_in(sandbox_root)

@@ -77,7 +77,6 @@ impl<T: Cache> ObjectDatabase for T {
                     ?hash,
                     "Non-deterministic dependency hashing"
                 );
-                anyhow::bail!("Non-deterministic dependency hashing")
             }
         }
 
@@ -169,7 +168,6 @@ pub mod testing {
                         ?hash,
                         "Non-deterministic dependency hashing"
                     );
-                    anyhow::bail!("Non-deterministic dependency hashing");
                 }
             }
             Ok(())
