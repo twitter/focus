@@ -14,19 +14,12 @@ fn mutate(
     app: Arc<focus_util::app::App>,
 ) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
-    let mut selections = repo.selection_manager().context("Loading the selection")?;
-    let backup = selections
-        .create_backup()
-        .context("Creating a backup of the current selection")?;
-    if selections
-        .mutate(action, &projects_and_targets)
-        .context("Updating the selection")?
-    {
+    let mut selections = repo.selection_manager()?;
+    if selections.mutate(action, &projects_and_targets)? {
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
-            super::sync::run(sparse_repo.as_ref(), app).context("Synchronizing changes")?;
-            backup.discard();
+            super::sync::run(sparse_repo.as_ref(), false, app)?;
         }
     }
 

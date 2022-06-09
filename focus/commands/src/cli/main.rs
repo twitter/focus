@@ -198,8 +198,6 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: EventSubcommand,
     },
-    /// Print the version of Focus
-    Version,
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -249,7 +247,6 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             EventSubcommand::PostMerge => "event-post-merge",
             EventSubcommand::PostCommit => "event-post-commit",
         },
-        Subcommand::Version => "version",
     };
     subcommand_name.into()
 }
@@ -632,7 +629,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::sync::run(&sparse_repo, app)?;
+            operation::sync::run(&sparse_repo, false, app)?;
             Ok(ExitCode(0))
         }
 
@@ -962,11 +959,6 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             EventSubcommand::PostCommit => Ok(ExitCode(0)),
             EventSubcommand::PostMerge => Ok(ExitCode(0)),
         },
-
-        Subcommand::Version => {
-            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-            Ok(ExitCode(0))
-        }
     }
 }
 
@@ -1045,12 +1037,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let preserve_sandbox = true;
 
-    let app = Arc::from(App::new(
-        preserve_sandbox,
-        sandbox_name_for_cmd(&options),
-        Some(env!("CARGO_PKG_NAME").to_owned()),
-        Some(env!("CARGO_PKG_VERSION").to_owned()),
-    )?);
+    let app = Arc::from(App::new(preserve_sandbox, sandbox_name_for_cmd(&options))?);
     let ti_context = app.tool_insights_client();
 
     setup_thread_pool(*resolution_threads)?;
