@@ -662,7 +662,7 @@ mod test {
         let sync_point_oid = model_repo
             .working_tree()
             .unwrap()
-            .read_sync_point_ref()?
+            .read_sparse_sync_point_ref()?
             .unwrap();
         assert_eq!(sync_point_oid, main_branch_commit_id);
 

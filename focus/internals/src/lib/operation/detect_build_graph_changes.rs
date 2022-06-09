@@ -23,7 +23,7 @@ fn find_committed_changes(app: Arc<App>, repo_path: &Path) -> Result<Vec<PathBuf
 
     let sync_state_oid = {
         if let Some(sync_point) = working_tree
-            .read_sync_point_ref()
+            .read_sparse_sync_point_ref()
             .context("reading sync state")?
         {
             sync_point

@@ -49,6 +49,14 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
     let ti_client = app_for_ti_client.tool_insights_client();
+    ti_client.get_context().add_to_custom_map(
+        "sync_kind",
+        if preemptive {
+            "preemptive"
+        } else {
+            "immediate"
+        },
+    );
 
     let backed_up_sparse_profile: Option<BackedUpFile> = if preemptive {
         None
@@ -92,10 +100,20 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
 
     if preemptive {
         if let Some(working_tree) = repo.working_tree() {
-            if let Ok(Some(sync_point)) = working_tree.read_sync_point_ref() {
+            if let Ok(Some(sync_point)) = working_tree.read_sparse_sync_point_ref() {
                 if sync_point == commit.id() {
                     // The sync point is already set to this ref. We don't need to bother.
                     warn!("Skipping preemptive synchronization because the commit to sync is the same as that of the sync point");
+                    return Ok(SyncResult {
+                        checked_out: false,
+                        commit_id: Some(commit.id()),
+                        skipped: true,
+                    });
+                }
+            } else if let Ok(Some(sync_point)) = working_tree.read_preemptive_sync_point_ref() {
+                if sync_point == commit.id() {
+                    // The sync point is already set to this ref. We don't need to bother.
+                    warn!("Skipping preemptive synchronization because the commit to sync is the same as that of the preemptive sync point");
                     return Ok(SyncResult {
                         checked_out: false,
                         commit_id: Some(commit.id()),
@@ -119,7 +137,13 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
         .context("Sync failed")
     })?;
 
-    if !preemptive {
+    if preemptive {
+        perform("Updating the sync point", || {
+            repo.working_tree()
+                .unwrap()
+                .write_preemptive_sync_point_ref(commit.id())
+        })?;
+    } else {
         ti_client
             .get_context()
             .add_to_custom_map("pattern_count", pattern_count.to_string());
@@ -500,6 +524,33 @@ mod testing {
         assert!(!result.checked_out);
         assert!(!result.skipped);
 
+        assert_eq!(result.commit_id.unwrap(), fixture.commit_id);
+
+        Ok(())
+    }
+
+    #[test]
+    fn preemptive_sync_skips_if_presync_ref_is_at_commit() -> Result<()> {
+        init_logging();
+
+        let fixture = PreemptiveSyncFixture::new()?;
+
+        // Sync preemptively
+        let result = operation::sync::run(
+            &fixture.underlying.sparse_repo_path,
+            true,
+            fixture.underlying.app.clone(),
+        )?;
+        assert!(!result.skipped);
+        assert_eq!(result.commit_id.unwrap(), fixture.commit_id);
+
+        // Subsequent preemptive syncs are skipped
+        let result = operation::sync::run(
+            &fixture.underlying.sparse_repo_path,
+            true,
+            fixture.underlying.app.clone(),
+        )?;
+        assert!(result.skipped);
         assert_eq!(result.commit_id.unwrap(), fixture.commit_id);
 
         Ok(())

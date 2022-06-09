@@ -38,7 +38,8 @@ use git2::{Oid, Repository, TreeWalkMode, TreeWalkResult};
 use tracing::{debug, info, info_span, trace, warn};
 use uuid::Uuid;
 
-const SYNC_REF_NAME: &str = "refs/focus/sync";
+const SPARSE_SYNC_REF_NAME: &str = "refs/focus/sync";
+const PREEMPTIVE_SYNC_REF_NAME: &str = "refs/focus/presync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
 const PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY: &str = "focus.preemptive-sync.enabled";
 
@@ -257,40 +258,66 @@ impl WorkingTree {
             .context("Failed to apply root-only patterns")
     }
 
-    /// Reads the commit ID of the sparse sync ref (named SYNC_REF_NAME)
-    pub fn read_sync_point_ref(&self) -> Result<Option<Oid>> {
-        let description = format!(
-            "Recording sparse sync point in {}",
-            self.work_dir().display()
-        );
-        let reference = self
-            .repo
-            .find_reference(SYNC_REF_NAME)
-            .context(description.clone())
-            .context("Finding sync reference");
+    pub fn read_sync_point_ref_internal(&self, name: &str) -> Result<Option<Oid>> {
+        let reference = self.repo.find_reference(name).with_context(|| {
+            format!(
+                "Finding sync reference {} in repo {}",
+                name,
+                self.repo.path().display()
+            )
+        });
         match reference {
             Ok(reference) => {
-                let commit = reference
-                    .peel_to_commit()
-                    .context(description)
-                    .context("Finding commit associated with reference")?;
+                let commit = reference.peel_to_commit().with_context(|| {
+                    format!(
+                        "Resolving commit for reference {} in repo {}",
+                        name,
+                        self.repo.path().display()
+                    )
+                })?;
                 Ok(Some(commit.id()))
             }
             _ => Ok(None),
         }
     }
 
+    /// Reads the commit ID of the sparse sync ref (named SYNC_REF_NAME)
+    pub fn read_sparse_sync_point_ref(&self) -> Result<Option<Oid>> {
+        self.read_sync_point_ref_internal(SPARSE_SYNC_REF_NAME)
+    }
+
+    /// Reads the commit ID of the preemptive sync ref (named SYNC_REF_NAME)
+    pub fn read_preemptive_sync_point_ref(&self) -> Result<Option<Oid>> {
+        self.read_sync_point_ref_internal(PREEMPTIVE_SYNC_REF_NAME)
+    }
+
+    pub fn write_sync_point_ref_internal(&self, name: &str, commit_id: git2::Oid) -> Result<()> {
+        self.repo
+            .reference(SPARSE_SYNC_REF_NAME, commit_id, true, "focus sync")
+            .with_context(|| {
+                format!(
+                    "Recording sync point ref {} in repo {} to {}",
+                    name,
+                    self.work_dir().display(),
+                    &commit_id,
+                )
+            })
+            .map(|_| ())
+    }
+
     /// Updates the sparse sync ref to the value of the HEAD ref (named SYNC_REF_NAME)
     pub fn write_sync_point_ref(&self) -> Result<()> {
-        let description = format!(
-            "Recording sparse sync point in {}",
-            self.work_dir().display()
-        );
-        let head_commit = self.get_head_commit().context(description)?;
-        self.repo
-            .reference(SYNC_REF_NAME, head_commit.id(), true, "focus sync")?;
+        let head_commit = self
+            .get_head_commit()
+            .context("Determining the HEAD commit")?;
+        self.write_sync_point_ref_internal(SPARSE_SYNC_REF_NAME, head_commit.id())
+            .context("Updating the sparse sync ref")
+    }
 
-        Ok(())
+    /// Updates the sparse sync ref to the value of the HEAD ref (named SYNC_REF_NAME)
+    pub fn write_preemptive_sync_point_ref(&self, commit_id: git2::Oid) -> Result<()> {
+        self.write_sync_point_ref_internal(PREEMPTIVE_SYNC_REF_NAME, commit_id)
+            .context("Updating the preemptive sync ref")
     }
 
     pub fn git_repo(&self) -> &Repository {
