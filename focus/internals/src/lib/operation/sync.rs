@@ -138,13 +138,10 @@ It isn't just one of your holiday games
         // Add as a target
         operation::selection::add(
             &fixture.sparse_repo_path,
-            false,
+            true,
             vec![String::from("bazel://x/...")],
             fixture.app.clone(),
         )?;
-
-        // Sync
-        operation::sync::run(&fixture.sparse_repo_path, fixture.app.clone())?;
 
         assert!(x_dir.is_dir());
 
@@ -195,7 +192,7 @@ It isn't just one of your holiday games
         assert!(!project_b_dir.is_dir());
         operation::selection::add(
             &path,
-            false,
+            true,
             vec![project_b_label.clone()],
             fixture.app.clone(),
         )?;
@@ -203,7 +200,6 @@ It isn't just one of your holiday games
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
         }
-        operation::sync::run(&path, fixture.app.clone())?;
 
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_b_dir.is_dir());
@@ -213,7 +209,7 @@ It isn't just one of your holiday games
         assert!(!project_a_dir.is_dir());
         operation::selection::add(
             &path,
-            false,
+            true,
             vec![project_a_label.clone()],
             fixture.app.clone(),
         )?;
@@ -224,27 +220,24 @@ It isn't just one of your holiday games
                 hashset! { project_a_label.clone(), project_b_label.clone() }
             )
         }
-        operation::sync::run(&path, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(library_a_dir.is_dir());
         assert!(project_a_dir.is_dir());
 
-        operation::selection::remove(&path, false, vec![project_a_label], fixture.app.clone())?;
+        operation::selection::remove(&path, true, vec![project_a_label], fixture.app.clone())?;
         {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! { project_b_label.clone() })
         }
-        operation::sync::run(&path, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
         assert!(!library_a_dir.is_dir());
         assert!(!project_a_dir.is_dir());
 
-        operation::selection::remove(&path, false, vec![project_b_label], fixture.app.clone())?;
+        operation::selection::remove(&path, true, vec![project_b_label], fixture.app.clone())?;
         {
             let selected_names = selected_project_names()?;
             assert_eq!(selected_names, hashset! {});
         }
-        operation::sync::run(&path, fixture.app.clone())?;
         insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
 
         assert!(!library_b_dir.is_dir());
@@ -263,14 +256,21 @@ It isn't just one of your holiday games
         let path = fixture.sparse_repo_path.clone();
         let library_b_dir = path.join("library_b");
         let targets = vec![String::from("bazel://library_b/...")];
-        let mut selections = fixture.sparse_repo()?.selection_manager()?;
 
-        assert!(selections.mutate(OperationAction::Add, &targets)?);
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            targets.clone(),
+            fixture.app.clone()
+        )?;
         assert!(library_b_dir.is_dir());
 
-        assert!(selections.mutate(OperationAction::Remove, &targets)?);
-        operation::sync::run(&path, fixture.app.clone())?;
+        operation::selection::remove(
+            &fixture.sparse_repo_path,
+            true,
+            targets.clone(),
+            fixture.app.clone()
+        )?;
         assert!(!library_b_dir.is_dir());
 
         Ok(())
@@ -283,7 +283,7 @@ It isn't just one of your holiday games
         let fixture = RepoPairFixture::new()?;
         fixture.perform_clone()?;
 
-        let mut selections = fixture.sparse_repo()?.selection_manager()?;
+        let selections = fixture.sparse_repo()?.selection_manager()?;
         let selection_before = selections.selection()?;
         let targets = vec![String::from("bazel://library_z/...")];
         assert!(operation::selection::add(
