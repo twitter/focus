@@ -202,49 +202,60 @@ enum Subcommand {
 /// Helper method to extract subcommand name. Tool insights client uses this to set
 /// feature name.
 fn feature_name_for(subcommand: &Subcommand) -> String {
-    let subcommand_name = match subcommand {
-        Subcommand::Clone { .. } => "clone",
-        Subcommand::Sync { .. } => "sync",
+    match subcommand {
+        Subcommand::Clone { .. } => "clone".to_string(),
+        Subcommand::Sync { .. } => "sync".to_string(),
         Subcommand::Repo { subcommand } => match subcommand {
-            RepoSubcommand::List { .. } => "repo-list",
-            RepoSubcommand::Repair { .. } => "repo-repair",
+            RepoSubcommand::List { .. } => "repo-list".to_string(),
+            RepoSubcommand::Repair { .. } => "repo-repair".to_string(),
         },
-        Subcommand::Add { .. } => "add",
-        Subcommand::Remove { .. } => "remove",
-        Subcommand::Status { .. } => "status",
-        Subcommand::Projects { .. } => "projects",
-        Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes",
+        Subcommand::Add { .. } => "add".to_string(),
+        Subcommand::Remove { .. } => "remove".to_string(),
+        Subcommand::Status { .. } => "status".to_string(),
+        Subcommand::Projects { .. } => "projects".to_string(),
+        Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes".to_string(),
         Subcommand::Refs { subcommand, .. } => match subcommand {
-            RefsSubcommand::Delete { .. } => "refs-delete",
-            RefsSubcommand::ListExpired { .. } => "refs-list-expired",
-            RefsSubcommand::ListCurrent { .. } => "refs-list-current",
+            RefsSubcommand::Delete { .. } => "refs-delete".to_string(),
+            RefsSubcommand::ListExpired { .. } => "refs-list-expired".to_string(),
+            RefsSubcommand::ListCurrent { .. } => "refs-list-current".to_string(),
         },
-        Subcommand::Init { .. } => "init",
+        Subcommand::Init { .. } => "init".to_string(),
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
-            MaintenanceSubcommand::Run { .. } => "maintenance-run",
-            MaintenanceSubcommand::Register { .. } => "maintenance-register",
-            MaintenanceSubcommand::SetDefaultConfig { .. } => "maintenance-set-default-config",
-            MaintenanceSubcommand::SandboxCleanup { .. } => "maintenance-sandbox-cleanup",
+            MaintenanceSubcommand::Run { .. } => "maintenance-run".to_string(),
+            MaintenanceSubcommand::Register { .. } => "maintenance-register".to_string(),
+            MaintenanceSubcommand::SetDefaultConfig { .. } => {
+                "maintenance-set-default-config".to_string()
+            }
+            MaintenanceSubcommand::SandboxCleanup { .. } => {
+                "maintenance-sandbox-cleanup".to_string()
+            }
             MaintenanceSubcommand::Schedule { subcommand } => match subcommand {
-                MaintenanceScheduleSubcommand::Enable { .. } => "maintenance-schedule-enable",
-                MaintenanceScheduleSubcommand::Disable { .. } => "maintenance-schedule-disable",
+                MaintenanceScheduleSubcommand::Enable { .. } => {
+                    "maintenance-schedule-enable".to_string()
+                }
+                MaintenanceScheduleSubcommand::Disable { .. } => {
+                    "maintenance-schedule-disable".to_string()
+                }
             },
         },
-        Subcommand::GitTrace { .. } => "git-trace",
-        Subcommand::Upgrade { .. } => "upgrade",
+        Subcommand::GitTrace { .. } => "git-trace".to_string(),
+        Subcommand::Upgrade { .. } => "upgrade".to_string(),
         Subcommand::Index { subcommand } => match subcommand {
-            IndexSubcommand::Clear { .. } => "index-clear",
-            IndexSubcommand::Fetch { .. } => "index-fetch",
-            IndexSubcommand::Get { .. } => "index-get",
-            IndexSubcommand::Generate { .. } => "index-generate",
-            IndexSubcommand::Hash { .. } => "index-hash",
-            IndexSubcommand::Push { .. } => "index-push",
-            IndexSubcommand::Resolve { .. } => "index-resolve",
+            IndexSubcommand::Clear { .. } => "index-clear".to_string(),
+            IndexSubcommand::Fetch { .. } => "index-fetch".to_string(),
+            IndexSubcommand::Get { .. } => "index-get".to_string(),
+            IndexSubcommand::Generate { .. } => "index-generate".to_string(),
+            IndexSubcommand::Hash { .. } => "index-hash".to_string(),
+            IndexSubcommand::Push { .. } => "index-push".to_string(),
+            IndexSubcommand::Resolve { .. } => "index-resolve".to_string(),
         },
-        Subcommand::Event { .. } => "event",
-        Subcommand::Version => "version",
-    };
-    subcommand_name.into()
+        Subcommand::Event { args } => {
+            let mut temp_args = args.to_owned();
+            temp_args.insert(0, "event".to_string());
+            temp_args.join("-")
+        }
+        Subcommand::Version => "version".to_string(),
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -1002,18 +1013,6 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     }
 }
 
-// Returns a cmd name for a sandbox.
-// Returns None if cmd hasn't been determined to need a sandbox prefix.
-fn sandbox_name_for_cmd(opts: &FocusOpts) -> Option<&str> {
-    match &opts.cmd {
-        Subcommand::Maintenance {
-            subcommand: MaintenanceSubcommand::Run { .. },
-            ..
-        } => Some("maintenance_"),
-        _ => None,
-    }
-}
-
 /// Run the main and any destructors. Local variables are not guaranteed to be
 /// dropped if `std::process::exit` is called, so make sure to bubble up the
 /// return code to the top level, which is the only place in the code that's
@@ -1037,7 +1036,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let app = Arc::from(App::new(
         preserve_sandbox,
-        sandbox_name_for_cmd(&options),
+        Some(&feature_name_for(&options.cmd)),
         Some(env!("CARGO_PKG_NAME").to_owned()),
         Some(env!("CARGO_PKG_VERSION").to_owned()),
     )?);
@@ -1089,4 +1088,26 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 fn main() -> Result<()> {
     let ExitCode(exit_code) = main_and_drop_locals()?;
     std::process::exit(exit_code);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_cmd_feature_name_for_is_in_right_format() -> Result<()> {
+        let event_cmd = Subcommand::Event {
+            args: vec![
+                "this".to_string(),
+                "is".to_string(),
+                "an".to_string(),
+                "event".to_string(),
+                "subcommand".to_string(),
+                "teehee".to_string(),
+            ],
+        };
+        let feature_name = feature_name_for(&event_cmd);
+        assert_eq!(feature_name, "event-this-is-an-event-subcommand-teehee");
+        Ok(())
+    }
 }
