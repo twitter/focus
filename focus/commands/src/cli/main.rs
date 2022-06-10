@@ -194,10 +194,7 @@ enum Subcommand {
     },
     /// Called by a git hook to trigger certain actions after a git event such as
     /// merge completion or checkout
-    Event {
-        #[clap(subcommand)]
-        subcommand: EventSubcommand,
-    },
+    Event { args: Vec<String> },
     /// Print the version of Focus
     Version,
 }
@@ -244,11 +241,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             IndexSubcommand::Push { .. } => "index-push",
             IndexSubcommand::Resolve { .. } => "index-resolve",
         },
-        Subcommand::Event { subcommand } => match subcommand {
-            EventSubcommand::PostCheckout => "event-post-checkout",
-            EventSubcommand::PostMerge => "event-post-merge",
-            EventSubcommand::PostCommit => "event-post-commit",
-        },
+        Subcommand::Event { .. } => "event",
         Subcommand::Version => "version",
     };
     subcommand_name.into()
@@ -958,11 +951,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
         },
 
-        Subcommand::Event { subcommand } => match subcommand {
-            EventSubcommand::PostCheckout => Ok(ExitCode(0)),
-            EventSubcommand::PostCommit => Ok(ExitCode(0)),
-            EventSubcommand::PostMerge => Ok(ExitCode(0)),
-        },
+        Subcommand::Event { args: _ } => Ok(ExitCode(0)),
 
         Subcommand::Version => {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
