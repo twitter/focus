@@ -271,7 +271,9 @@ These are the keys currently being hashed: {:?}",
         .dependency_key_cache
         .insert(key.to_owned(), DependencyKeyCacheValue::Done(hash.clone()))
     {
-        error!(?key, ?old_value, new_value = ?hash, "Non-deterministic content hashing for dependency key");
+        if old_value != hash {
+            error!(?key, ?old_value, new_value = ?hash, "Non-deterministic content hashing for dependency key");
+        }
     }
     Ok(hash)
 }
@@ -294,7 +296,9 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<Cont
         .tree_path_cache
         .insert(path.to_owned(), hash.clone())
     {
-        error!(key = ?path, ?old_value, new_value = ?hash, "Non-deterministic content hashing for path");
+        if old_value != hash {
+            error!(key = ?path, ?old_value, new_value = ?hash, "Non-deterministic content hashing for path");
+        }
     }
     Ok(hash)
 }
@@ -358,7 +362,9 @@ fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Resul
         .load_dependencies_cache
         .insert(tree.id(), result.clone())
     {
-        error!(key = ?tree.id(), ?old_value, new_value = ?result, "Non-deterministic content hashing for load dependencies");
+        if old_value != result {
+            error!(key = ?tree.id(), ?old_value, new_value = ?result, "Non-deterministic content hashing for load dependencies");
+        }
     }
     Ok(result)
 }
