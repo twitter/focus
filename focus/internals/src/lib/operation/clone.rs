@@ -593,7 +593,7 @@ mod test {
             .status()
             .expect("git switch failed");
 
-        let app = Arc::new(App::new(false, None)?);
+        let app = Arc::new(App::new_for_testing()?);
 
         fixture.perform_clone()?;
 

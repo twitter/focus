@@ -26,7 +26,7 @@ pub(in crate::operation) mod refs {
             let _tempdir = tempfile::tempdir()?;
             let repo_path = Self::init(_tempdir.path())?;
 
-            let app = Arc::new(App::new(false, None)?);
+            let app = Arc::new(App::new_for_testing()?);
             let repo = git2::Repository::open(&repo_path).context("failed to open Repository")?;
 
             Ok(Fixture {
@@ -239,7 +239,7 @@ pub(in crate::operation) mod integration {
             )?;
             let sparse_repo_path = dir.path().join("sparse");
             let projects_and_targets: Vec<String> = vec![];
-            let app = Arc::new(App::new(false, None)?);
+            let app = Arc::new(App::new_for_testing()?);
 
             Ok(Self {
                 dir,
