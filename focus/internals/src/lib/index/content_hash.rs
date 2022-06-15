@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::cell::RefCell;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::path::Path;
@@ -53,24 +53,10 @@ impl FromStr for ContentHash {
     }
 }
 
-/// Used to handle the fact that `load` dependencies might be malformed and have
-/// circular dependencies.
-#[derive(Clone, Debug)]
-enum DependencyKeyCacheValue {
-    /// Indicates that the provided dependency key is already being hashed. If
-    /// we try to compute the dependency key hash while it's already being
-    /// computed, that indicates a dependency cycle, for which we should
-    /// early-exit.
-    Calculating,
-
-    /// Indicates that the provided dependency key has finished hashing.
-    Done(ContentHash),
-}
-
 #[derive(Debug, Default)]
 pub struct Caches {
     /// Cache of hashed dependency keys. These are only valid for the provided `repo`/`head_tree`.
-    dependency_key_cache: HashMap<DependencyKey, DependencyKeyCacheValue>,
+    dependency_key_cache: HashMap<DependencyKey, ContentHash>,
 
     /// Cache of hashed tree paths, which should be either:
     ///
@@ -118,30 +104,24 @@ impl std::fmt::Debug for HashContext<'_> {
 pub fn content_hash_dependency_key(
     ctx: &HashContext,
     key: &DependencyKey,
+    keys_being_calculated: &mut HashSet<DependencyKey>,
 ) -> anyhow::Result<ContentHash> {
     debug!(?key, "Hashing dependency key");
 
     {
         let cache = &mut ctx.caches.borrow_mut().dependency_key_cache;
         match cache.get(key) {
-            Some(DependencyKeyCacheValue::Done(hash)) => return Ok(hash.to_owned()),
-            Some(DependencyKeyCacheValue::Calculating) => {
-                anyhow::bail!(
-                    "\
+            Some(hash) => return Ok(hash.to_owned()),
+            None => {
+                if !keys_being_calculated.insert(key.clone()) {
+                    anyhow::bail!(
+                        "\
 Circular dependency when hashing: {:?}
 These are the keys currently being hashed: {:?}",
-                    key,
-                    cache
-                        .iter()
-                        .filter_map(|(k, v)| match v {
-                            DependencyKeyCacheValue::Done(_) => None,
-                            DependencyKeyCacheValue::Calculating => Some(k),
-                        })
-                        .collect::<BTreeSet<_>>()
-                );
-            }
-            None => {
-                cache.insert(key.clone(), DependencyKeyCacheValue::Calculating);
+                        key,
+                        keys_being_calculated.iter().collect::<BTreeSet<_>>(),
+                    );
+                }
             }
         }
     }
@@ -172,7 +152,9 @@ These are the keys currently being hashed: {:?}",
                 for label in loaded_deps {
                     let key = DependencyKey::BazelBuildFile(label);
                     buf.push_str(", ");
-                    buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
+                    buf.push_str(
+                        &content_hash_dependency_key(ctx, &key, keys_being_calculated)?.to_string(),
+                    );
                 }
             }
 
@@ -183,7 +165,9 @@ These are the keys currently being hashed: {:?}",
                 target_name: TargetName::Name("WORKSPACE".to_string()),
             });
             buf.push_str(", ");
-            buf.push_str(&content_hash_dependency_key(ctx, &key)?.to_string());
+            buf.push_str(
+                &content_hash_dependency_key(ctx, &key, keys_being_calculated)?.to_string(),
+            );
         }
 
         DependencyKey::BazelBuildFile(
@@ -228,7 +212,10 @@ These are the keys currently being hashed: {:?}",
                             }
 
                             buf.push_str(", ");
-                            buf.push_str(&content_hash_dependency_key(ctx, &dep_key)?.to_string());
+                            buf.push_str(
+                                &content_hash_dependency_key(ctx, &dep_key, keys_being_calculated)?
+                                    .to_string(),
+                            );
                         }
                     }
 
@@ -248,7 +235,10 @@ These are the keys currently being hashed: {:?}",
             // here.
             let workspace_key = DependencyKey::Path("WORKSPACE".into());
             buf.push_str(", ");
-            buf.push_str(&content_hash_dependency_key(ctx, &workspace_key)?.to_string());
+            buf.push_str(
+                &content_hash_dependency_key(ctx, &workspace_key, keys_being_calculated)?
+                    .to_string(),
+            );
         }
 
         DependencyKey::Path(path) => {
@@ -258,18 +248,21 @@ These are the keys currently being hashed: {:?}",
 
         DependencyKey::DummyForTesting(inner_dep_key) => {
             buf.push_str("DummyForTesting(");
-            buf.push_str(&content_hash_dependency_key(ctx, inner_dep_key.borrow())?.to_string());
+            buf.push_str(
+                &content_hash_dependency_key(ctx, inner_dep_key.borrow(), keys_being_calculated)?
+                    .to_string(),
+            );
         }
     };
 
     buf.push(')');
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
     let hash = ContentHash(hash);
-    if let Some(DependencyKeyCacheValue::Done(old_value)) = ctx
+    if let Some(old_value) = ctx
         .caches
         .borrow_mut()
         .dependency_key_cache
-        .insert(key.to_owned(), DependencyKeyCacheValue::Done(hash.clone()))
+        .insert(key.to_owned(), hash.clone())
     {
         if old_value != hash {
             error!(?key, ?old_value, new_value = ?hash, "Non-deterministic content hashing for dependency key");
