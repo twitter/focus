@@ -805,10 +805,7 @@ impl Repo {
                     .context("Resolving commit")?,
             )),
             Err(e) => {
-                warn!(
-                    "Could not find prefetch head commit (ref {}): {}",
-                    &ref_name, e
-                );
+                warn!(?ref_name, ?e, "Could not find prefetch head commit",);
                 Ok(None)
             }
         }
@@ -830,9 +827,7 @@ impl Repo {
             .snapshot()
             .context("Snapshotting config")?;
 
-        snapshot
-            .get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)
-            .map_err(|e| anyhow::anyhow!(e))
+        Ok(snapshot.get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)?)
     }
 
     pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
@@ -843,7 +838,7 @@ impl Repo {
         git_helper::write_config(
             working_tree.work_dir(),
             PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY,
-            if enabled { "true" } else { "false" },
+            enabled.to_string().as_str(),
             self.app.clone(),
         )
         .context("Writing preemptive sync enabled key")?;
