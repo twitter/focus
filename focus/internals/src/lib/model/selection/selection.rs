@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use focus_util::backed_up_file::BackedUpFile;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashSet},
@@ -238,6 +239,11 @@ impl SelectionManager {
         store_model(&self.selection_path, &persisted_selection)?;
         debug!(?persisted_selection, path = ?self.selection_path, "Saved selection");
         Ok(())
+    }
+
+    /// Returns a back up of the selection file.
+    pub fn create_backup(&self) -> Result<BackedUpFile> {
+        BackedUpFile::new(&self.selection_path)
     }
 
     /// Returns a Selection combining both user-selected and mandatory projects and targets.
