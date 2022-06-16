@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -16,7 +17,7 @@ fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -
         .iter()
         .map(|dep_key| {
             let dep_key = DependencyKey::DummyForTesting(Box::new(dep_key.clone()));
-            content_hash_dependency_key(ctx, &dep_key).unwrap()
+            content_hash_dependency_key(ctx, &dep_key, &mut HashSet::new()).unwrap()
         })
         .collect::<Vec<_>>()
 }

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use super::content_hash::HashContext;
@@ -42,7 +43,7 @@ impl<T: Cache> ObjectDatabase for T {
         ctx: &HashContext,
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
-        let hash = content_hash_dependency_key(ctx, key)?;
+        let hash = content_hash_dependency_key(ctx, key, &mut HashSet::new())?;
         let result = self.get_direct(&hash)?;
         Ok((hash, result))
     }
@@ -62,7 +63,7 @@ impl<T: Cache> ObjectDatabase for T {
         key: &DependencyKey,
         value: DependencyValue,
     ) -> anyhow::Result<()> {
-        let hash = content_hash_dependency_key(ctx, key)?;
+        let hash = content_hash_dependency_key(ctx, key, &mut HashSet::new())?;
         debug!(?hash, ?value, "Inserting entry into object database");
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
 
@@ -77,7 +78,6 @@ impl<T: Cache> ObjectDatabase for T {
                     ?hash,
                     "Non-deterministic dependency hashing"
                 );
-                anyhow::bail!("Non-deterministic dependency hashing")
             }
         }
 
@@ -139,7 +139,7 @@ pub mod testing {
             ctx: &HashContext,
             key: &DependencyKey,
         ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
-            let hash = content_hash_dependency_key(ctx, key)?;
+            let hash = content_hash_dependency_key(ctx, key, &mut HashSet::new())?;
             let dep_value = self.get_direct(&hash)?;
             Ok((hash, dep_value))
         }
@@ -156,7 +156,7 @@ pub mod testing {
             key: &DependencyKey,
             value: DependencyValue,
         ) -> anyhow::Result<()> {
-            let hash = content_hash_dependency_key(ctx, key)?;
+            let hash = content_hash_dependency_key(ctx, key, &mut HashSet::new())?;
             debug!(?hash, ?value, "Inserting entry into object database");
 
             let mut entries = self.entries.lock().expect("poisoned mutex");
@@ -169,7 +169,6 @@ pub mod testing {
                         ?hash,
                         "Non-deterministic dependency hashing"
                     );
-                    anyhow::bail!("Non-deterministic dependency hashing");
                 }
             }
             Ok(())
@@ -204,7 +203,7 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
         ctx: &HashContext,
         key: &DependencyKey,
     ) -> anyhow::Result<(ContentHash, Option<DependencyValue>)> {
-        let hash = content_hash_dependency_key(ctx, key)?;
+        let hash = content_hash_dependency_key(ctx, key, &mut HashSet::new())?;
         let result = self.get_direct(&hash)?;
         Ok((hash, result))
     }
@@ -249,7 +248,7 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
         key: &DependencyKey,
         value: DependencyValue,
     ) -> anyhow::Result<()> {
-        let ContentHash(key_oid) = content_hash_dependency_key(ctx, key)?;
+        let ContentHash(key_oid) = content_hash_dependency_key(ctx, key, &mut HashSet::new())?;
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
         let value_oid = ctx
             .repo
