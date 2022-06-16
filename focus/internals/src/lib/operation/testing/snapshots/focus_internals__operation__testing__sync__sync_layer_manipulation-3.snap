@@ -1,11 +1,15 @@
 ---
-source: focus/internals/src/lib/operation/sync.rs
+source: focus/internals/src/lib/operation/testing/sync.rs
 expression: "std::fs::read_to_string(&profile_path)?"
 ---
 /*
 !/*/
+/focus/
 /library_a/
 /library_b/
+/mandatory_y/
+!/mandatory_y/*/
+/mandatory_y/very_important_info/
 /mandatory_z/
 /project_a/
 /project_a/src/
@@ -31,9 +35,4 @@ expression: "std::fs::read_to_string(&profile_path)?"
 /project_b/src/main/java/com/example/
 !/project_b/src/main/java/com/example/*/
 /project_b/src/main/java/com/example/cmdline/
-/3rdparty/
-/focus/
-/pants-internal/
-/pants-support/
-/tools/
 

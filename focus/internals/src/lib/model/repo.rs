@@ -2,7 +2,7 @@ use content_addressed_cache::RocksDBCache;
 use focus_util::{
     app::{App, ExitCode},
     git_helper::{self, get_head_commit},
-    paths,
+    paths::{self, is_build_definition},
     sandbox_command::SandboxCommandOutput,
 };
 use std::{
@@ -34,7 +34,7 @@ use super::{
 };
 
 use anyhow::{bail, Context, Result};
-use git2::{Oid, Repository, TreeWalkMode, TreeWalkResult};
+use git2::{ObjectType, Oid, Repository, TreeWalkMode, TreeWalkResult};
 use tracing::{debug, info, info_span, trace, warn};
 use uuid::Uuid;
 
@@ -480,36 +480,72 @@ impl OutliningTree {
 
         for path in result.paths.iter() {
             let qualified_path = repo_path.join(path);
-            match paths::find_closest_directory_with_build_file(&qualified_path, &repo_path)
+
+            let path = self
+                .find_closest_directory_with_build_file(commit_id, &qualified_path)
                 .context("locating closest build file")?
-            {
-                Some(path_to_closest_build_file) => {
-                    debug!(
-                        "Adding directory with closest build definition: {}",
-                        path_to_closest_build_file.display()
-                    );
-                    if let Some(path) = treat_path(&path_to_closest_build_file)? {
-                        patterns.insert_leading(Pattern::Directory {
-                            precedence: LAST,
-                            path,
-                            recursive: true,
-                        });
-                    }
-                }
-                None => {
-                    debug!("Adding directory verbatim: {}", qualified_path.display());
-                    if let Some(path) = treat_path(&qualified_path)? {
-                        patterns.insert(Pattern::Directory {
-                            precedence: LAST,
-                            path,
-                            recursive: true,
-                        });
-                    }
-                }
+                .unwrap_or(qualified_path);
+            if let Some(path) = treat_path(&path)? {
+                patterns.insert_leading(Pattern::Directory {
+                    precedence: LAST,
+                    path,
+                    recursive: true,
+                });
             }
         }
 
         Ok((patterns, result))
+    }
+
+    fn find_closest_directory_with_build_file(
+        &self,
+        commit_id: git2::Oid,
+        path: impl AsRef<Path>,
+        // ceiling: impl AsRef<Path>,
+    ) -> Result<Option<PathBuf>> {
+        let path = path.as_ref();
+        let git_repo = self.underlying.git_repo();
+        let tree = git_repo
+            .find_commit(commit_id)
+            .context("Resolving commit")?
+            .tree()
+            .context("Resolving tree")?;
+
+        let mut path = path.to_owned();
+        loop {
+            if let Ok(tree_entry) = tree.get_path(&path) {
+                info!(?path, "Current");
+                // If the entry is a tree, get it.
+                if tree_entry.kind() == Some(ObjectType::Tree) {
+                    let tree_object = tree_entry
+                        .to_object(git_repo)
+                        .with_context(|| format!("Resolving tree {}", path.display()))?;
+                    let current_tree = tree_object.as_tree().unwrap();
+                    // Iterate through the tree to see if there is a build file.
+                    for entry in current_tree.iter() {
+                        if entry.kind() == Some(ObjectType::Blob) {
+                            if let Some(name) = entry.name() {
+                                info!(?name, "Considering file");
+
+                                let candidate_path = PathBuf::from_str(name)?;
+                                if is_build_definition(candidate_path) {
+                                    info!(?name, "Found build definition");
+
+                                    return Ok(Some(path));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !path.pop() {
+                // We have reached the root with no match.
+                break;
+            }
+        }
+
+        Ok(None)
     }
 }
 

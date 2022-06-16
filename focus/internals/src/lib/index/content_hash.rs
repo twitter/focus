@@ -24,7 +24,7 @@ use super::DependencyKey;
 
 /// This value is mixed into all content hashes. Update this value when
 /// content-hashing changes in a backward-incompatible way.
-const VERSION: usize = 3;
+const VERSION: usize = 4;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -226,7 +226,7 @@ pub fn expire_old_refs(
 }
 
 #[cfg(test)]
-mod tests {
+mod testing {
     use std::fs;
 
     use anyhow::Result;

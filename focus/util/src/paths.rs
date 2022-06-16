@@ -1,10 +1,9 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
 };
-use tracing::warn;
 
 lazy_static! {
     pub static ref MAIN_SEPARATOR_PATH: PathBuf =
@@ -43,43 +42,6 @@ pub fn focus_sandbox_dir() -> PathBuf {
         .join("focus")
 }
 
-pub fn find_closest_directory_with_build_file<P0: AsRef<Path>, P1: AsRef<Path>>(
-    file: P0,
-    ceiling: P1,
-) -> Result<Option<PathBuf>> {
-    let file = file.as_ref();
-    let ceiling = ceiling.as_ref();
-    let mut dir = if file.is_dir() {
-        file
-    } else if let Some(parent) = file.parent() {
-        parent
-    } else {
-        warn!(?file, "Path has no parent");
-        return Ok(None);
-    };
-    loop {
-        if dir == ceiling {
-            return Ok(None);
-        }
-
-        for entry in std::fs::read_dir(&dir)
-            .with_context(|| format!("reading directory contents {}", dir.display()))?
-        {
-            let entry = entry.context("reading directory entry")?;
-            let file_name = entry.file_name();
-            let entry_path = Path::new(&file_name);
-            if is_build_definition(entry_path) {
-                // Match BUILD, BUILD.*
-                return Ok(Some(dir.to_owned()));
-            }
-        }
-
-        dir = dir
-            .parent()
-            .context("getting parent of current directory")?;
-    }
-}
-
 lazy_static! {
     static ref BUILD_STEM: OsString = OsString::from("BUILD");
     static ref WORKSPACE_STEM: OsString = OsString::from("WORKSPACE");
@@ -87,7 +49,7 @@ lazy_static! {
 }
 
 /// Determine if the Path is a build definition.
-pub(crate) fn is_build_definition<P: AsRef<Path>>(path: P) -> bool {
+pub fn is_build_definition<P: AsRef<Path>>(path: P) -> bool {
     let path = path.as_ref();
     match path.file_stem() {
         Some(stem) => stem.eq(BUILD_STEM.as_os_str()),

@@ -1,9 +1,10 @@
 ---
-source: focus/internals/src/lib/operation/sync.rs
+source: focus/internals/src/lib/operation/testing/sync.rs
 expression: "std::fs::read_to_string(&profile_path)?"
 ---
 /*
 !/*/
 /focus/
+/mandatory_y/very_important_info/
 /mandatory_z/
 

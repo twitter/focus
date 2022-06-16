@@ -12,7 +12,8 @@ fn mutate(
     action: OperationAction,
     projects_and_targets: Vec<String>,
     app: Arc<focus_util::app::App>,
-) -> Result<()> {
+) -> Result<bool> {
+    let mut synced = false;
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
     let mut selections = repo.selection_manager().context("Loading the selection")?;
     let backup = selections
@@ -25,12 +26,14 @@ fn mutate(
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
-            super::sync::run(sparse_repo.as_ref(), false, app).context("Synchronizing changes")?;
+            let result = super::sync::run(sparse_repo.as_ref(), false, app)
+                .context("Synchronizing changes")?;
+            synced = !result.skipped;
             backup.discard();
         }
     }
 
-    Ok(())
+    Ok(synced)
 }
 
 pub fn add(
@@ -38,7 +41,7 @@ pub fn add(
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
     app: Arc<App>,
-) -> Result<()> {
+) -> Result<bool> {
     mutate(
         sparse_repo,
         sync_if_changed,
@@ -53,7 +56,7 @@ pub fn remove(
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
     app: Arc<App>,
-) -> Result<()> {
+) -> Result<bool> {
     mutate(
         sparse_repo,
         sync_if_changed,
