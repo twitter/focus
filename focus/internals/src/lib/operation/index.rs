@@ -344,12 +344,12 @@ pub fn push(
 
 #[cfg(test)]
 mod tests {
+    use crate::operation::testing::integration::RepoPairFixture;
     use focus_testing::ScratchGitRepo;
     use maplit::hashset;
 
     use crate::model::configuration::{Configuration, INDEX_CONFIG_FILENAME};
     use crate::model::selection::store_model;
-    use crate::operation::testing::integration::RepoPairFixture;
     use crate::target::Label;
 
     use super::*;
@@ -412,7 +412,7 @@ mod tests {
                             Label("//project_a/src/main/java/com/example/cmdline:runner"),
                         ),
                         ContentHash(
-                            c31c95867b703cb343a04d99a8909eb17f8ba9ee,
+                            4c58adbd4fac890f350058535efdd99b26fb41eb,
                         ),
                     ),
                 },
