@@ -637,7 +637,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::sync::run(&sparse_repo, app)?;
+            operation::sync::run(&sparse_repo, false, app)?;
             Ok(ExitCode(0))
         }
 
