@@ -186,7 +186,7 @@ mod tests {
 
     use super::FileBackedCollection;
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct Person {
         name: String,
     }

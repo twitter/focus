@@ -11,7 +11,7 @@ use tracing::{debug, error, warn};
 use super::*;
 
 /// A structure representing the current selection in memory. Instead of serializing this structure, a PersistedSelection is stored to disk. In addition to that structure being simpler to serialize, the indirection allows for updates to the underlying project definitions.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Selection {
     pub projects: HashSet<Project>,
     pub targets: HashSet<Target>,
@@ -302,7 +302,7 @@ impl SelectionManager {
 }
 
 /// A structure to store the names of selected projects and targets. Converted from the fully-featured in-memory representation Selection.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct PersistedSelection {
     pub projects: HashSet<String>,
     pub targets: HashSet<String>,

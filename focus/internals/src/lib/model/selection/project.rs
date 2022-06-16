@@ -69,7 +69,7 @@ impl TryFrom<&Project> for TargetSet {
 }
 
 /// ProjectSet is a file-level container for projects.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 struct ProjectSet {
     pub projects: HashSet<Project>,
 }

@@ -30,7 +30,7 @@ impl Display for Target {
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum TargetError {
     #[error("Scheme not supported")]
     UnsupportedScheme(String),
@@ -135,7 +135,7 @@ impl Debug for Label {
 }
 
 /// TODO: improve error messaging here
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum LabelParseError {
     #[error("No target name")]
     NoTargetName,

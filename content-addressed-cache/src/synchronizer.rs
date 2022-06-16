@@ -23,14 +23,14 @@ lazy_static! {
 }
 
 pub fn refspec_fmt(value: impl Display) -> String {
-    return format!("+refs/tags/focus/{}:refs/tags/focus/{}", value, value);
+    format!("+refs/tags/focus/{}:refs/tags/focus/{}", value, value)
 }
 
 pub fn tag_fmt(value: impl Display) -> String {
-    return format!("refs/tags/focus/{}", value);
+    format!("refs/tags/focus/{}", value)
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PopulateResult {
     pub entry_count: usize,
     pub new_entry_count: usize,

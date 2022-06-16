@@ -14,7 +14,7 @@ pub enum Underlying {
     Project(String),
 }
 
-#[derive(Debug, PartialEq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Operation {
     pub action: OperationAction,
     pub underlying: Underlying,

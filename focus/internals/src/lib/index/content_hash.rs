@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::{BTreeSet, HashSet};
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use std::hash::Hash;
 use std::path::Path;
 use std::path::PathBuf;
@@ -127,7 +127,7 @@ These are the keys currently being hashed: {:?}",
     }
 
     let mut buf = String::new();
-    buf.push_str(&format!("DependencyKeyV{VERSION}"));
+    write!(&mut buf, "DependencyKeyV{VERSION}")?;
 
     match key {
         DependencyKey::BazelPackage(
@@ -277,9 +277,11 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<Cont
     }
 
     let mut buf = String::new();
-    buf.push_str(&format!("PathBufV{VERSION}("));
-    buf.push_str(&get_tree_path_id(ctx.head_tree, path)?.to_string());
-    buf.push(')');
+    write!(
+        &mut buf,
+        "PathBufV{VERSION}({tree_id})",
+        tree_id = get_tree_path_id(ctx.head_tree, path)?
+    )?;
 
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
     let hash = ContentHash(hash);
