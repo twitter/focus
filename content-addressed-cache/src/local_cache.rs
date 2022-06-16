@@ -29,7 +29,7 @@ pub struct RocksDBCache {
     ttl: Duration,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CompositeKey {
     pub kind: CacheKeyKind,
     pub key: CacheKey,
