@@ -8,10 +8,10 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use focus_util::{app::App, paths::focus_config_dir};
+use focus_util::{app::App, lock_file::LockFile, paths::focus_config_dir};
 
 use crate::model::repo::Repo;
 
@@ -143,8 +143,15 @@ impl Tracker {
         Ok(())
     }
 
+    fn repo_registry_lock_path(&self) -> PathBuf {
+        self.repos_by_uuid_dir().join("regisry.lock")
+    }
+
     // Repair the registry of tracked repositories by checking that symlinks point to canonicalizable destinations and that the configured UUIDs match the inbound link.
     pub fn repair(&self, app: Arc<App>) -> Result<()> {
+        // Hold a repo repair lock.
+        let _lock = LockFile::new(&self.repo_registry_lock_path());
+
         let reader = self
             .repos_by_uuid_dir()
             .read_dir()
@@ -186,7 +193,7 @@ impl Tracker {
                                     };
 
                                     if mismatched_uuid {
-                                        warn!(
+                                        debug!(
                                             ?entry_path,
                                             ?uuid_from_filename,
                                             "Removing entry configured UUID differs from indicated UUID",
@@ -196,12 +203,12 @@ impl Tracker {
                                 }
 
                                 Err(e) => {
-                                    warn!(?entry_path, ?e, "Removing entry: invalid destination",);
+                                    debug!(?entry_path, ?e, "Removing entry: invalid destination",);
                                     std::fs::remove_file(entry.path())?;
                                 }
                             }
                         } else {
-                            warn!(?entry_path, "Removing entry (not a symlink)");
+                            debug!(?entry_path, "Removing entry (not a symlink)");
                             std::fs::remove_file(entry.path())?;
                         }
                     } else {

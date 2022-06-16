@@ -7,17 +7,18 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.56"
-ciborium = "0.2.0"
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
     "vendored-libgit2", "vendored-openssl"
 ] }
 focus-util = { path = "../focus/util" }
 hex = "0.3.1"
 lazy_static = "1.4.0"
-maplit = "1.0.2"
 rand = "0.6.3"
 regex = "1.5.5"
 rocksdb = "0.18.0"
 tempfile = "3.2.0"
-thiserror = "1.0.30"
 tracing = "0.1.32"
+
+[dev-dependencies]
+ciborium = "0.2.0"
+maplit = "1.0.2"

@@ -3,42 +3,10 @@ use std::{collections::HashSet, path::Path};
 use anyhow::Result;
 use maplit::hashset;
 
-use focus_testing::{init_logging, ScratchGitRepo};
+use focus_testing::init_logging;
 use focus_util::app;
 
-use crate::{
-    model::repo::Repo,
-    operation::{
-        self,
-        testing::integration::{RepoDisposition, RepoPairFixture},
-    },
-};
-
-fn add_updated_content(scratch_repo: &ScratchGitRepo) -> Result<git2::Oid> {
-    // Commit new files affecting the build graph to the dense repo
-    let build_bazel_content = r#"filegroup(
-            name = "excerpts",
-            srcs = [
-                "catz.txt",
-            ],
-            visibility = [
-                "//visibility:public",
-            ],
-        )"#;
-    scratch_repo.write_and_commit_file(
-        Path::new("x/BUILD.bazel"),
-        build_bazel_content.as_bytes(),
-        "Add excerpts",
-    )?;
-    let catz_txt_content = r#"The Naming of Cats is a difficult matter,
-        It isn't just one of your holiday games
-                )"#;
-    scratch_repo.write_and_commit_file(
-        Path::new("x/catz.txt"),
-        catz_txt_content.as_bytes(),
-        "Add excerpts",
-    )
-}
+use crate::testing::integration::{RepoDisposition, RepoPairFixture};
 
 #[test]
 fn sync_upstream_changes() -> Result<()> {
@@ -47,14 +15,37 @@ fn sync_upstream_changes() -> Result<()> {
     let fixture = RepoPairFixture::new()?;
 
     fixture.perform_clone()?;
-    let _ = add_updated_content(&fixture.dense_repo)?;
+
+    // Commit new files affecting the build graph to the dense repo
+    let build_bazel_content = r#"filegroup(
+name = "excerpts",
+srcs = [
+    "catz.txt",
+],
+visibility = [
+    "//visibility:public",
+],
+)"#;
+    fixture.dense_repo.write_and_commit_file(
+        Path::new("x/BUILD.bazel"),
+        build_bazel_content.as_bytes(),
+        "Add excerpts",
+    )?;
+    let catz_txt_content = r#"The Naming of Cats is a difficult matter,
+It isn't just one of your holiday games
+    )"#;
+    fixture.dense_repo.write_and_commit_file(
+        Path::new("x/catz.txt"),
+        catz_txt_content.as_bytes(),
+        "Add excerpts",
+    )?;
 
     // Fetch in the sparse repo from the dense repo
     fixture.perform_pull(RepoDisposition::Sparse, "origin", "main")?;
 
     // Make sure that the graph is seen as having changed
     assert_eq!(
-        operation::detect_build_graph_changes::run(
+        crate::detect_build_graph_changes::run(
             &fixture.sparse_repo_path,
             vec![],
             fixture.app.clone(),
@@ -63,13 +54,13 @@ fn sync_upstream_changes() -> Result<()> {
     );
 
     // Sync in the sparse repo
-    let _ = operation::sync::run(&fixture.sparse_repo_path, false, fixture.app.clone())?;
+    crate::sync::run(&fixture.sparse_repo_path, false, fixture.app.clone())?;
 
     let x_dir = fixture.sparse_repo_path.join("x");
     assert!(!x_dir.is_dir());
 
     // Add as a target
-    operation::selection::add(
+    crate::selection::add(
         &fixture.sparse_repo_path,
         true,
         vec![String::from("bazel://x/...")],
@@ -123,7 +114,7 @@ fn sync_layer_manipulation() -> Result<()> {
 
     assert!(!library_b_dir.is_dir());
     assert!(!project_b_dir.is_dir());
-    operation::selection::add(
+    crate::selection::add(
         &path,
         true,
         vec![project_b_label.clone()],
@@ -140,7 +131,7 @@ fn sync_layer_manipulation() -> Result<()> {
 
     assert!(!library_a_dir.is_dir());
     assert!(!project_a_dir.is_dir());
-    operation::selection::add(
+    crate::selection::add(
         &path,
         true,
         vec![project_a_label.clone()],
@@ -157,7 +148,7 @@ fn sync_layer_manipulation() -> Result<()> {
     assert!(library_a_dir.is_dir());
     assert!(project_a_dir.is_dir());
 
-    operation::selection::remove(&path, true, vec![project_a_label], fixture.app.clone())?;
+    crate::selection::remove(&path, true, vec![project_a_label], fixture.app.clone())?;
     {
         let selected_names = selected_project_names()?;
         assert_eq!(selected_names, hashset! { project_b_label.clone() })
@@ -166,7 +157,7 @@ fn sync_layer_manipulation() -> Result<()> {
     assert!(!library_a_dir.is_dir());
     assert!(!project_a_dir.is_dir());
 
-    operation::selection::remove(&path, true, vec![project_b_label], fixture.app.clone())?;
+    crate::selection::remove(&path, true, vec![project_b_label], fixture.app.clone())?;
     {
         let selected_names = selected_project_names()?;
         assert_eq!(selected_names, hashset! {});
@@ -190,7 +181,7 @@ fn sync_adhoc_manipulation() -> Result<()> {
     let library_b_dir = path.join("library_b");
     let targets = vec![String::from("bazel://library_b/...")];
 
-    operation::selection::add(
+    crate::selection::add(
         &fixture.sparse_repo_path,
         true,
         targets.clone(),
@@ -198,7 +189,7 @@ fn sync_adhoc_manipulation() -> Result<()> {
     )?;
     assert!(library_b_dir.is_dir());
 
-    operation::selection::remove(
+    crate::selection::remove(
         &fixture.sparse_repo_path,
         true,
         targets.clone(),
@@ -219,7 +210,7 @@ fn failed_selection_mutations_are_reverted() -> Result<()> {
     let selections = fixture.sparse_repo()?.selection_manager()?;
     let selection_before = selections.selection()?;
     let targets = vec![String::from("bazel://library_z/...")];
-    assert!(operation::selection::add(
+    assert!(crate::selection::add(
         &fixture.sparse_repo_path,
         true,
         targets,
@@ -269,19 +260,17 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
 
     let path = fixture.sparse_repo_path.clone();
     let targets = vec![String::from("bazel://library_b/...")];
-    operation::selection::add(&path, false, targets, fixture.app.clone())?;
-    {
-        let result = operation::sync::run(&path, false, fixture.app.clone())?;
-        assert!(!result.skipped);
-        assert!(result.checked_out);
-    }
+    crate::selection::add(
+        &fixture.sparse_repo_path,
+        false, // Note: Manual sync
+        targets.clone(),
+        fixture.app.clone(),
+    )?;
+    // First sync performs a checkout.
+    assert!(crate::sync::run(&path, false, fixture.app.clone())?.checked_out);
 
     // Subsequent sync does not perform a checkout.
-    {
-        let result = operation::sync::run(&path, false, fixture.app.clone())?;
-        assert!(!result.skipped);
-        assert!(!result.checked_out);
-    }
+    assert!(!crate::sync::run(&path, false, fixture.app.clone())?.checked_out);
 
     Ok(())
 }
@@ -313,104 +302,29 @@ fn sync_configures_working_and_outlining_trees() -> Result<()> {
     Ok(())
 }
 
-struct PreemptiveSyncFixture {
-    pub underlying: RepoPairFixture,
-    pub repo: Repo,
-    pub commit_id: git2::Oid,
-}
-
-impl PreemptiveSyncFixture {
-    fn new() -> Result<Self> {
-        let fixture = RepoPairFixture::new()?;
-
-        fixture.perform_clone()?;
-        add_updated_content(&fixture.dense_repo)?;
-
-        let fetched_commits = fixture.perform_fetch(RepoDisposition::Sparse, "origin")?;
-        assert_eq!(fetched_commits.len(), 1);
-        let commit_id = fetched_commits[0];
-
-        let repo = Repo::open(&fixture.sparse_repo_path, fixture.app.clone())?;
-        repo.set_preemptive_sync_enabled(true)?;
-
-        // Set the prefetch ref
-        repo.underlying().reference(
-            "refs/prefetch/remotes/origin/main",
-            commit_id,
-            true,
-            "Emulated prefetch ref",
-        )?;
-
-        Ok(PreemptiveSyncFixture {
-            underlying: fixture,
-            repo,
-            commit_id,
-        })
-    }
-}
-
 #[test]
-fn preemptive_sync() -> Result<()> {
+fn regression_adding_directory_targets_present_in_mandatory_sets() -> Result<()> {
     init_logging();
 
-    let fixture = PreemptiveSyncFixture::new()?;
+    let fixture = RepoPairFixture::new()?;
+    fixture.perform_clone()?;
 
-    // Sync preemptively
-    let result = operation::sync::run(
-        &fixture.underlying.sparse_repo_path,
+    let path = fixture.sparse_repo_path.clone();
+
+    let mandatory_y_dir = path.join("mandatory_y");
+    let very_important_info_dir = mandatory_y_dir.join("very_important_info");
+    let automakers_dir = very_important_info_dir.join("automakers");
+    let swedish_txt_file = automakers_dir.join("swedish.txt");
+    let targets = vec![String::from("directory:mandatory_y")];
+    assert!(automakers_dir.is_dir());
+    assert!(swedish_txt_file.is_file());
+    crate::selection::add(
+        &fixture.sparse_repo_path,
         true,
-        fixture.underlying.app.clone(),
+        targets.clone(),
+        fixture.app.clone(),
     )?;
-    assert!(!result.checked_out);
-    assert!(!result.skipped);
-
-    assert_eq!(result.commit_id.unwrap(), fixture.commit_id);
+    assert!(swedish_txt_file.is_file());
 
     Ok(())
 }
-
-#[test]
-fn preemptive_sync_skips_if_presync_ref_is_at_commit() -> Result<()> {
-    init_logging();
-
-    let fixture = PreemptiveSyncFixture::new()?;
-
-    // Sync preemptively
-    let result = operation::sync::run(
-        &fixture.underlying.sparse_repo_path,
-        true,
-        fixture.underlying.app.clone(),
-    )?;
-    assert!(!result.skipped);
-    assert_eq!(result.commit_id.unwrap(), fixture.commit_id);
-
-    // Subsequent preemptive syncs are skipped
-    let result = operation::sync::run(
-        &fixture.underlying.sparse_repo_path,
-        true,
-        fixture.underlying.app.clone(),
-    )?;
-    assert!(result.skipped);
-    assert_eq!(result.commit_id.unwrap(), fixture.commit_id);
-
-    Ok(())
-}
-
-#[test]
-fn preemptive_sync_skips_if_disabled() -> Result<()> {
-    init_logging();
-
-    let fixture = PreemptiveSyncFixture::new()?;
-
-    fixture.repo.set_preemptive_sync_enabled(false)?;
-    let result = operation::sync::run(
-        &fixture.underlying.sparse_repo_path,
-        true,
-        fixture.underlying.app.clone(),
-    )?;
-    assert!(result.skipped);
-
-    Ok(())
-}
-
-// Test for already being on the commit.

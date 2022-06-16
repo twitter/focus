@@ -12,15 +12,15 @@ use focus_util::git_helper;
 use focus_util::paths::assert_focused_repo;
 use tracing::{debug, debug_span, info};
 
-use crate::index::{
+use focus_internals::index::{
     content_hash_dependency_key, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
     ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
     FUNCTION_ID,
 };
-use crate::model::configuration::IndexConfig;
-use crate::model::repo::Repo;
-use crate::model::selection::OperationAction;
-use crate::target::{Target, TargetSet};
+use focus_internals::model::configuration::IndexConfig;
+use focus_internals::model::repo::Repo;
+use focus_internals::model::selection::OperationAction;
+use focus_internals::target::{Target, TargetSet};
 
 const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
 
@@ -344,13 +344,13 @@ pub fn push(
 
 #[cfg(test)]
 mod tests {
-    use crate::operation::testing::integration::RepoPairFixture;
     use focus_testing::ScratchGitRepo;
     use maplit::hashset;
 
-    use crate::model::configuration::{Configuration, INDEX_CONFIG_FILENAME};
-    use crate::model::selection::store_model;
-    use crate::target::Label;
+    use crate::testing::integration::RepoPairFixture;
+    use focus_internals::model::configuration::{Configuration, INDEX_CONFIG_FILENAME};
+    use focus_internals::model::selection::store_model;
+    use focus_internals::target::Label;
 
     use super::*;
 

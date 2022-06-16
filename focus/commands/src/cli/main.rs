@@ -21,11 +21,8 @@ use focus_util::{
     time::FocusTime,
 };
 
-use focus_internals::{
-    operation,
-    operation::maintenance::{self, ScheduleOpts},
-    tracker::Tracker,
-};
+use focus_internals::tracker::Tracker;
+use focus_operations::maintenance::{self, ScheduleOpts};
 use strum::VariantNames;
 use tracing::{debug, debug_span, info};
 
@@ -113,7 +110,7 @@ enum Subcommand {
     Init {
         /// By default we take 90 days of history, pass a date with this option
         /// if you want a different amount of history
-        #[clap(long, parse(try_from_str = operation::init::parse_shallow_since_date))]
+        #[clap(long, parse(try_from_str = focus_operations::init::parse_shallow_since_date))]
         shallow_since: Option<NaiveDate>,
 
         /// This command will only ever clone a single ref, by default this is
@@ -151,7 +148,7 @@ enum Subcommand {
         #[clap(long)]
         push_url: Option<String>,
 
-        #[clap(long, default_value=operation::init::SOURCE_RO_URL)]
+        #[clap(long, default_value=focus_operations::init::SOURCE_RO_URL)]
         fetch_url: String,
 
         #[clap()]
@@ -162,7 +159,7 @@ enum Subcommand {
     Maintenance {
         /// The git config key to look for paths of repos to run maintenance in. Defaults to
         /// 'maintenance.repo'
-        #[clap(long, default_value=operation::maintenance::DEFAULT_CONFIG_KEY, global = true)]
+        #[clap(long, default_value=focus_operations::maintenance::DEFAULT_CONFIG_KEY, global = true)]
         git_config_key: String,
 
         #[clap(subcommand)]
@@ -283,11 +280,11 @@ enum MaintenanceSubcommand {
         /// The time period of job to run
         #[clap(
             long,
-            possible_values=operation::maintenance::TimePeriod::VARIANTS,
+            possible_values=focus_operations::maintenance::TimePeriod::VARIANTS,
             default_value="hourly",
             env = "FOCUS_TIME_PERIOD"
         )]
-        time_period: operation::maintenance::TimePeriod,
+        time_period: focus_operations::maintenance::TimePeriod,
     },
 
     SetDefaultConfig {},
@@ -328,11 +325,11 @@ enum MaintenanceScheduleSubcommand {
         /// The time period of job to schedule
         #[clap(
             long,
-            possible_values=operation::maintenance::TimePeriod::VARIANTS,
+            possible_values=focus_operations::maintenance::TimePeriod::VARIANTS,
             default_value="hourly",
             env = "FOCUS_TIME_PERIOD"
         )]
-        time_period: operation::maintenance::TimePeriod,
+        time_period: focus_operations::maintenance::TimePeriod,
 
         /// register jobs for all time periods
         #[clap(long, conflicts_with = "time-period", env = "FOCUS_ALL")]
@@ -343,7 +340,7 @@ enum MaintenanceScheduleSubcommand {
         focus_path: Option<PathBuf>,
 
         /// path to git
-        #[clap(long, default_value = operation::maintenance::DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS, env = "FOCUS_GIT_BINARY_PATH")]
+        #[clap(long, default_value = focus_operations::maintenance::DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS, env = "FOCUS_GIT_BINARY_PATH")]
         git_binary_path: PathBuf,
 
         /// Normally, we check to see if the scheduled job is already defined and if it is
@@ -513,7 +510,7 @@ enum IndexSubcommand {
         sparse_repo: PathBuf,
 
         /// The Git remote to push to.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
+        #[clap(long, default_value = focus_operations::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
 
         /// If index keys are found to be missing, pause for debugging.
@@ -598,7 +595,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             copy_branches,
             projects_and_targets,
         } => {
-            let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
+            let origin = focus_operations::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
                 let current_dir =
                     std::env::current_dir().context("Failed to obtain current directory")?;
@@ -615,7 +612,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 projects_and_targets.len().to_string(),
             );
 
-            operation::clone::run(
+            focus_operations::clone::run(
                 origin,
                 sparse_repo.clone(),
                 branch,
@@ -637,7 +634,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::sync::run(&sparse_repo, false, app)?;
+            focus_operations::sync::run(&sparse_repo, false, app)?;
             Ok(ExitCode(0))
         }
 
@@ -653,7 +650,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    operation::refs::expire_old_refs(
+                    focus_operations::refs::expire_old_refs(
                         &repo,
                         cutoff,
                         check_merge_base,
@@ -668,10 +665,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let operation::refs::PartitionedRefNames {
+                    let focus_operations::refs::PartitionedRefNames {
                         current: _,
                         expired,
-                    } = operation::refs::PartitionedRefNames::for_repo(
+                    } = focus_operations::refs::PartitionedRefNames::for_repo(
                         &repo,
                         cutoff,
                         check_merge_base,
@@ -687,10 +684,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let operation::refs::PartitionedRefNames {
+                    let focus_operations::refs::PartitionedRefNames {
                         current,
                         expired: _,
-                    } = operation::refs::PartitionedRefNames::for_repo(
+                    } = focus_operations::refs::PartitionedRefNames::for_repo(
                         &repo,
                         cutoff,
                         check_merge_base,
@@ -705,11 +702,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List {} => {
-                operation::repo::list()?;
+                focus_operations::repo::list()?;
                 Ok(ExitCode(0))
             }
             RepoSubcommand::Repair {} => {
-                operation::repo::repair(app)?;
+                focus_operations::repo::repair(app)?;
                 Ok(ExitCode(0))
             }
         },
@@ -718,7 +715,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let repo = paths::expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
-            operation::detect_build_graph_changes::run(&repo, args, app)
+            focus_operations::detect_build_graph_changes::run(&repo, args, app)
         }
 
         Subcommand::Add {
@@ -727,9 +724,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::ensure_clean::run(&sparse_repo, app.clone())
+            focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+            focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
@@ -739,23 +736,23 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::ensure_clean::run(&sparse_repo, app.clone())
+            focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
+            focus_operations::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Status {} => {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
-            operation::selection::status(&sparse_repo, app)?;
+            focus_operations::selection::status(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Projects {} => {
             let repo = std::env::current_dir()?;
             paths::assert_focused_repo(&repo)?;
-            operation::selection::list_projects(&repo, app)?;
+            focus_operations::selection::list_projects(&repo, app)?;
             Ok(ExitCode(0))
         }
 
@@ -778,23 +775,23 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
             let target = expanded.as_path();
 
-            let mut init_opts: Vec<operation::init::InitOpt> = Vec::new();
+            let mut init_opts: Vec<focus_operations::init::InitOpt> = Vec::new();
 
-            let mut add_if_true = |n: bool, opt: operation::init::InitOpt| {
+            let mut add_if_true = |n: bool, opt: focus_operations::init::InitOpt| {
                 if n {
                     init_opts.push(opt)
                 };
             };
 
-            add_if_true(no_checkout, operation::init::InitOpt::NoCheckout);
-            add_if_true(bare, operation::init::InitOpt::Bare);
-            add_if_true(sparse, operation::init::InitOpt::Sparse);
-            add_if_true(follow_tags, operation::init::InitOpt::FollowTags);
-            add_if_true(progress, operation::init::InitOpt::Progress);
+            add_if_true(no_checkout, focus_operations::init::InitOpt::NoCheckout);
+            add_if_true(bare, focus_operations::init::InitOpt::Bare);
+            add_if_true(sparse, focus_operations::init::InitOpt::Sparse);
+            add_if_true(follow_tags, focus_operations::init::InitOpt::FollowTags);
+            add_if_true(progress, focus_operations::init::InitOpt::Progress);
 
             info!("Setting up a copy of the repo in {:?}", target);
 
-            operation::init::run(
+            focus_operations::init::run(
                 shallow_since,
                 Some(branch_name),
                 if no_filter { None } else { Some(filter) },
@@ -818,8 +815,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 git_config_path,
                 time_period,
             } => {
-                operation::maintenance::run(
-                    operation::maintenance::RunOptions {
+                focus_operations::maintenance::run(
+                    focus_operations::maintenance::RunOptions {
                         git_binary_path,
                         git_config_key,
                         git_config_path,
@@ -838,16 +835,18 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 repo_path,
                 git_config_path,
             } => {
-                operation::maintenance::register(operation::maintenance::RegisterOpts {
-                    repo_path,
-                    git_config_key,
-                    global_config_path: git_config_path,
-                })?;
+                focus_operations::maintenance::register(
+                    focus_operations::maintenance::RegisterOpts {
+                        repo_path,
+                        git_config_key,
+                        global_config_path: git_config_path,
+                    },
+                )?;
                 Ok(ExitCode(0))
             }
 
             MaintenanceSubcommand::SetDefaultConfig { .. } => {
-                operation::maintenance::set_default_git_maintenance_config(
+                focus_operations::maintenance::set_default_git_maintenance_config(
                     &std::env::current_dir()?,
                 )?;
                 Ok(ExitCode(0))
@@ -914,12 +913,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { sparse_repo } => {
-                operation::index::clear(sparse_repo)?;
+                focus_operations::index::clear(sparse_repo)?;
                 Ok(ExitCode(0))
             }
 
             IndexSubcommand::Fetch { sparse_repo } => {
-                let exit_code = operation::index::fetch(app, sparse_repo)?;
+                let exit_code = focus_operations::index::fetch(app, sparse_repo)?;
                 Ok(exit_code)
             }
 
@@ -928,17 +927,17 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 break_on_missing_keys,
             } => {
                 let exit_code =
-                    operation::index::generate(app, sparse_repo, break_on_missing_keys)?;
+                    focus_operations::index::generate(app, sparse_repo, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Get { target } => {
-                let exit_code = operation::index::get(app, Path::new("."), &target)?;
+                let exit_code = focus_operations::index::get(app, Path::new("."), &target)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Hash { targets } => {
-                let exit_code = operation::index::hash(app, Path::new("."), &targets)?;
+                let exit_code = focus_operations::index::hash(app, Path::new("."), &targets)?;
                 Ok(exit_code)
             }
 
@@ -948,7 +947,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 break_on_missing_keys,
             } => {
                 let exit_code =
-                    operation::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
+                    focus_operations::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
@@ -956,8 +955,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 targets,
                 break_on_missing_keys,
             } => {
-                let exit_code =
-                    operation::index::resolve(app, Path::new("."), targets, break_on_missing_keys)?;
+                let exit_code = focus_operations::index::resolve(
+                    app,
+                    Path::new("."),
+                    targets,
+                    break_on_missing_keys,
+                )?;
                 Ok(exit_code)
             }
         },
@@ -1007,7 +1010,7 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
         | Subcommand::Add { .. }
         | Subcommand::Remove { .. }
         | Subcommand::Init { .. } => {
-            operation::maintenance::schedule_enable(ScheduleOpts::default())
+            focus_operations::maintenance::schedule_enable(ScheduleOpts::default())
         }
         _ => Ok(()),
     }

@@ -1,5 +1,5 @@
 ---
-source: focus/internals/src/lib/operation/testing/sync.rs
+source: focus/operations/src/sync.rs
 expression: "&profile"
 ---
 /*

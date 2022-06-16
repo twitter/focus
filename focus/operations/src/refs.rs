@@ -232,7 +232,7 @@ mod testing {
     use anyhow::Result;
     use focus_util::{git_helper::Ident, time::FocusTime};
 
-    use crate::operation::testing::refs::Fixture;
+    use crate::testing::refs::Fixture;
 
     const OLD_MERGE_BASE_BRANCH_NAME: &str = "refs/heads/oldmergebase";
     const OLD_TIP_BRANCH_NAME: &str = "refs/heads/oldtip";

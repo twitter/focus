@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use std::sync::{mpsc, Arc};
 
-use crate::model::repo::Repo;
+use focus_internals::model::repo::Repo;
 use focus_util::{
     app::{App, ExitCode},
     git_helper, paths,
