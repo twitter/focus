@@ -29,6 +29,6 @@ impl Migration for HooksMigration {
     }
 
     fn upgrade(&self, path: &Path) -> Result<()> {
-        focus_internals::operation::event::init(path)
+        focus_operations::event::init(path)
     }
 }

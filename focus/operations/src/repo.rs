@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
-use crate::tracker::Tracker;
+use focus_internals::tracker::Tracker;
 use focus_util::app::App;
 
 pub fn list() -> Result<()> {

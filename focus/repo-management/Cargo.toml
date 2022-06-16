@@ -1,5 +1,5 @@
 [package]
-name = "focus-commands"
+name = "focus-repo-management"
 version = "0.5.3"
 edition = "2021"
 
@@ -10,8 +10,6 @@ chrono = "0.4"
 clap = { version = "3.1.7", features = ["derive", "env", "wrap_help"] }
 dirs = "4.0.0"
 focus-internals = { path = "../internals" }
-focus-migrations = { path = "../migrations" }
-focus-operations = { path = "../operations" }
 focus-testing = { path = "../testing" }
 focus-tracing = { path = "../tracing" }
 focus-util = { path = "../util" }
@@ -19,28 +17,7 @@ git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b
   "vendored-libgit2", "vendored-openssl",
 ] }
 lazy_static = "1.4.0"
-nix = "0.23.0"
-rand = "0.8.4"
-rayon = "1.5.1"
-regex = "1.5.4"
-serde = "1.0.130"
-serde_derive = "1.0.130"
-serde_json = "1.0.68"
-strum = "0.24.0"
-strum_macros = "0.24.0"
 tempfile = "3.2.0"
 termion = "1.5.6"
 thiserror = "1.0.30"
 tracing = "0.1.31"
-url = "2.2.2"
-uuid = { version = "0.8.2", features = ["v4"] }
-walkdir = "2.3.2"
-
-##
-## Focus CLI: The primary UI for Project Focused Development
-##
-[[bin]]
-name = "focus"
-path = "src/cli/main.rs"
-
-[features]

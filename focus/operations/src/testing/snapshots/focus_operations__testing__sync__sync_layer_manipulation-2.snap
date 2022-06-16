@@ -1,0 +1,25 @@
+---
+source: focus/operations/src/testing/sync.rs
+expression: "std::fs::read_to_string(&profile_path)?"
+---
+/*
+!/*/
+/focus/
+/library_b/
+/mandatory_y/
+!/mandatory_y/*/
+/mandatory_y/very_important_info/
+/mandatory_z/
+/project_b/
+/project_b/src/
+!/project_b/src/*/
+/project_b/src/main/
+!/project_b/src/main/*/
+/project_b/src/main/java/
+!/project_b/src/main/java/*/
+/project_b/src/main/java/com/
+!/project_b/src/main/java/com/*/
+/project_b/src/main/java/com/example/
+!/project_b/src/main/java/com/example/*/
+/project_b/src/main/java/com/example/cmdline/
+

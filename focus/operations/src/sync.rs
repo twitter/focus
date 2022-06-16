@@ -1,8 +1,7 @@
-use crate::model::repo::Repo;
-use crate::{index::RocksDBMemoizationCacheExt, locking};
+use focus_internals::index::RocksDBMemoizationCacheExt;
+use focus_internals::{locking, model::repo::Repo, target::TargetSet};
 
-use crate::operation::util::perform;
-use crate::target::TargetSet;
+use crate::util::perform;
 use content_addressed_cache::RocksDBCache;
 use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;

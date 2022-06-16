@@ -9,8 +9,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::tracker::Tracker;
-use crate::{locking, operation};
+use focus_internals::{locking, tracker::Tracker};
 
 use anyhow::{bail, Context, Result};
 use focus_util::{
@@ -251,7 +250,7 @@ impl Runner {
 
     #[tracing::instrument]
     fn run_internal_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<()> {
-        operation::sync::run(repo_path, true, self.app.clone())
+        crate::sync::run(repo_path, true, self.app.clone())
             .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))
             .map(|_| ())
     }

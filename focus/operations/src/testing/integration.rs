@@ -15,7 +15,7 @@ use tracing::{info, warn};
 use focus_testing::ScratchGitRepo;
 use focus_util::app::App;
 
-use crate::{model::repo::Repo, operation};
+use focus_internals::model::repo::Repo;
 
 #[allow(dead_code)]
 pub enum RepoDisposition {
@@ -77,8 +77,8 @@ impl RepoPairFixture {
 
     #[allow(dead_code)]
     pub fn perform_clone(&self) -> Result<()> {
-        operation::clone::run(
-            operation::clone::Origin::Local(self.dense_repo_path.clone()),
+        crate::clone::run(
+            crate::clone::Origin::Local(self.dense_repo_path.clone()),
             self.sparse_repo_path.clone(),
             self.branch.clone(),
             self.projects_and_targets.clone(),
@@ -90,7 +90,7 @@ impl RepoPairFixture {
 
     #[allow(dead_code)]
     pub fn perform_sync(&self) -> Result<bool> {
-        operation::sync::run(&self.sparse_repo_path, false, self.app.clone())
+        crate::sync::run(&self.sparse_repo_path, false, self.app.clone())
             .map(|result| result.checked_out)
     }
 

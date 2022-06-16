@@ -1,6 +1,6 @@
 use content_addressed_cache::RocksDBCache;
 use focus_util::{
-    app::{App, ExitCode},
+    app::App,
     git_helper::{self, get_head_commit},
     paths::{self, is_build_definition},
     sandbox_command::SandboxCommandOutput,
@@ -20,7 +20,6 @@ use crate::{
         HashContext, PathsToMaterializeResult,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
-    operation::index,
     target::TargetSet,
     target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
@@ -670,12 +669,13 @@ impl Repo {
                     info!(
                         "Cache miss for sparse checkout patterns; fetching from the remote index"
                     );
-                    let _: Result<ExitCode> = index::fetch_internal(
-                        app.clone(),
-                        cache,
-                        working_tree.work_dir().to_path_buf(),
-                        index_config,
-                    );
+                    // TODO: Re-enable after the index is moved into its own crate.
+                    // let _: Result<ExitCode> = index::fetch_internal(
+                    //     app.clone(),
+                    //     cache,
+                    //     working_tree.work_dir().to_path_buf(),
+                    //     index_config,
+                    // );
                     // Query again now that the index is populated.
                     paths_to_materialize =
                         get_files_to_materialize(&hash_context, cache, dependency_keys)?;
@@ -819,7 +819,7 @@ impl Repo {
         Ok(())
     }
 
-    pub(crate) fn selection_manager(&self) -> Result<SelectionManager> {
+    pub fn selection_manager(&self) -> Result<SelectionManager> {
         SelectionManager::from_repo(self)
     }
 

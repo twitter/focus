@@ -1,11 +1,11 @@
-use crate::index::RocksDBMemoizationCacheExt;
-use crate::model::selection::{Operation, OperationAction};
-use crate::operation::event;
+use crate::event;
+use focus_internals::index::RocksDBMemoizationCacheExt;
+use focus_internals::model::selection::{Operation, OperationAction};
 
-use crate::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 use anyhow::{bail, Context, Result};
 use chrono::{Duration, Utc};
 use content_addressed_cache::RocksDBCache;
+use focus_internals::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 
 use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
 use git2::Repository;
@@ -530,11 +530,12 @@ mod test {
     use git2::Repository;
     use tracing::info;
 
-    use crate::{operation::testing::integration::RepoPairFixture, target::Target};
+    use crate::testing::integration::RepoPairFixture;
+    use focus_internals::target::Target;
     use focus_testing::init_logging;
     use focus_util::app::App;
 
-    use crate::model::repo::Repo;
+    use focus_internals::model::repo::Repo;
 
     static MAIN_BRANCH_NAME: &str = "main";
 

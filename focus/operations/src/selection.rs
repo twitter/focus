@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use focus_util::app::App;
 use tracing::info;
 
-use crate::model::{repo::Repo, selection::*};
+use focus_internals::model::{repo::Repo, selection::*};
 
 fn mutate(
     sparse_repo: impl AsRef<Path>,
