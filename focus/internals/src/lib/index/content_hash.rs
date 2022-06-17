@@ -24,7 +24,7 @@ use super::DependencyKey;
 
 /// This value is mixed into all content hashes. Update this value when
 /// content-hashing changes in a backward-incompatible way.
-const VERSION: usize = 4;
+const VERSION: usize = 5;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -345,11 +345,6 @@ fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Resul
     for tree_entry in tree {
         let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
         result.extend(deps);
-        if tree_entry.filemode() == i32::from(git2::FileMode::Tree) {
-            if let Some(tree) = tree_entry.to_object(ctx.repo)?.as_tree() {
-                result.extend(find_load_dependencies(ctx, tree)?);
-            }
-        }
     }
     if let Some(old_value) = ctx
         .caches
