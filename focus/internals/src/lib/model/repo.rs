@@ -863,7 +863,9 @@ impl Repo {
             .snapshot()
             .context("Snapshotting config")?;
 
-        Ok(snapshot.get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)?)
+        Ok(snapshot
+            .get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)
+            .unwrap_or(false))
     }
 
     pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
