@@ -4,6 +4,7 @@ pub mod git_helper;
 pub mod lock_file;
 pub mod paths;
 pub mod periodic;
+pub mod process;
 pub mod sandbox;
 pub mod sandbox_command;
 pub mod time;

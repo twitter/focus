@@ -53,7 +53,6 @@ impl LockFile {
 
     // we must own the exclusive lock before writing the file!
     fn write_process_description(file: &mut File) -> Result<()> {
-        // truncate the file
         file.seek(SeekFrom::Start(0))?;
         file.set_len(0)?;
         {
@@ -61,10 +60,8 @@ impl LockFile {
             let mut buffered_writer = BufWriter::new(fp);
             writeln!(
                 buffered_writer,
-                "PID {} started by {} on host {}",
-                std::process::id(),
-                whoami::username(),
-                whoami::hostname(),
+                "{}",
+                super::process::get_process_description()
             )?;
             buffered_writer.flush()?;
         }
