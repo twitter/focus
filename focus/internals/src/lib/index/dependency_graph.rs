@@ -421,7 +421,7 @@ sh_binary(
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        a38eb70555ffd78f1b5fa43a50e7be10ef0f2f7c,
+                        b1d4fbbae036c10ae9254f1f6d616b62aea02f3a,
                     ),
                 ),
             },
@@ -657,7 +657,7 @@ def my_macro_inner(name):
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        2f7a0ffb94d0377ab66224ee8459b44919d84366,
+                        2b0784096dba37a66b87163a11037e47f381b7a5,
                     ),
                 ),
             },
@@ -808,7 +808,7 @@ def some_macro():
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        8933366bff74c6185415be78d8609a50d24cd642,
+                        0a1b175d7fd8406de40ed82f2ff7643fbebaf93e,
                     ),
                 ),
             },
@@ -909,10 +909,20 @@ def some_macro():
             r#"
 file: WORKSPACE
 
+file: macro/BUILD
+
+file: macro/macro.bzl
+def foo(name, srcs):
+    native.sh_binary(
+        name = name,
+        srcs = srcs,
+    )
+
 file: package1/some/sub/package/foo.sh
 
 file: package1/some/sub/package/BUILD
-sh_binary(
+load("//macro:macro.bzl", "foo")
+foo(
     name = "foo",
     srcs = ["foo.sh"],
 )
@@ -934,7 +944,43 @@ sh_binary(
             targets: target_set,
         };
         let cache_options = CacheOptions::default();
-        let resolve_result = resolver.resolve(&request, &cache_options, app)?;
+        let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
+        insta::assert_debug_snapshot!(resolve_result, @r###"
+        ResolutionResult {
+            paths: {
+                "package1",
+                "package1/some/sub/package",
+            },
+            package_deps: {
+                BazelPackage(
+                    Label("//package1/..."),
+                ): PackageInfo {
+                    deps: {
+                        BazelPackage(
+                            Label("//package1/some/sub/package:foo"),
+                        ),
+                        BazelPackage(
+                            Label("//package1/some/sub/package:foo.sh"),
+                        ),
+                    },
+                },
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo"),
+                ): PackageInfo {
+                    deps: {
+                        BazelPackage(
+                            Label("//package1/some/sub/package:foo.sh"),
+                        ),
+                    },
+                },
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo.sh"),
+                ): PackageInfo {
+                    deps: {},
+                },
+            },
+        }
+        "###);
 
         let odb = HashMapOdb::new();
         let files_to_materialize = {
@@ -964,6 +1010,113 @@ sh_binary(
             paths: {
                 "package1",
                 "package1/some/sub/package",
+            },
+        }
+        "###);
+
+        // Make a change that affects a subpackage without changing the tree entry containing the
+        // package.
+        write_files(
+            &fix,
+            r#"
+file: WORKSPACE
+
+file: macro/macro.bzl
+def foo(name, srcs):
+    native.sh_binary(
+        name = name + "2",
+        srcs = srcs,
+    )
+"#,
+        )?;
+        let head_oid = fix.commit_all("Wrote files")?;
+        let files_to_materialize = {
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let ctx = HashContext {
+                repo: &repo,
+                head_tree: &head_tree,
+                caches: Default::default(),
+            };
+            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1/...")? })?
+        };
+
+        // The content hash for `//package1/...` has NOT changed since its `BUILD` file and tree
+        // entry have remained the same, so it doesn't appear in `missing_keys` below.
+        //
+        // However, when we traverse its dependencies, we get to `//package1/some/sub/package:foo`
+        // and try to content-hash that. Since that package's `BUILD` file has a `load` statement
+        // for a package which *has* changed, that package's content hash also changes and no longer
+        // matches.
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        MissingKeys {
+            missing_keys: {
+                (
+                    BazelPackage(
+                        Label("//package1/some/sub/package:foo"),
+                    ),
+                    ContentHash(
+                        058bdf3a6ee56e50ffb6c3bb35d006fb0b7a74d2,
+                    ),
+                ),
+                (
+                    BazelPackage(
+                        Label("//package1/some/sub/package:foo.sh"),
+                    ),
+                    ContentHash(
+                        48df160ff6ba56e1dfb46b287521395a231625b9,
+                    ),
+                ),
+            },
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1/..."),
+                ),
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo"),
+                ),
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo.sh"),
+                ),
+            },
+        }
+        "###);
+
+        // Ensure that the change in the build graph is reflected.
+        let resolve_result = resolver.resolve(&request, &cache_options, app)?;
+        insta::assert_debug_snapshot!(resolve_result, @r###"
+        ResolutionResult {
+            paths: {
+                "package1",
+                "package1/some/sub/package",
+            },
+            package_deps: {
+                BazelPackage(
+                    Label("//package1/..."),
+                ): PackageInfo {
+                    deps: {
+                        BazelPackage(
+                            Label("//package1/some/sub/package:foo.sh"),
+                        ),
+                        BazelPackage(
+                            Label("//package1/some/sub/package:foo2"),
+                        ),
+                    },
+                },
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo.sh"),
+                ): PackageInfo {
+                    deps: {},
+                },
+                BazelPackage(
+                    Label("//package1/some/sub/package:foo2"),
+                ): PackageInfo {
+                    deps: {
+                        BazelPackage(
+                            Label("//package1/some/sub/package:foo.sh"),
+                        ),
+                    },
+                },
             },
         }
         "###);
