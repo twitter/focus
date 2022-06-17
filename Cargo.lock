@@ -637,6 +637,7 @@ dependencies = [
  "criterion",
  "dirs",
  "focus-internals",
+ "focus-platform",
  "focus-testing",
  "focus-util",
  "git2",
@@ -665,6 +666,10 @@ dependencies = [
  "which",
  "whoami",
 ]
+
+[[package]]
+name = "focus-platform"
+version = "0.5.4"
 
 [[package]]
 name = "focus-repo-management"
