@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use focus_util::{app::App, lock_file::LockFile, paths::focus_config_dir};
@@ -261,7 +261,7 @@ impl Tracker {
                                 }
 
                                 Err(e) => {
-                                    warn!(
+                                    debug!(
                                         ?entry_path,
                                         ?e,
                                         "Skipping entry: unable to canonicalize destination",
@@ -269,7 +269,7 @@ impl Tracker {
                                 }
                             }
                         } else {
-                            info!(?entry_path, "ignoring entry (not a symlink)");
+                            debug!(?entry_path, "ignoring entry (not a symlink)");
                         }
                     } else {
                         bail!("unable to determine file type for {:?}", entry.path());
