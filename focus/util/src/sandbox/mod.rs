@@ -5,7 +5,7 @@ use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tracing::info;
+use tracing::{info, warn};
 
 use tempfile::TempDir;
 
@@ -25,17 +25,15 @@ impl Sandbox {
         let sandbox_root = paths::focus_sandbox_dir();
         std::fs::create_dir_all(&sandbox_root)
             .with_context(|| format!("creating sandbox root {}", sandbox_root.display()))?;
-
+        let prefix = name_prefix
+            .map(|prefix| DEFAULT_NAME_PREFIX.to_string() + prefix + "_")
+            .unwrap_or_else(|| DEFAULT_NAME_PREFIX.to_string());
         let underlying: TempDir = tempfile::Builder::new()
-            .prefix(&match name_prefix {
-                Some(prefix) => DEFAULT_NAME_PREFIX.to_string() + prefix + "_",
-                None => DEFAULT_NAME_PREFIX.to_string(),
-            })
-            .tempdir_in(sandbox_root)
+            .prefix(&prefix)
+            .tempdir_in(&sandbox_root)
             .context("creating a temporary directory to house the sandbox")?;
 
-        let path: PathBuf = (&underlying.path().to_path_buf()).to_owned();
-
+        let path = underlying.path().to_owned();
         let temp_dir: Option<TempDir> = if preserve_contents {
             // We preserve the contents of the temporary directory by dropping and recreating it.
             drop(underlying);
@@ -45,6 +43,9 @@ impl Sandbox {
                 ?path,
                 "Created sandbox, which will not be cleaned up at exit",
             );
+
+            // Create a symlink since we are preserving the sandbox
+            Self::create_latest_symlink(&path, &sandbox_root, &prefix);
 
             None
         } else {
@@ -69,6 +70,36 @@ impl Sandbox {
 
     pub fn command_description_path(&self) -> PathBuf {
         self.path.join("cmd")
+    }
+
+    fn latest_symlink_path(sandbox_root: impl AsRef<Path>, prefix: &str) -> PathBuf {
+        let mut prefix = prefix.to_owned();
+        if prefix.ends_with('_') {
+            prefix.pop();
+        }
+        sandbox_root.as_ref().join(&prefix).with_extension("latest")
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn create_latest_symlink(path: impl AsRef<Path>, root: impl AsRef<Path>, prefix: &str) {
+        let link_path = Self::latest_symlink_path(root, prefix);
+        if link_path.is_symlink() {
+            let _ = std::fs::remove_file(&link_path);
+        }
+        if let Err(e) = std::os::unix::fs::symlink(path, link_path) {
+            warn!(?e, "Failed to create symlink to latest sandbox");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn create_latest_symlink(path: impl AsRef<Path>, root: impl AsRef<Path>, prefix: &str) {
+        let link_path = Self::latest_symlink_path(root, prefix);
+        if link_path.is_symlink() {
+            let _ = std::fs::remove_file(&link_path);
+        }
+        if let Err(e) = std::os::windows::fs::symlink_dir(path, link_path) {
+            warn!(?e, "Failed to create symlink to latest sandbox");
+        }
     }
 
     pub fn create_file(
@@ -151,7 +182,16 @@ mod tests {
         let path = sandbox.path().to_owned();
         drop(sandbox);
         assert!(fs::metadata(&path)?.is_dir());
-        fs::remove_dir(&path)?;
+
+        let latest_link_path = {
+            let parent = path.parent().unwrap();
+            parent.join("focus_sandbox.latest")
+        };
+        let metadata = std::fs::symlink_metadata(&latest_link_path)?;
+        assert!(metadata.is_symlink());
+        fs::remove_file(&latest_link_path)?;
+        fs::remove_dir_all(&path)?;
+
         Ok(())
     }
 
