@@ -5,7 +5,7 @@ Library to instrument tools via the tool insights service.
 The library, currently, is only useful on MacOS since it relies on the
 tool insights daemon to upload the logs to tool insights service.
 """
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
