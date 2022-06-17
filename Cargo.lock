@@ -314,7 +314,7 @@ dependencies = [
 
 [[package]]
 name = "content-addressed-cache"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "ciborium",
@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "focus-commands"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "focus-internals"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -608,7 +608,7 @@ dependencies = [
 
 [[package]]
 name = "focus-migrations"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "focus-internals",
@@ -629,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "focus-operations"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "focus-repo-management"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -688,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "focus-testing"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "git2",
@@ -703,7 +703,7 @@ dependencies = [
 
 [[package]]
 name = "focus-tracing"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "focus-util"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1935,7 +1935,7 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tool-insights-client"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "libc",
