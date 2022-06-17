@@ -5,7 +5,8 @@
             "description": "Mandatory dependencies imposed by the repository",
             "mandatory": true,
             "targets": [
-                "bazel://mandatory_z/..."
+                "bazel://mandatory_z/...",
+                "directory:mandatory_y/very_important_info"
             ]
         }
     ]

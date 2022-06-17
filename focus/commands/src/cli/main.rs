@@ -21,11 +21,8 @@ use focus_util::{
     time::FocusTime,
 };
 
-use focus_internals::{
-    operation,
-    operation::maintenance::{self, ScheduleOpts},
-    tracker::Tracker,
-};
+use focus_internals::tracker::Tracker;
+use focus_operations::maintenance::{self, ScheduleOpts};
 use strum::VariantNames;
 use tracing::{debug, debug_span, info};
 
@@ -113,7 +110,7 @@ enum Subcommand {
     Init {
         /// By default we take 90 days of history, pass a date with this option
         /// if you want a different amount of history
-        #[clap(long, parse(try_from_str = operation::init::parse_shallow_since_date))]
+        #[clap(long, parse(try_from_str = focus_operations::init::parse_shallow_since_date))]
         shallow_since: Option<NaiveDate>,
 
         /// This command will only ever clone a single ref, by default this is
@@ -151,7 +148,7 @@ enum Subcommand {
         #[clap(long)]
         push_url: Option<String>,
 
-        #[clap(long, default_value=operation::init::SOURCE_RO_URL)]
+        #[clap(long, default_value=focus_operations::init::SOURCE_RO_URL)]
         fetch_url: String,
 
         #[clap()]
@@ -162,7 +159,7 @@ enum Subcommand {
     Maintenance {
         /// The git config key to look for paths of repos to run maintenance in. Defaults to
         /// 'maintenance.repo'
-        #[clap(long, default_value=operation::maintenance::DEFAULT_CONFIG_KEY, global = true)]
+        #[clap(long, default_value=focus_operations::maintenance::DEFAULT_CONFIG_KEY, global = true)]
         git_config_key: String,
 
         #[clap(subcommand)]
@@ -194,61 +191,68 @@ enum Subcommand {
     },
     /// Called by a git hook to trigger certain actions after a git event such as
     /// merge completion or checkout
-    Event {
-        #[clap(subcommand)]
-        subcommand: EventSubcommand,
-    },
+    Event { args: Vec<String> },
+    /// Print the version of Focus
+    Version,
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
 /// feature name.
 fn feature_name_for(subcommand: &Subcommand) -> String {
-    let subcommand_name = match subcommand {
-        Subcommand::Clone { .. } => "clone",
-        Subcommand::Sync { .. } => "sync",
+    match subcommand {
+        Subcommand::Clone { .. } => "clone".to_string(),
+        Subcommand::Sync { .. } => "sync".to_string(),
         Subcommand::Repo { subcommand } => match subcommand {
-            RepoSubcommand::List { .. } => "repo-list",
-            RepoSubcommand::Repair { .. } => "repo-repair",
+            RepoSubcommand::List { .. } => "repo-list".to_string(),
+            RepoSubcommand::Repair { .. } => "repo-repair".to_string(),
         },
-        Subcommand::Add { .. } => "add",
-        Subcommand::Remove { .. } => "remove",
-        Subcommand::Status { .. } => "status",
-        Subcommand::Projects { .. } => "projects",
-        Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes",
+        Subcommand::Add { .. } => "add".to_string(),
+        Subcommand::Remove { .. } => "remove".to_string(),
+        Subcommand::Status { .. } => "status".to_string(),
+        Subcommand::Projects { .. } => "projects".to_string(),
+        Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes".to_string(),
         Subcommand::Refs { subcommand, .. } => match subcommand {
-            RefsSubcommand::Delete { .. } => "refs-delete",
-            RefsSubcommand::ListExpired { .. } => "refs-list-expired",
-            RefsSubcommand::ListCurrent { .. } => "refs-list-current",
+            RefsSubcommand::Delete { .. } => "refs-delete".to_string(),
+            RefsSubcommand::ListExpired { .. } => "refs-list-expired".to_string(),
+            RefsSubcommand::ListCurrent { .. } => "refs-list-current".to_string(),
         },
-        Subcommand::Init { .. } => "init",
+        Subcommand::Init { .. } => "init".to_string(),
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
-            MaintenanceSubcommand::Run { .. } => "maintenance-run",
-            MaintenanceSubcommand::Register { .. } => "maintenance-register",
-            MaintenanceSubcommand::SetDefaultConfig { .. } => "maintenance-set-default-config",
-            MaintenanceSubcommand::SandboxCleanup { .. } => "maintenance-sandbox-cleanup",
+            MaintenanceSubcommand::Run { .. } => "maintenance-run".to_string(),
+            MaintenanceSubcommand::Register { .. } => "maintenance-register".to_string(),
+            MaintenanceSubcommand::SetDefaultConfig { .. } => {
+                "maintenance-set-default-config".to_string()
+            }
+            MaintenanceSubcommand::SandboxCleanup { .. } => {
+                "maintenance-sandbox-cleanup".to_string()
+            }
             MaintenanceSubcommand::Schedule { subcommand } => match subcommand {
-                MaintenanceScheduleSubcommand::Enable { .. } => "maintenance-schedule-enable",
-                MaintenanceScheduleSubcommand::Disable { .. } => "maintenance-schedule-disable",
+                MaintenanceScheduleSubcommand::Enable { .. } => {
+                    "maintenance-schedule-enable".to_string()
+                }
+                MaintenanceScheduleSubcommand::Disable { .. } => {
+                    "maintenance-schedule-disable".to_string()
+                }
             },
         },
-        Subcommand::GitTrace { .. } => "git-trace",
-        Subcommand::Upgrade { .. } => "upgrade",
+        Subcommand::GitTrace { .. } => "git-trace".to_string(),
+        Subcommand::Upgrade { .. } => "upgrade".to_string(),
         Subcommand::Index { subcommand } => match subcommand {
-            IndexSubcommand::Clear { .. } => "index-clear",
-            IndexSubcommand::Fetch { .. } => "index-fetch",
-            IndexSubcommand::Get { .. } => "index-get",
-            IndexSubcommand::Generate { .. } => "index-generate",
-            IndexSubcommand::Hash { .. } => "index-hash",
-            IndexSubcommand::Push { .. } => "index-push",
-            IndexSubcommand::Resolve { .. } => "index-resolve",
+            IndexSubcommand::Clear { .. } => "index-clear".to_string(),
+            IndexSubcommand::Fetch { .. } => "index-fetch".to_string(),
+            IndexSubcommand::Get { .. } => "index-get".to_string(),
+            IndexSubcommand::Generate { .. } => "index-generate".to_string(),
+            IndexSubcommand::Hash { .. } => "index-hash".to_string(),
+            IndexSubcommand::Push { .. } => "index-push".to_string(),
+            IndexSubcommand::Resolve { .. } => "index-resolve".to_string(),
         },
-        Subcommand::Event { subcommand } => match subcommand {
-            EventSubcommand::PostCheckout => "event-post-checkout",
-            EventSubcommand::PostMerge => "event-post-merge",
-            EventSubcommand::PostCommit => "event-post-commit",
-        },
-    };
-    subcommand_name.into()
+        Subcommand::Event { args } => {
+            let mut temp_args = args.to_owned();
+            temp_args.insert(0, "event".to_string());
+            temp_args.join("-")
+        }
+        Subcommand::Version => "version".to_string(),
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -276,11 +280,11 @@ enum MaintenanceSubcommand {
         /// The time period of job to run
         #[clap(
             long,
-            possible_values=operation::maintenance::TimePeriod::VARIANTS,
+            possible_values=focus_operations::maintenance::TimePeriod::VARIANTS,
             default_value="hourly",
             env = "FOCUS_TIME_PERIOD"
         )]
-        time_period: operation::maintenance::TimePeriod,
+        time_period: focus_operations::maintenance::TimePeriod,
     },
 
     SetDefaultConfig {},
@@ -321,11 +325,11 @@ enum MaintenanceScheduleSubcommand {
         /// The time period of job to schedule
         #[clap(
             long,
-            possible_values=operation::maintenance::TimePeriod::VARIANTS,
+            possible_values=focus_operations::maintenance::TimePeriod::VARIANTS,
             default_value="hourly",
             env = "FOCUS_TIME_PERIOD"
         )]
-        time_period: operation::maintenance::TimePeriod,
+        time_period: focus_operations::maintenance::TimePeriod,
 
         /// register jobs for all time periods
         #[clap(long, conflicts_with = "time-period", env = "FOCUS_ALL")]
@@ -336,7 +340,7 @@ enum MaintenanceScheduleSubcommand {
         focus_path: Option<PathBuf>,
 
         /// path to git
-        #[clap(long, default_value = operation::maintenance::DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS, env = "FOCUS_GIT_BINARY_PATH")]
+        #[clap(long, default_value = focus_operations::maintenance::DEFAULT_GIT_BINARY_PATH_FOR_SCHEDULED_JOBS, env = "FOCUS_GIT_BINARY_PATH")]
         git_binary_path: PathBuf,
 
         /// Normally, we check to see if the scheduled job is already defined and if it is
@@ -506,7 +510,7 @@ enum IndexSubcommand {
         sparse_repo: PathBuf,
 
         /// The Git remote to push to.
-        #[clap(long, default_value = operation::index::INDEX_DEFAULT_REMOTE)]
+        #[clap(long, default_value = focus_operations::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
 
         /// If index keys are found to be missing, pause for debugging.
@@ -525,6 +529,7 @@ enum IndexSubcommand {
 }
 
 #[derive(Parser, Debug)]
+#[allow(clippy::enum_variant_names)]
 enum EventSubcommand {
     PostCheckout,
     PostCommit,
@@ -590,7 +595,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             copy_branches,
             projects_and_targets,
         } => {
-            let origin = operation::clone::Origin::try_from(dense_repo.as_str())?;
+            let origin = focus_operations::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
                 let current_dir =
                     std::env::current_dir().context("Failed to obtain current directory")?;
@@ -607,7 +612,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 projects_and_targets.len().to_string(),
             );
 
-            operation::clone::run(
+            focus_operations::clone::run(
                 origin,
                 sparse_repo.clone(),
                 branch,
@@ -629,7 +634,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::sync::run(&sparse_repo, app)?;
+            focus_operations::sync::run(&sparse_repo, false, app)?;
             Ok(ExitCode(0))
         }
 
@@ -645,7 +650,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    operation::refs::expire_old_refs(
+                    focus_operations::refs::expire_old_refs(
                         &repo,
                         cutoff,
                         check_merge_base,
@@ -660,10 +665,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let operation::refs::PartitionedRefNames {
+                    let focus_operations::refs::PartitionedRefNames {
                         current: _,
                         expired,
-                    } = operation::refs::PartitionedRefNames::for_repo(
+                    } = focus_operations::refs::PartitionedRefNames::for_repo(
                         &repo,
                         cutoff,
                         check_merge_base,
@@ -679,10 +684,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                     check_merge_base,
                 } => {
                     let cutoff = FocusTime::parse_date(cutoff_date)?;
-                    let operation::refs::PartitionedRefNames {
+                    let focus_operations::refs::PartitionedRefNames {
                         current,
                         expired: _,
-                    } = operation::refs::PartitionedRefNames::for_repo(
+                    } = focus_operations::refs::PartitionedRefNames::for_repo(
                         &repo,
                         cutoff,
                         check_merge_base,
@@ -697,11 +702,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List {} => {
-                operation::repo::list()?;
+                focus_operations::repo::list()?;
                 Ok(ExitCode(0))
             }
             RepoSubcommand::Repair {} => {
-                operation::repo::repair(app)?;
+                focus_operations::repo::repair(app)?;
                 Ok(ExitCode(0))
             }
         },
@@ -710,7 +715,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let repo = paths::expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
-            operation::detect_build_graph_changes::run(&repo, args, app)
+            focus_operations::detect_build_graph_changes::run(&repo, args, app)
         }
 
         Subcommand::Add {
@@ -719,9 +724,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::ensure_clean::run(&sparse_repo, app.clone())
+            focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+            focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
@@ -731,23 +736,23 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            operation::ensure_clean::run(&sparse_repo, app.clone())
+            focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            operation::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
+            focus_operations::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Status {} => {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
-            operation::selection::status(&sparse_repo, app)?;
+            focus_operations::selection::status(&sparse_repo, app)?;
             Ok(ExitCode(0))
         }
 
         Subcommand::Projects {} => {
             let repo = std::env::current_dir()?;
             paths::assert_focused_repo(&repo)?;
-            operation::selection::list_projects(&repo, app)?;
+            focus_operations::selection::list_projects(&repo, app)?;
             Ok(ExitCode(0))
         }
 
@@ -770,23 +775,23 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
             let target = expanded.as_path();
 
-            let mut init_opts: Vec<operation::init::InitOpt> = Vec::new();
+            let mut init_opts: Vec<focus_operations::init::InitOpt> = Vec::new();
 
-            let mut add_if_true = |n: bool, opt: operation::init::InitOpt| {
+            let mut add_if_true = |n: bool, opt: focus_operations::init::InitOpt| {
                 if n {
                     init_opts.push(opt)
                 };
             };
 
-            add_if_true(no_checkout, operation::init::InitOpt::NoCheckout);
-            add_if_true(bare, operation::init::InitOpt::Bare);
-            add_if_true(sparse, operation::init::InitOpt::Sparse);
-            add_if_true(follow_tags, operation::init::InitOpt::FollowTags);
-            add_if_true(progress, operation::init::InitOpt::Progress);
+            add_if_true(no_checkout, focus_operations::init::InitOpt::NoCheckout);
+            add_if_true(bare, focus_operations::init::InitOpt::Bare);
+            add_if_true(sparse, focus_operations::init::InitOpt::Sparse);
+            add_if_true(follow_tags, focus_operations::init::InitOpt::FollowTags);
+            add_if_true(progress, focus_operations::init::InitOpt::Progress);
 
             info!("Setting up a copy of the repo in {:?}", target);
 
-            operation::init::run(
+            focus_operations::init::run(
                 shallow_since,
                 Some(branch_name),
                 if no_filter { None } else { Some(filter) },
@@ -810,8 +815,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 git_config_path,
                 time_period,
             } => {
-                operation::maintenance::run(
-                    operation::maintenance::RunOptions {
+                focus_operations::maintenance::run(
+                    focus_operations::maintenance::RunOptions {
                         git_binary_path,
                         git_config_key,
                         git_config_path,
@@ -830,16 +835,18 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 repo_path,
                 git_config_path,
             } => {
-                operation::maintenance::register(operation::maintenance::RegisterOpts {
-                    repo_path,
-                    git_config_key,
-                    global_config_path: git_config_path,
-                })?;
+                focus_operations::maintenance::register(
+                    focus_operations::maintenance::RegisterOpts {
+                        repo_path,
+                        git_config_key,
+                        global_config_path: git_config_path,
+                    },
+                )?;
                 Ok(ExitCode(0))
             }
 
             MaintenanceSubcommand::SetDefaultConfig { .. } => {
-                operation::maintenance::set_default_git_maintenance_config(
+                focus_operations::maintenance::set_default_git_maintenance_config(
                     &std::env::current_dir()?,
                 )?;
                 Ok(ExitCode(0))
@@ -906,12 +913,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { sparse_repo } => {
-                operation::index::clear(sparse_repo)?;
+                focus_operations::index::clear(sparse_repo)?;
                 Ok(ExitCode(0))
             }
 
             IndexSubcommand::Fetch { sparse_repo } => {
-                let exit_code = operation::index::fetch(app, sparse_repo)?;
+                let exit_code = focus_operations::index::fetch(app, sparse_repo)?;
                 Ok(exit_code)
             }
 
@@ -920,17 +927,17 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 break_on_missing_keys,
             } => {
                 let exit_code =
-                    operation::index::generate(app, sparse_repo, break_on_missing_keys)?;
+                    focus_operations::index::generate(app, sparse_repo, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Get { target } => {
-                let exit_code = operation::index::get(app, Path::new("."), &target)?;
+                let exit_code = focus_operations::index::get(app, Path::new("."), &target)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Hash { targets } => {
-                let exit_code = operation::index::hash(app, Path::new("."), &targets)?;
+                let exit_code = focus_operations::index::hash(app, Path::new("."), &targets)?;
                 Ok(exit_code)
             }
 
@@ -940,7 +947,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 break_on_missing_keys,
             } => {
                 let exit_code =
-                    operation::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
+                    focus_operations::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
@@ -948,17 +955,22 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 targets,
                 break_on_missing_keys,
             } => {
-                let exit_code =
-                    operation::index::resolve(app, Path::new("."), targets, break_on_missing_keys)?;
+                let exit_code = focus_operations::index::resolve(
+                    app,
+                    Path::new("."),
+                    targets,
+                    break_on_missing_keys,
+                )?;
                 Ok(exit_code)
             }
         },
 
-        Subcommand::Event { subcommand } => match subcommand {
-            EventSubcommand::PostCheckout => Ok(ExitCode(0)),
-            EventSubcommand::PostCommit => Ok(ExitCode(0)),
-            EventSubcommand::PostMerge => Ok(ExitCode(0)),
-        },
+        Subcommand::Event { args: _ } => Ok(ExitCode(0)),
+
+        Subcommand::Version => {
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            Ok(ExitCode(0))
+        }
     }
 }
 
@@ -998,21 +1010,9 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
         | Subcommand::Add { .. }
         | Subcommand::Remove { .. }
         | Subcommand::Init { .. } => {
-            operation::maintenance::schedule_enable(ScheduleOpts::default())
+            focus_operations::maintenance::schedule_enable(ScheduleOpts::default())
         }
         _ => Ok(()),
-    }
-}
-
-// Returns a cmd name for a sandbox.
-// Returns None if cmd hasn't been determined to need a sandbox prefix.
-fn sandbox_name_for_cmd(opts: &FocusOpts) -> Option<&str> {
-    match &opts.cmd {
-        Subcommand::Maintenance {
-            subcommand: MaintenanceSubcommand::Run { .. },
-            ..
-        } => Some("maintenance_"),
-        _ => None,
     }
 }
 
@@ -1037,7 +1037,12 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     let preserve_sandbox = true;
 
-    let app = Arc::from(App::new(preserve_sandbox, sandbox_name_for_cmd(&options))?);
+    let app = Arc::from(App::new(
+        preserve_sandbox,
+        Some(&feature_name_for(&options.cmd)),
+        Some(env!("CARGO_PKG_NAME").to_owned()),
+        Some(env!("CARGO_PKG_VERSION").to_owned()),
+    )?);
     let ti_context = app.tool_insights_client();
 
     setup_thread_pool(*resolution_threads)?;
@@ -1086,4 +1091,26 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 fn main() -> Result<()> {
     let ExitCode(exit_code) = main_and_drop_locals()?;
     std::process::exit(exit_code);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_cmd_feature_name_for_is_in_right_format() -> Result<()> {
+        let event_cmd = Subcommand::Event {
+            args: vec![
+                "this".to_string(),
+                "is".to_string(),
+                "an".to_string(),
+                "event".to_string(),
+                "subcommand".to_string(),
+                "teehee".to_string(),
+            ],
+        };
+        let feature_name = feature_name_for(&event_cmd);
+        assert_eq!(feature_name, "event-this-is-an-event-subcommand-teehee");
+        Ok(())
+    }
 }

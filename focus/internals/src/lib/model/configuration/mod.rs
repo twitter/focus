@@ -5,7 +5,7 @@ pub use index_config::IndexConfig;
 
 use super::persistence;
 
-pub(crate) const INDEX_CONFIG_FILENAME: &str = "index.cfg.json";
+pub const INDEX_CONFIG_FILENAME: &str = "index.cfg.json";
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Configuration {
@@ -25,7 +25,7 @@ impl Configuration {
         })
     }
 
-    pub(crate) fn config_dir(repo_path: impl AsRef<Path>) -> PathBuf {
+    pub fn config_dir(repo_path: impl AsRef<Path>) -> PathBuf {
         repo_path.as_ref().join(".focus").join("config")
     }
 }

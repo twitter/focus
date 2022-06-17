@@ -327,7 +327,6 @@ dependencies = [
  "regex",
  "rocksdb",
  "tempfile",
- "thiserror",
  "tracing",
 ]
 
@@ -547,6 +546,7 @@ dependencies = [
  "dirs",
  "focus-internals",
  "focus-migrations",
+ "focus-operations",
  "focus-testing",
  "focus-tracing",
  "focus-util",
@@ -576,21 +576,17 @@ version = "0.5.3"
 dependencies = [
  "anyhow",
  "chrono",
- "clap 3.1.18",
  "content-addressed-cache",
  "criterion",
  "dirs",
  "focus-testing",
- "focus-tracing",
  "focus-util",
  "git2",
- "heck",
  "insta",
  "lazy_static",
  "maplit",
  "nix",
  "once_cell",
- "plist",
  "rand 0.8.5",
  "rayon",
  "regex",
@@ -599,16 +595,10 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "sha2",
- "strum",
- "strum_macros",
  "tempfile",
- "termion",
  "thiserror",
  "tool-insights-client",
  "tracing",
- "tracing-appender",
- "tracing-error",
- "tracing-subscriber",
  "url",
  "uuid",
  "walkdir",
@@ -622,6 +612,7 @@ version = "0.5.3"
 dependencies = [
  "anyhow",
  "focus-internals",
+ "focus-operations",
  "git2",
  "insta",
  "lazy_static",
@@ -634,6 +625,65 @@ dependencies = [
  "tracing-chrome",
  "tracing-error",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "focus-operations"
+version = "0.5.3"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "content-addressed-cache",
+ "criterion",
+ "dirs",
+ "focus-internals",
+ "focus-testing",
+ "focus-util",
+ "git2",
+ "insta",
+ "lazy_static",
+ "maplit",
+ "nix",
+ "once_cell",
+ "plist",
+ "rand 0.8.5",
+ "regex",
+ "serde",
+ "serde-xml-rs",
+ "serde_derive",
+ "serde_json",
+ "sha2",
+ "strum",
+ "strum_macros",
+ "tempfile",
+ "thiserror",
+ "tool-insights-client",
+ "tracing",
+ "url",
+ "uuid",
+ "walkdir",
+ "which",
+ "whoami",
+]
+
+[[package]]
+name = "focus-repo-management"
+version = "0.5.3"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap 3.1.18",
+ "dirs",
+ "focus-internals",
+ "focus-testing",
+ "focus-tracing",
+ "focus-util",
+ "git2",
+ "lazy_static",
+ "tempfile",
+ "termion",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -1736,9 +1786,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbaf6116ab8924f39d52792136fb74fd60a80194cf1b1c6ffa6453eef1c3f942"
+checksum = "0748dd251e24453cb8717f0354206b91557e4ec8703673a4b30208f2abaf1ebf"
 dependencies = [
  "proc-macro2",
  "quote",

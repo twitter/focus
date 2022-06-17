@@ -2,6 +2,8 @@
 members = [
   "focus/commands",
   "focus/internals",
+  "focus/operations",
+  "focus/repo-management",
   "focus/testing",
   "focus/tracing",
   "focus/util",

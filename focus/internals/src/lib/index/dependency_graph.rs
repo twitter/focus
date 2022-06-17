@@ -421,7 +421,7 @@ sh_binary(
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        fe52529478fee0bc3eb667cfd4fd4e6927d5bcac,
+                        a38eb70555ffd78f1b5fa43a50e7be10ef0f2f7c,
                     ),
                 ),
             },
@@ -433,7 +433,7 @@ sh_binary(
         }
         "###);
 
-        let app = Arc::new(App::new(false, None)?);
+        let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
         let target_set =
@@ -572,7 +572,7 @@ New contents
         let head_oid = fix.commit_all("Wrote files")?;
         let repo = fix.repo()?;
 
-        let app = Arc::new(App::new(false, None)?);
+        let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
         let target_set = hashset! {"bazel://package1:foo".try_into()? };
@@ -657,7 +657,7 @@ def my_macro_inner(name):
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        6a2af318ce7453abddc4b128e014e552599c6881,
+                        2f7a0ffb94d0377ab66224ee8459b44919d84366,
                     ),
                 ),
             },
@@ -738,7 +738,7 @@ def some_macro():
         let head_oid = fix.commit_all("Wrote files")?;
         let repo = fix.repo()?;
 
-        let app = Arc::new(App::new(false, None)?);
+        let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
         let target_set = hashset! {"bazel://package1:foo".try_into()?};
@@ -808,7 +808,7 @@ def some_macro():
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        2fc26d30b28a7b0b2b695d05052c161915b9da16,
+                        8933366bff74c6185415be78d8609a50d24cd642,
                     ),
                 ),
             },
@@ -855,7 +855,7 @@ def some_macro():
         let head_oid = fix.commit_all("Wrote files")?;
         let repo = fix.repo()?;
 
-        let app = Arc::new(App::new(false, None)?);
+        let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
         let target_set = hashset! {"bazel://package1:foo".try_into()?};
@@ -921,7 +921,7 @@ sh_binary(
         let head_oid = fix.commit_all("Wrote files")?;
         let repo = fix.repo()?;
 
-        let app = Arc::new(App::new(false, None)?);
+        let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
         let resolver = BazelResolver::new(cache_dir.path());
         let target_set = hashset! {

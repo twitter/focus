@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use focus_util::backed_up_file::BackedUpFile;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashSet},
@@ -185,7 +186,7 @@ impl<'processor> SelectionOperationProcessor<'processor> {
 }
 
 /// SelectionManager maintains the current selection within a repository. It also provides access to projects defined in the repository via the `project_catalog()` method and associated structure.
-pub(crate) struct SelectionManager {
+pub struct SelectionManager {
     /// The path where the selection is stored.
     selection_path: PathBuf,
     /// The currently selected projects.
@@ -238,6 +239,11 @@ impl SelectionManager {
         store_model(&self.selection_path, &persisted_selection)?;
         debug!(?persisted_selection, path = ?self.selection_path, "Saved selection");
         Ok(())
+    }
+
+    /// Returns a back up of the selection file.
+    pub fn create_backup(&self) -> Result<BackedUpFile> {
+        BackedUpFile::new(&self.selection_path)
     }
 
     /// Returns a Selection combining both user-selected and mandatory projects and targets.

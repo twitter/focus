@@ -1,8 +1,8 @@
 use content_addressed_cache::RocksDBCache;
 use focus_util::{
-    app::{App, ExitCode},
+    app::App,
     git_helper::{self, get_head_commit},
-    paths,
+    paths::{self, is_build_definition},
     sandbox_command::SandboxCommandOutput,
 };
 use std::{
@@ -20,7 +20,6 @@ use crate::{
         HashContext, PathsToMaterializeResult,
     },
     model::outlining::{LeadingPatternInserter, Pattern},
-    operation::index,
     target::TargetSet,
     target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
@@ -34,12 +33,15 @@ use super::{
 };
 
 use anyhow::{bail, Context, Result};
-use git2::{Oid, Repository, TreeWalkMode, TreeWalkResult};
-use tracing::{debug, info, info_span, trace};
+use git2::{ObjectType, Oid, Repository, TreeWalkMode, TreeWalkResult};
+use tracing::{debug, info, info_span, trace, warn};
 use uuid::Uuid;
 
-const SYNC_REF_NAME: &str = "refs/focus/sync";
+const SPARSE_SYNC_REF_NAME: &str = "refs/focus/sync";
+const PREEMPTIVE_SYNC_REF_NAME: &str = "refs/focus/presync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
+const PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY: &str = "focus.preemptive-sync.enabled";
+
 const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
 const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
 const VERSION_CONFIG_KEY: &str = "focus.version";
@@ -255,40 +257,66 @@ impl WorkingTree {
             .context("Failed to apply root-only patterns")
     }
 
-    /// Reads the commit ID of the sparse sync ref (named SYNC_REF_NAME)
-    pub fn read_sync_point_ref(&self) -> Result<Option<Oid>> {
-        let description = format!(
-            "Recording sparse sync point in {}",
-            self.work_dir().display()
-        );
-        let reference = self
-            .repo
-            .find_reference(SYNC_REF_NAME)
-            .context(description.clone())
-            .context("Finding sync reference");
+    pub fn read_sync_point_ref_internal(&self, name: &str) -> Result<Option<Oid>> {
+        let reference = self.repo.find_reference(name).with_context(|| {
+            format!(
+                "Finding sync reference {} in repo {}",
+                name,
+                self.repo.path().display()
+            )
+        });
         match reference {
             Ok(reference) => {
-                let commit = reference
-                    .peel_to_commit()
-                    .context(description)
-                    .context("Finding commit associated with reference")?;
+                let commit = reference.peel_to_commit().with_context(|| {
+                    format!(
+                        "Resolving commit for reference {} in repo {}",
+                        name,
+                        self.repo.path().display()
+                    )
+                })?;
                 Ok(Some(commit.id()))
             }
             _ => Ok(None),
         }
     }
 
+    /// Reads the commit ID of the sparse sync ref (named SYNC_REF_NAME)
+    pub fn read_sparse_sync_point_ref(&self) -> Result<Option<Oid>> {
+        self.read_sync_point_ref_internal(SPARSE_SYNC_REF_NAME)
+    }
+
+    /// Reads the commit ID of the preemptive sync ref (named SYNC_REF_NAME)
+    pub fn read_preemptive_sync_point_ref(&self) -> Result<Option<Oid>> {
+        self.read_sync_point_ref_internal(PREEMPTIVE_SYNC_REF_NAME)
+    }
+
+    pub fn write_sync_point_ref_internal(&self, name: &str, commit_id: git2::Oid) -> Result<()> {
+        self.repo
+            .reference(SPARSE_SYNC_REF_NAME, commit_id, true, "focus sync")
+            .with_context(|| {
+                format!(
+                    "Recording sync point ref {} in repo {} to {}",
+                    name,
+                    self.work_dir().display(),
+                    &commit_id,
+                )
+            })
+            .map(|_| ())
+    }
+
     /// Updates the sparse sync ref to the value of the HEAD ref (named SYNC_REF_NAME)
     pub fn write_sync_point_ref(&self) -> Result<()> {
-        let description = format!(
-            "Recording sparse sync point in {}",
-            self.work_dir().display()
-        );
-        let head_commit = self.get_head_commit().context(description)?;
-        self.repo
-            .reference(SYNC_REF_NAME, head_commit.id(), true, "focus sync")?;
+        let head_commit = self
+            .get_head_commit()
+            .context("Determining the HEAD commit")?;
+        self.write_sync_point_ref_internal(SPARSE_SYNC_REF_NAME, head_commit.id())
+            .context("Updating the sparse sync ref")
+    }
 
-        Ok(())
+    /// Updates the sparse sync ref to the value of the HEAD ref (named SYNC_REF_NAME)
+    pub fn write_preemptive_sync_point_ref(&self, commit_id: git2::Oid) -> Result<()> {
+        self.write_sync_point_ref_internal(PREEMPTIVE_SYNC_REF_NAME, commit_id)
+            .context("Updating the preemptive sync ref")
     }
 
     pub fn git_repo(&self) -> &Repository {
@@ -451,36 +479,72 @@ impl OutliningTree {
 
         for path in result.paths.iter() {
             let qualified_path = repo_path.join(path);
-            match paths::find_closest_directory_with_build_file(&qualified_path, &repo_path)
+
+            let path = self
+                .find_closest_directory_with_build_file(commit_id, &qualified_path)
                 .context("locating closest build file")?
-            {
-                Some(path_to_closest_build_file) => {
-                    debug!(
-                        "Adding directory with closest build definition: {}",
-                        path_to_closest_build_file.display()
-                    );
-                    if let Some(path) = treat_path(&path_to_closest_build_file)? {
-                        patterns.insert_leading(Pattern::Directory {
-                            precedence: LAST,
-                            path,
-                            recursive: true,
-                        });
-                    }
-                }
-                None => {
-                    debug!("Adding directory verbatim: {}", qualified_path.display());
-                    if let Some(path) = treat_path(&qualified_path)? {
-                        patterns.insert(Pattern::Directory {
-                            precedence: LAST,
-                            path,
-                            recursive: true,
-                        });
-                    }
-                }
+                .unwrap_or(qualified_path);
+            if let Some(path) = treat_path(&path)? {
+                patterns.insert_leading(Pattern::Directory {
+                    precedence: LAST,
+                    path,
+                    recursive: true,
+                });
             }
         }
 
         Ok((patterns, result))
+    }
+
+    fn find_closest_directory_with_build_file(
+        &self,
+        commit_id: git2::Oid,
+        path: impl AsRef<Path>,
+        // ceiling: impl AsRef<Path>,
+    ) -> Result<Option<PathBuf>> {
+        let path = path.as_ref();
+        let git_repo = self.underlying.git_repo();
+        let tree = git_repo
+            .find_commit(commit_id)
+            .context("Resolving commit")?
+            .tree()
+            .context("Resolving tree")?;
+
+        let mut path = path.to_owned();
+        loop {
+            if let Ok(tree_entry) = tree.get_path(&path) {
+                info!(?path, "Current");
+                // If the entry is a tree, get it.
+                if tree_entry.kind() == Some(ObjectType::Tree) {
+                    let tree_object = tree_entry
+                        .to_object(git_repo)
+                        .with_context(|| format!("Resolving tree {}", path.display()))?;
+                    let current_tree = tree_object.as_tree().unwrap();
+                    // Iterate through the tree to see if there is a build file.
+                    for entry in current_tree.iter() {
+                        if entry.kind() == Some(ObjectType::Blob) {
+                            if let Some(name) = entry.name() {
+                                info!(?name, "Considering file");
+
+                                let candidate_path = PathBuf::from_str(name)?;
+                                if is_build_definition(candidate_path) {
+                                    info!(?name, "Found build definition");
+
+                                    return Ok(Some(path));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !path.pop() {
+                // We have reached the root with no match.
+                break;
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -556,17 +620,21 @@ impl Repo {
     /// Run a sync, returning the number of patterns that were applied and whether a checkout occured as a result of the profile changing.
     pub fn sync(
         &self,
+        commit_id: git2::Oid,
         targets: &TargetSet,
         skip_pattern_application: bool,
         index_config: &IndexConfig,
         app: Arc<App>,
         cache: &RocksDBCache,
     ) -> Result<(usize, bool)> {
-        let head_commit = self.get_head_commit()?;
-        let head_tree = head_commit.tree().context("Failed to resolve head tree")?;
+        let commit = self
+            .underlying()
+            .find_commit(commit_id)
+            .with_context(|| format!("Resolving commit {}", commit_id))?;
+        let tree = commit.tree().context("Resolving tree")?;
         let hash_context = HashContext {
             repo: &self.repo,
-            head_tree: &head_tree,
+            head_tree: &tree,
             caches: Default::default(),
         };
 
@@ -601,12 +669,13 @@ impl Repo {
                     info!(
                         "Cache miss for sparse checkout patterns; fetching from the remote index"
                     );
-                    let _: Result<ExitCode> = index::fetch_internal(
-                        app.clone(),
-                        cache,
-                        working_tree.work_dir().to_path_buf(),
-                        index_config,
-                    );
+                    // TODO: Re-enable after the index is moved into its own crate.
+                    // let _: Result<ExitCode> = index::fetch_internal(
+                    //     app.clone(),
+                    //     cache,
+                    //     working_tree.work_dir().to_path_buf(),
+                    //     index_config,
+                    // );
                     // Query again now that the index is populated.
                     paths_to_materialize =
                         get_files_to_materialize(&hash_context, cache, dependency_keys)?;
@@ -652,7 +721,7 @@ impl Repo {
 
                     debug!(?missing_keys, "These are the missing keys");
                     let (outline_patterns, resolution_result) = outlining_tree
-                        .outline(head_commit.id(), targets, app.clone())
+                        .outline(commit_id, targets, app.clone())
                         .context("Failed to outline")?;
 
                     debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
@@ -750,7 +819,7 @@ impl Repo {
         Ok(())
     }
 
-    pub(crate) fn selection_manager(&self) -> Result<SelectionManager> {
+    pub fn selection_manager(&self) -> Result<SelectionManager> {
         SelectionManager::from_repo(self)
     }
 
@@ -759,11 +828,68 @@ impl Repo {
         self.selection_manager()?.computed_selection()
     }
 
+    pub fn get_prefetch_head_commit(
+        &self,
+        remote_name: &str,
+        branch_name: &str,
+    ) -> Result<Option<git2::Commit>> {
+        let ref_name = format!("refs/prefetch/remotes/{}/{}", remote_name, branch_name);
+        match self.repo.find_reference(&ref_name) {
+            Ok(prefetch_head_reference) => Ok(Some(
+                prefetch_head_reference
+                    .peel_to_commit()
+                    .context("Resolving commit")?,
+            )),
+            Err(e) => {
+                warn!(?ref_name, ?e, "Could not find prefetch head commit",);
+                Ok(None)
+            }
+        }
+    }
+
     pub fn get_head_commit(&self) -> Result<git2::Commit> {
         let head_reference = self.repo.head().context("resolving HEAD reference")?;
         let head_commit = head_reference
             .peel_to_commit()
             .context("resolving HEAD commit")?;
         Ok(head_commit)
+    }
+
+    pub fn get_preemptive_sync_enabled(&self) -> Result<bool> {
+        let snapshot = self
+            .underlying()
+            .config()
+            .context("Reading config")?
+            .snapshot()
+            .context("Snapshotting config")?;
+
+        Ok(snapshot.get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)?)
+    }
+
+    pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
+        let working_tree = self
+            .working_tree()
+            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+
+        git_helper::write_config(
+            working_tree.work_dir(),
+            PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY,
+            enabled.to_string().as_str(),
+            self.app.clone(),
+        )
+        .context("Writing preemptive sync enabled key")?;
+
+        Ok(())
+    }
+
+    pub fn primary_branch_name(&self) -> Result<String> {
+        let repo = self.underlying();
+        if repo.find_reference("refs/heads/master").is_ok() {
+            Ok(String::from("master"))
+        } else if repo.find_reference("refs/heads/main").is_ok() {
+            Ok(String::from("main"))
+        } else {
+            bail!("Could not determine primary branch name");
+        }
     }
 }

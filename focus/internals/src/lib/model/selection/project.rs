@@ -92,7 +92,7 @@ impl ProjectSetStore {
 
 /// ProjectIndex indexes projects loaded from a ProjectSetStore. When constructed, a unified forward index of project name to project is maintained, keeping track of which sets projects were defined in and preventing duplicates in the flat namespace.
 #[derive(Default, Debug)]
-pub(crate) struct ProjectIndex {
+pub struct ProjectIndex {
     /// Underlying maps project names to instances of the Project structure.
     pub underlying: HashMap<String, Project>,
 
@@ -184,7 +184,7 @@ impl TryFrom<&ProjectIndex> for TargetSet {
 }
 
 /// ProjectCatalog maintains indices of optional and mandatory projects defined in a repository.
-pub(crate) struct ProjectCatalog {
+pub struct ProjectCatalog {
     pub optional_projects: ProjectIndex,
     pub mandatory_projects: ProjectIndex,
 }
