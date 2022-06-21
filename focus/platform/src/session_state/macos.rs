@@ -7,7 +7,7 @@ use std::time::Duration;
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {}
 
-// N.B. These were found in the core-foundation-rs crate.  Eventually we should consider adding `CGEventSourceSecondsSinceLastEventType` to that create and taking a dependency.
+// N.B. These were found in the core-foundation-rs crate.  Eventually we should consider adding `CGEventSourceSecondsSinceLastEventType` to that create and taking a dependency.  That code is dual-licensed under the Apache and MIT licenses.
 // [Ref](https://github.com/servo/core-foundation-rs/tree/master/core-graphics/src)
 
 /// Constants that specify the different types of input events.
