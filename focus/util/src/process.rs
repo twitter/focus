@@ -2,15 +2,13 @@ use std::path::PathBuf;
 
 /// Returns a textual description of the current process
 pub fn get_process_description() -> String {
-    let mut cmdline = format!(
-        "{}",
-        std::env::current_exe()
-            .unwrap_or_else(|_| PathBuf::from("unknown-executable"))
-            .display()
-    );
+    let mut cmdline = String::new();
     for arg in std::env::args() {
-        cmdline.push(' ');
         cmdline.push_str(arg.as_str());
+        cmdline.push(' ');
+    }
+    if cmdline.ends_with(' ') {
+        cmdline.pop();
     }
     let current_dir =
         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("unknown-directory"));

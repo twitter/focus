@@ -32,15 +32,9 @@ impl App {
         app_name: Option<String>,
         app_version: Option<String>,
     ) -> Result<Self> {
-        let invocation_description = std::env::args().collect::<Vec<String>>().join(" ");
-
         let sandbox = Arc::from(
-            Sandbox::new(
-                Some(&invocation_description),
-                preserve_sandbox_contents,
-                with_cmd_prefix,
-            )
-            .context("Failed to create sandbox")?,
+            Sandbox::new(preserve_sandbox_contents, with_cmd_prefix)
+                .context("Failed to create sandbox")?,
         );
         let tool_insights_client = Client::new(
             app_name.unwrap_or_else(|| env!("CARGO_PKG_NAME").to_owned()),

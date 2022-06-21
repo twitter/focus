@@ -154,22 +154,13 @@ mod tests {
     fn lock_should_contain_process_info() -> Result<()> {
         testing::init_logging();
         let dir = tempdir()?;
-        let path = dir.path().join("lockfile");
+        let path = dir.path().join("process_lock");
 
         let _a = LockFile::new(&path).expect("should have acquired lock");
 
         let content = std::fs::read_to_string(&path).context("Failed reading lockfile")?;
-
         let content = content.trim();
-
-        let expect = format!(
-            "PID {} started by {} on host {}",
-            std::process::id(),
-            whoami::username(),
-            whoami::hostname(),
-        );
-
-        assert_eq!(expect.as_str(), content);
+        assert_eq!(crate::process::get_process_description().as_str(), content);
 
         Ok(())
     }
