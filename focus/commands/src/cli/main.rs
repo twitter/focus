@@ -403,31 +403,6 @@ enum ProjectSubcommand {
 }
 
 #[derive(Parser, Debug)]
-enum AdhocSubcommand {
-    /// List the contents of the ad-hoc target stack
-    List {},
-
-    /// Push one or more target(s) onto the top of the ad-hoc target stack
-    Push {
-        /// Names of targets to push.
-        names: Vec<String>,
-    },
-
-    /// Pop one or more targets(s) from the top of the ad-hoc target stack
-    Pop {
-        /// The number of targets to pop.
-        #[clap(long, default_value = "1")]
-        count: usize,
-    },
-
-    /// Filter out one or more target(s) from the ad-hoc target stack
-    Remove {
-        /// Names of the targets to be removed.
-        names: Vec<String>,
-    },
-}
-
-#[derive(Parser, Debug)]
 enum RefsSubcommand {
     /// Expires refs that are outside the window of "current refs"
     Delete {
