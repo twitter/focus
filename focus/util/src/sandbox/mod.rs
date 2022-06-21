@@ -1,6 +1,6 @@
 pub mod cleanup;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ use tracing::info;
 
 use tempfile::TempDir;
 
-use crate::paths;
+use crate::{paths, process};
 
 pub struct Sandbox {
     #[allow(dead_code)]
@@ -21,13 +21,7 @@ pub struct Sandbox {
 const DEFAULT_NAME_PREFIX: &str = "focus_sandbox_";
 
 impl Sandbox {
-    pub fn new(
-        description: Option<&str>,
-        preserve_contents: bool,
-        name_prefix: Option<&str>,
-    ) -> Result<Self> {
-        use std::io::Write;
-
+    pub fn new(preserve_contents: bool, name_prefix: Option<&str>) -> Result<Self> {
         let sandbox_root = paths::focus_sandbox_dir();
         std::fs::create_dir_all(&sandbox_root)
             .with_context(|| format!("creating sandbox root {}", sandbox_root.display()))?;
@@ -64,21 +58,11 @@ impl Sandbox {
             serial_sequence,
         };
 
-        if let Some(description) = description {
-            let description_path = instance.command_description_path();
-            match File::create(&description_path) {
-                Ok(mut f) => {
-                    writeln!(f, "{}", description)?;
-                }
-                Err(e) => {
-                    bail!(
-                        "failed writing description file to {}: {}",
-                        description_path.display(),
-                        e
-                    );
-                }
-            }
-        }
+        std::fs::write(
+            instance.command_description_path(),
+            process::get_process_description(),
+        )
+        .context("Writing process descritpion failed")?;
 
         Ok(instance)
     }
@@ -153,7 +137,7 @@ mod tests {
     #[test]
     fn sandbox_deletion() -> Result<()> {
         let path = {
-            let sandbox = Sandbox::new(None, false, None)?;
+            let sandbox = Sandbox::new(false, None)?;
             let owned_path = sandbox.path().to_owned();
             owned_path
         };
@@ -163,7 +147,7 @@ mod tests {
 
     #[test]
     fn sandbox_preservation() -> Result<()> {
-        let sandbox = Sandbox::new(None, true, None)?;
+        let sandbox = Sandbox::new(true, None)?;
         let path = sandbox.path().to_owned();
         drop(sandbox);
         assert!(fs::metadata(&path)?.is_dir());
@@ -173,7 +157,7 @@ mod tests {
 
     #[test]
     fn sandbox_name_prefix_is_present() -> Result<()> {
-        let unnamed_sandbox = Sandbox::new(None, false, None)?;
+        let unnamed_sandbox = Sandbox::new(false, None)?;
         assert!(unnamed_sandbox
             .path()
             .file_name()
@@ -181,7 +165,7 @@ mod tests {
             .to_string_lossy()
             .starts_with(&DEFAULT_NAME_PREFIX));
 
-        let named_sandbox = Sandbox::new(None, false, Some("test_"))?;
+        let named_sandbox = Sandbox::new(false, Some("test_"))?;
         assert!(named_sandbox
             .path()
             .file_name()
@@ -194,7 +178,7 @@ mod tests {
 
     #[test]
     fn file_naming() -> Result<()> {
-        let sandbox = Sandbox::new(None, true, None)?;
+        let sandbox = Sandbox::new(true, None)?;
         match sandbox.create_file(Some("hello"), Some("txt"), None) {
             Ok((_, path, ser)) => {
                 assert_eq!(ser, 0);
@@ -237,11 +221,11 @@ mod tests {
 
     #[test]
     fn writing_command_descripton() -> Result<()> {
-        let description = "hello";
-        let sandbox = Sandbox::new(Some(description), true, None)?;
+        let sandbox = Sandbox::new(true, None)?;
+        let process_description = process::get_process_description();
         assert_eq!(
             fs::read_to_string(sandbox.command_description_path())?,
-            format!("{}\n", description)
+            process_description,
         );
         Ok(())
     }
