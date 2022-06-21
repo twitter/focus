@@ -69,14 +69,6 @@ pub fn remove(
     )
 }
 
-pub fn status(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
-    let repo = Repo::open(sparse_repo.as_ref(), app)?;
-    let selections = repo.selection_manager()?;
-    let selection = selections.selection()?;
-    println!("{}", selection);
-    Ok(())
-}
-
 pub fn list_projects(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = repo.selection_manager()?;
