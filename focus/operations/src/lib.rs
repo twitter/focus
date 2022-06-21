@@ -12,6 +12,7 @@ pub mod maintenance;
 pub mod refs;
 pub mod repo;
 pub mod selection;
+pub mod status;
 pub mod sync;
 pub(crate) mod testing;
 pub mod util;

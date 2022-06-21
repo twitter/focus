@@ -766,8 +766,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         Subcommand::Status {} => {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
-            focus_operations::selection::status(&sparse_repo, app)?;
-            Ok(ExitCode(0))
+            focus_operations::status::run(&sparse_repo, app)
         }
 
         Subcommand::Projects {} => {
