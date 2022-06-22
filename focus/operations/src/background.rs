@@ -19,7 +19,7 @@ pub fn enable(
 
 pub fn disable(app: Arc<App>, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo, app)?;
-    repo.set_preemptive_sync_enabled(true)?;
+    repo.set_preemptive_sync_enabled(false)?;
 
     Ok(ExitCode(0))
 }
