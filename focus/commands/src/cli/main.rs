@@ -25,7 +25,10 @@ use focus_util::{
 };
 
 use focus_internals::tracker::Tracker;
-use focus_operations::maintenance::{self, ScheduleOpts};
+use focus_operations::{
+    maintenance::{self, ScheduleOpts},
+    sync::SyncMode,
+};
 use strum::VariantNames;
 use tracing::{debug, debug_span, info};
 
@@ -265,6 +268,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Background { subcommand } => match subcommand {
             BackgroundSubcommand::Enable { .. } => "background-enable".to_string(),
             BackgroundSubcommand::Disable { .. } => "background-disable".to_string(),
+            BackgroundSubcommand::Sync { .. } => "background-sync".to_string(),
         },
     }
 }
@@ -651,7 +655,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            focus_operations::sync::run(&sparse_repo, false, app)?;
+            focus_operations::sync::run(&sparse_repo, SyncMode::Normal, app)?;
             Ok(ExitCode(0))
         }
 
@@ -996,6 +1000,9 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             } => focus_operations::background::enable(app, sparse_repo, idle_period_ms),
             BackgroundSubcommand::Disable { sparse_repo } => {
                 focus_operations::background::disable(app, sparse_repo)
+            }
+            BackgroundSubcommand::Sync { sparse_repo } => {
+                focus_operations::background::sync(app, sparse_repo)
             }
         },
     }

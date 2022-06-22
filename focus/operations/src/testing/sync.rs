@@ -12,7 +12,7 @@ use focus_testing::init_logging;
 use focus_util::app;
 
 use crate::{
-    sync::SyncStatus,
+    sync::{SyncMode, SyncStatus},
     testing::integration::{RepoDisposition, RepoPairFixture},
 };
 
@@ -66,7 +66,11 @@ fn sync_upstream_changes() -> Result<()> {
     );
 
     // Sync in the sparse repo
-    crate::sync::run(&fixture.sparse_repo_path, false, fixture.app.clone())?;
+    crate::sync::run(
+        &fixture.sparse_repo_path,
+        SyncMode::Normal,
+        fixture.app.clone(),
+    )?;
 
     let x_dir = fixture.sparse_repo_path.join("x");
     assert!(!x_dir.is_dir());
@@ -279,10 +283,10 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
         fixture.app.clone(),
     )?;
     // First sync performs a checkout.
-    assert!(crate::sync::run(&path, false, fixture.app.clone())?.checked_out);
+    assert!(crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?.checked_out);
 
     // Subsequent sync does not perform a checkout.
-    assert!(!crate::sync::run(&path, false, fixture.app.clone())?.checked_out);
+    assert!(!crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?.checked_out);
 
     Ok(())
 }
@@ -392,7 +396,7 @@ fn preemptive_sync_single_threaded_test() -> Result<()> {
     crate::sync::test_only_set_preemptive_sync_machine_is_active(false);
     let result = crate::sync::run(
         &fixture.underlying.sparse_repo_path,
-        true,
+        SyncMode::Preemptive { force: false },
         fixture.underlying.app.clone(),
     )?;
     assert!(!result.checked_out);
@@ -417,7 +421,7 @@ fn preemptive_sync_skips_if_presync_ref_is_at_commit_single_threaded_test() -> R
     crate::sync::test_only_set_preemptive_sync_machine_is_active(false);
     let result = crate::sync::run(
         &fixture.underlying.sparse_repo_path,
-        true,
+        SyncMode::Preemptive { force: false },
         fixture.underlying.app.clone(),
     )?;
     assert_eq!(result.status, SyncStatus::Success);
@@ -426,7 +430,7 @@ fn preemptive_sync_skips_if_presync_ref_is_at_commit_single_threaded_test() -> R
     // Subsequent preemptive syncs are skipped
     let result = crate::sync::run(
         &fixture.underlying.sparse_repo_path,
-        true,
+        SyncMode::Preemptive { force: false },
         fixture.underlying.app.clone(),
     )?;
     assert_eq!(result.status, SyncStatus::SkippedSyncPointUnchanged);
@@ -449,7 +453,7 @@ fn preemptive_sync_skips_if_disabled_single_threaded_test() -> Result<()> {
     crate::sync::test_only_set_preemptive_sync_machine_is_active(false);
     let result = crate::sync::run(
         &fixture.underlying.sparse_repo_path,
-        true,
+        SyncMode::Preemptive { force: false },
         fixture.underlying.app.clone(),
     )?;
     assert_eq!(result.status, SyncStatus::SkippedPreemptiveSyncDisabled);
@@ -471,7 +475,7 @@ fn preemptive_sync_skips_if_machine_is_in_active_use_single_threaded_test() -> R
     crate::sync::test_only_set_preemptive_sync_machine_is_active(true);
     let result = crate::sync::run(
         &fixture.underlying.sparse_repo_path,
-        true,
+        SyncMode::Preemptive { force: false },
         fixture.underlying.app.clone(),
     )?;
     assert_eq!(

@@ -253,9 +253,13 @@ impl Runner {
 
     #[tracing::instrument]
     fn run_internal_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<()> {
-        crate::sync::run(repo_path, true, self.app.clone())
-            .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))
-            .map(|_| ())
+        crate::sync::run(
+            repo_path,
+            crate::sync::SyncMode::Preemptive { force: false },
+            self.app.clone(),
+        )
+        .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))
+        .map(|_| ())
     }
 
     #[tracing::instrument]

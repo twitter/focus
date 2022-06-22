@@ -20,6 +20,8 @@ use focus_util::app::App;
 
 use focus_internals::model::repo::Repo;
 
+use crate::sync::SyncMode;
+
 #[allow(dead_code)]
 pub enum RepoDisposition {
     Dense,
@@ -93,7 +95,7 @@ impl RepoPairFixture {
 
     #[allow(dead_code)]
     pub fn perform_sync(&self) -> Result<bool> {
-        crate::sync::run(&self.sparse_repo_path, false, self.app.clone())
+        crate::sync::run(&self.sparse_repo_path, SyncMode::Normal, self.app.clone())
             .map(|result| result.checked_out)
     }
 
