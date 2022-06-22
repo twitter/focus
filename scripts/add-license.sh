@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 GOPATH=$(go env GOPATH || true)

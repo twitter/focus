@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 //! This crate is [Tool Insights] bindings for Rust.
 //! It does not implement all the functionality and configuration as advertised by [Tool Insights].
 //! The user can change the log message write location by setting `TOOL_INSIGHTS_DIR`,

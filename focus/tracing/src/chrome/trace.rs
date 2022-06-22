@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::{
     chrome::{Complete, Trace},
     git_trace2::{event as gevent, event::Sid, Event as GitEvent},

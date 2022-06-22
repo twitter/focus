@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 pub mod clone;
 pub mod detect_build_graph_changes;
 pub mod ensure_clean;

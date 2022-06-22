@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use super::{scheduling::*, *};
 use anyhow::{anyhow, bail, Context, Result};
 use std::{

@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use std::{

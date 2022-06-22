@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use focus_testing::{init_logging, ScratchGitRepo};

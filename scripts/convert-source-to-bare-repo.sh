@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 
 # This script prepares a copy of source acquired through 'source-init'
 # to be a bare repo suitable for development with.

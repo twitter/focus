@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Deserialization of Bazel query results (returned from `bazel query --output xml`).
 //!
 //! Check the documentation of
