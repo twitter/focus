@@ -9,7 +9,7 @@ use crate::util::perform;
 use content_addressed_cache::RocksDBCache;
 use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use std::convert::TryFrom;
 
@@ -91,12 +91,18 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
             PREEMPTIVE_SYNC_MAX_WAIT_MILLIS
         });
         let poll_interval = Duration::from_millis(PREEMPTIVE_SYNC_POLL_INTERVAL_MILLIS);
+        info!(
+            ?idle_duration,
+            ?max_wait,
+            ?poll_interval,
+            "Waiting for machine to become idle"
+        );
         if wait_for_machine_to_be_idle(idle_duration, max_wait, poll_interval)
             .context("Failed waiting for machine to be idle")?
         {
-            debug!("Machine is idle, continuing preemptive sync");
+            info!("Machine is idle, continuing preemptive sync");
         } else {
-            debug!("Machine is busy, cancelling preemptive sync");
+            info!("Machine is busy, cancelling preemptive sync");
             return Ok(SyncResult {
                 checked_out: false,
                 commit_id: None,
