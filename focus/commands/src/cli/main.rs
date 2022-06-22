@@ -544,6 +544,13 @@ enum BackgroundSubcommand {
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
     },
+
+    /// Manually run a preemptive sync
+    Sync {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
 }
 
 #[derive(Parser, Debug)]
