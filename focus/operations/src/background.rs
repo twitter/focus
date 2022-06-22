@@ -1,3 +1,4 @@
+use anyhow::Context;
 use focus_internals::model::repo::Repo;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
@@ -20,5 +21,10 @@ pub fn disable(app: Arc<App>, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> 
     let repo = Repo::open(&sparse_repo, app)?;
     repo.set_preemptive_sync_enabled(true)?;
 
+    Ok(ExitCode(0))
+}
+
+pub fn sync(app: Arc<App>, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
+    super::sync::run(&sparse_repo, true, app).context("Running preemptive sync")?;
     Ok(ExitCode(0))
 }
