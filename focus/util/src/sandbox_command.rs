@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::app::App;
 use anyhow::{bail, Context, Result};
 use std::{

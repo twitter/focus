@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 // module to collect tracing setup and config for the focus app itself
 
 use std::fs::OpenOptions;

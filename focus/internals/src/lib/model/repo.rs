@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use content_addressed_cache::RocksDBCache;
 use focus_util::{
     app::App,

@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{bail, Context, Result};
 use git2::Repository;
 use std::ffi::{OsStr, OsString};

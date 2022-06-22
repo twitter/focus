@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::borrow::Borrow;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -412,7 +415,7 @@ mod tests {
                             Label("//project_a/src/main/java/com/example/cmdline:runner"),
                         ),
                         ContentHash(
-                            277129a7f2c4c8afa43c55db7b7823ac24ac8a8a,
+                            f23fdb3c0e374bbf678875f610fa7f8331bd5010,
                         ),
                     ),
                 },

@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::default::Default;
 use std::string::ToString;
 use std::time::Duration;

@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{Context, Result};
 use focus_util::app::{App, ExitCode};
 use std::io::Write;

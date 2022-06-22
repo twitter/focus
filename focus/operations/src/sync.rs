@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::{locking, model::repo::Repo, target::TargetSet};
 
