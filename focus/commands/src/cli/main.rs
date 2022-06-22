@@ -195,8 +195,15 @@ enum Subcommand {
     /// Called by a git hook to trigger certain actions after a git event such as
     /// merge completion or checkout
     Event { args: Vec<String> },
+
     /// Print the version of Focus
     Version,
+
+    /// Control automatic background synchronization
+    Background {
+        #[clap(subcommand)]
+        subcommand: BackgroundSubcommand,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -255,6 +262,10 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             temp_args.join("-")
         }
         Subcommand::Version => "version".to_string(),
+        Subcommand::Background { subcommand } => match subcommand {
+            BackgroundSubcommand::Enable { .. } => "background-enable".to_string(),
+            BackgroundSubcommand::Disable { .. } => "background-disable".to_string(),
+        },
     }
 }
 
@@ -512,6 +523,27 @@ enum EventSubcommand {
     PostCheckout,
     PostCommit,
     PostMerge,
+}
+
+#[derive(Parser, Debug)]
+enum BackgroundSubcommand {
+    /// Enable preemptive background synchronization
+    Enable {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+
+        /// Idle threshold: how long must the machine be inactive before performing pre-emptive sync? (In milliseconds)
+        #[clap(default_value = "30000")]
+        idle_period_ms: u64,
+    },
+
+    /// Disable preemptive background synchronization.
+    Disable {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -949,6 +981,16 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             Ok(ExitCode(0))
         }
+
+        Subcommand::Background { subcommand } => match subcommand {
+            BackgroundSubcommand::Enable {
+                sparse_repo,
+                idle_period_ms,
+            } => focus_operations::background::enable(app, sparse_repo, idle_period_ms),
+            BackgroundSubcommand::Disable { sparse_repo } => {
+                focus_operations::background::disable(app, sparse_repo)
+            }
+        },
     }
 }
 
