@@ -264,7 +264,7 @@ impl WorkingTree {
             .context("Failed to apply root-only patterns")
     }
 
-    pub fn read_sync_point_ref_internal(&self, name: &str) -> Result<Option<Oid>> {
+    pub fn read_ref(&self, name: &str) -> Result<Option<Oid>> {
         let reference = self.repo.find_reference(name).with_context(|| {
             format!(
                 "Finding sync reference {} in repo {}",
@@ -289,12 +289,22 @@ impl WorkingTree {
 
     /// Reads the commit ID of the sparse sync ref (named SYNC_REF_NAME)
     pub fn read_sparse_sync_point_ref(&self) -> Result<Option<Oid>> {
-        self.read_sync_point_ref_internal(SPARSE_SYNC_REF_NAME)
+        self.read_ref(SPARSE_SYNC_REF_NAME)
     }
 
     /// Reads the commit ID of the preemptive sync ref (named SYNC_REF_NAME)
     pub fn read_preemptive_sync_point_ref(&self) -> Result<Option<Oid>> {
-        self.read_sync_point_ref_internal(PREEMPTIVE_SYNC_REF_NAME)
+        self.read_ref(PREEMPTIVE_SYNC_REF_NAME)
+    }
+
+    pub fn primary_branch_name(&self) -> Result<String> {
+        if self.repo.find_reference("refs/heads/master").is_ok() {
+            Ok(String::from("master"))
+        } else if self.repo.find_reference("refs/heads/main").is_ok() {
+            Ok(String::from("main"))
+        } else {
+            bail!("Could not determine primary branch name")
+        }
     }
 
     pub fn write_sync_point_ref_internal(&self, name: &str, commit_id: git2::Oid) -> Result<()> {

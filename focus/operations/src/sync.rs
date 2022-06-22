@@ -177,8 +177,9 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
 
     // Figure out if this repo has a "master" branch or "main" branch.
-    let primary_branch_name =
-        primary_branch_name(&repo).context("Determining primary branch name")?;
+    let primary_branch_name = repo
+        .primary_branch_name()
+        .context("Determining primary branch name")?;
 
     let commit = if preemptive {
         if let Some(prefetch_commit) = repo
@@ -308,15 +309,4 @@ fn wait_for_machine_to_be_idle(
     }
 
     Ok(false)
-}
-
-fn primary_branch_name(repo: &Repo) -> Result<String> {
-    let underlying = repo.underlying();
-    if underlying.find_reference("refs/heads/master").is_ok() {
-        Ok(String::from("master"))
-    } else if underlying.find_reference("refs/heads/main").is_ok() {
-        Ok(String::from("main"))
-    } else {
-        bail!("Could not determine primary branch name")
-    }
 }
