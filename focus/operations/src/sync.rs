@@ -40,6 +40,19 @@ pub fn test_only_set_preemptive_sync_machine_is_active(new_value: bool) {
     TEST_ONLY_PREEMPTIVE_SYNC_MACHINE_IS_ACTIVE.store(new_value, Ordering::SeqCst);
 }
 
+/// An enumeration indicating which kind of sync should be performed.
+#[derive(Debug, Eq, PartialEq)]
+pub enum SyncMode {
+    /// Perform a normal sync
+    Normal,
+
+    /// Perform a preemptive sync
+    Preemptive {
+        /// Whether to skip enablement and machine idleness checks
+        force: bool,
+    },
+}
+
 /// An enumeration capturing that the sync was peformed or a reason it was skipped.
 #[derive(Debug, PartialEq, Eq)]
 pub enum SyncStatus {
@@ -72,10 +85,15 @@ pub struct SyncResult {
 }
 
 /// Synchronize the sparse repo's contents with the build graph. Returns a SyncResult indicating what happened.
-pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncResult> {
+pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResult> {
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
 
-    if preemptive {
+    let (preemptive, force) = match mode {
+        SyncMode::Normal => (false, false),
+        SyncMode::Preemptive { force: forced } => (true, forced),
+    };
+
+    if preemptive && !force {
         if !repo.get_preemptive_sync_enabled()? {
             return Ok(SyncResult {
                 checked_out: false,

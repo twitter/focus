@@ -5,6 +5,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use focus_util::app::{App, ExitCode};
 
+use crate::sync::SyncMode;
+
 pub fn enable(
     app: Arc<App>,
     sparse_repo: PathBuf,
@@ -25,6 +27,7 @@ pub fn disable(app: Arc<App>, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> 
 }
 
 pub fn sync(app: Arc<App>, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
-    super::sync::run(&sparse_repo, true, app).context("Running preemptive sync")?;
+    super::sync::run(&sparse_repo, SyncMode::Preemptive { force: true }, app)
+        .context("Running preemptive sync")?;
     Ok(ExitCode(0))
 }
