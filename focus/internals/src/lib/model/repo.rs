@@ -14,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use crate::{
@@ -44,6 +45,9 @@ const SPARSE_SYNC_REF_NAME: &str = "refs/focus/sync";
 const PREEMPTIVE_SYNC_REF_NAME: &str = "refs/focus/presync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
 const PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY: &str = "focus.preemptive-sync.enabled";
+const PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY: &str =
+    "focus.preemptive-sync.user-idle-threshold";
+const PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT: i32 = 15000;
 
 const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
 const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
@@ -858,6 +862,7 @@ impl Repo {
         Ok(head_commit)
     }
 
+    /// Read whether preemptive sync is enabled from Git config.
     pub fn get_preemptive_sync_enabled(&self) -> Result<bool> {
         let snapshot = self
             .underlying()
@@ -871,6 +876,7 @@ impl Repo {
             .unwrap_or(false))
     }
 
+    /// Set whether preemptive sync is enabled in the Git config.
     pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
         let working_tree = self
             .working_tree()
@@ -880,6 +886,46 @@ impl Repo {
             working_tree.work_dir(),
             PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY,
             enabled.to_string().as_str(),
+            self.app.clone(),
+        )
+        .context("Writing preemptive sync enabled key")?;
+
+        Ok(())
+    }
+
+    /// Read the configured preemptive sync idle threshold duration. This indicates how long the computer must be inactive to allow for preemptive sync to run.
+    pub fn get_preemptive_sync_idle_threshold(&self) -> Result<Duration> {
+        let snapshot = self
+            .underlying()
+            .config()
+            .context("Reading config")?
+            .snapshot()
+            .context("Snapshotting config")?;
+
+        let mut threshold = snapshot
+            .get_i32(PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY)
+            .unwrap_or(PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT);
+        if threshold < 1 {
+            warn!(
+                "Configuration value of '{}' must be positive; using default ({})",
+                PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY,
+                PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT
+            );
+            threshold = PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT;
+        }
+        Ok(Duration::from_millis(threshold as u64))
+    }
+
+    /// Write the configured preemptive sync idle threshold duration.
+    pub fn set_preemptive_sync_idle_threshold(&self, duration: Duration) -> Result<()> {
+        let working_tree = self
+            .working_tree()
+            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+
+        git_helper::write_config(
+            working_tree.work_dir(),
+            PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY,
+            &duration.as_millis().to_string(),
             self.app.clone(),
         )
         .context("Writing preemptive sync enabled key")?;

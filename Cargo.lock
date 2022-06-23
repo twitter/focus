@@ -637,6 +637,7 @@ dependencies = [
  "criterion",
  "dirs",
  "focus-internals",
+ "focus-platform",
  "focus-testing",
  "focus-util",
  "git2",
