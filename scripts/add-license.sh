@@ -20,7 +20,7 @@ EOT
     exit 1
 fi
 
-PROJECT_ROOT=$(realpath "$(dirname "$0")/..")
+PROJECT_ROOT=$(git rev-parse --show-toplevel)
 echo "Adding license to project at $PROJECT_ROOT"
 addlicense -c "Twitter, Inc." -l "Apache-2.0" -s=only \
     -ignore '.git/**' \
