@@ -1,9 +1,0 @@
-# shellcheck disable=SC1091
-
-LOCAL_GIT="$HOME/local/opt/git/latest/bin"
-
-if [[ -d "$LOCAL_GIT" ]]; then
-  export PATH="$LOCAL_GIT:$PATH"
-fi
-
-# vim:ft=bash:ts=2:sw=2:et
