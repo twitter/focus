@@ -196,7 +196,11 @@ These are the keys currently being hashed: {:?}",
 
                         let loaded_deps = match ctx.head_tree.get_path(&path) {
                             Ok(tree_entry) => {
-                                extract_load_statements_from_tree_entry(ctx, &tree_entry)?
+                                if is_tree_entry_relevant_to_build_graph(&tree_entry) {
+                                    extract_load_statements_from_tree_entry(ctx, &tree_entry)?
+                                } else {
+                                    Default::default()
+                                }
                             }
                             Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
                             Err(e) => return Err(e.into()),
@@ -346,8 +350,10 @@ fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Resul
 
     let mut result = BTreeSet::new();
     for tree_entry in tree {
-        let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
-        result.extend(deps);
+        if is_tree_entry_relevant_to_build_graph(&tree_entry) {
+            let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
+            result.extend(deps);
+        }
     }
     if let Some(old_value) = ctx
         .caches
@@ -376,10 +382,6 @@ fn extract_load_statements_from_tree_entry(
     ctx: &HashContext,
     tree_entry: &git2::TreeEntry,
 ) -> anyhow::Result<BTreeSet<Label>> {
-    if !is_tree_entry_relevant_to_build_graph(tree_entry) {
-        return Ok(Default::default());
-    }
-
     let object = tree_entry
         .to_object(ctx.repo)
         .context("converting tree entry to object")?;
