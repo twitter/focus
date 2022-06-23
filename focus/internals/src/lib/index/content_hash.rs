@@ -362,19 +362,21 @@ fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Resul
     Ok(result)
 }
 
+fn is_tree_entry_relevant_to_build_graph(tree_entry: &git2::TreeEntry) -> bool {
+    match tree_entry.name() {
+        Some(file_name) => is_relevant_to_build_graph(Path::new(file_name)),
+        None => {
+            warn!(name_bytes = ?tree_entry.name_bytes(), "Skipped tree entry with non-UTF-8 name");
+            false
+        }
+    }
+}
+
 fn extract_load_statements_from_tree_entry(
     ctx: &HashContext,
     tree_entry: &git2::TreeEntry,
 ) -> anyhow::Result<BTreeSet<Label>> {
-    let file_name = match tree_entry.name() {
-        Some(file_name) => Path::new(file_name),
-        None => {
-            warn!(name_bytes = ?tree_entry.name_bytes(), "Skipped tree entry with non-UTF-8 name");
-            return Ok(Default::default());
-        }
-    };
-
-    if !is_relevant_to_build_graph(file_name) {
+    if !is_tree_entry_relevant_to_build_graph(tree_entry) {
         return Ok(Default::default());
     }
 
@@ -384,7 +386,7 @@ fn extract_load_statements_from_tree_entry(
     let blob = match object.as_blob() {
         Some(blob) => blob,
         None => {
-            warn!(?file_name, "Tree entry was not a blob");
+            warn!(file_name = ?tree_entry.name(), "Tree entry was not a blob");
             return Ok(Default::default());
         }
     };
@@ -392,7 +394,7 @@ fn extract_load_statements_from_tree_entry(
     let content = match std::str::from_utf8(blob.content()) {
         Ok(content) => content,
         Err(e) => {
-            warn!(?file_name, ?e, "Could not decode non-UTF-8 blob content");
+            warn!(file_name = ?tree_entry.name(), ?e, "Could not decode non-UTF-8 blob content");
             return Ok(Default::default());
         }
     };
