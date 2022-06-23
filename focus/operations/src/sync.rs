@@ -1,6 +1,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use core::sync::atomic::AtomicBool;
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::{locking, model::repo::Repo, target::TargetSet};
 
@@ -8,25 +9,101 @@ use crate::util::perform;
 use content_addressed_cache::RocksDBCache;
 use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use std::convert::TryFrom;
 
 use std::path::Path;
 
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{bail, Context, Result};
+use lazy_static::lazy_static;
 
-pub struct SyncResult {
-    pub checked_out: bool,
-    pub commit_id: Option<git2::Oid>,
-    pub skipped: bool,
+const PREEMPTIVE_SYNC_MAX_WAIT_MILLIS: u64 = 30000;
+const TEST_ONLY_PREEMPTIVE_SYNC_MAX_WAIT_MILLIS_UNDER_TEST: u64 = 300;
+const PREEMPTIVE_SYNC_POLL_INTERVAL_MILLIS: u64 = 100;
+
+lazy_static! {
+    static ref TEST_ONLY_PREEMPTIVE_SYNC_MACHINE_IS_ACTIVE: AtomicBool = AtomicBool::new(false);
 }
 
-/// Synchronize the sparse repo's contents with the build graph. Returns whether a checkout actually occured.
+pub fn test_only_get_preemptive_sync_machine_is_active() -> bool {
+    use std::sync::atomic::Ordering;
+    TEST_ONLY_PREEMPTIVE_SYNC_MACHINE_IS_ACTIVE.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+pub fn test_only_set_preemptive_sync_machine_is_active(new_value: bool) {
+    use std::sync::atomic::Ordering;
+    TEST_ONLY_PREEMPTIVE_SYNC_MACHINE_IS_ACTIVE.store(new_value, Ordering::SeqCst);
+}
+
+/// An enumeration capturing that the sync was peformed or a reason it was skipped.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SyncStatus {
+    /// The sync was performed.
+    Success,
+
+    /// There is no change to the sync point itself.
+    SkippedSyncPointUnchanged,
+
+    /// The content that has changed is not relevant to the build graph.
+    SkippedSyncPointDifferenceIrrelevant,
+
+    /// Preemptive syncing is not enabled.
+    SkippedPreemptiveSyncDisabled,
+
+    /// Preemptive syncing was cancelled because the machine is actively being used.
+    SkippedPreemptiveSyncCancelledByActivity,
+}
+
+/// State describing the outcome of a sync.
+pub struct SyncResult {
+    /// Whether the working tree was checked out during the sync
+    pub checked_out: bool,
+
+    /// The commit ID that was synchronized
+    pub commit_id: Option<git2::Oid>,
+
+    /// The action taken
+    pub status: SyncStatus,
+}
+
+/// Synchronize the sparse repo's contents with the build graph. Returns a SyncResult indicating what happened.
 pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncResult> {
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
+
+    if preemptive {
+        if !repo.get_preemptive_sync_enabled()? {
+            return Ok(SyncResult {
+                checked_out: false,
+                commit_id: None,
+                status: SyncStatus::SkippedPreemptiveSyncDisabled,
+            });
+        }
+
+        let idle_duration = repo.get_preemptive_sync_idle_threshold()?;
+        let max_wait = Duration::from_millis(if cfg!(test) {
+            TEST_ONLY_PREEMPTIVE_SYNC_MAX_WAIT_MILLIS_UNDER_TEST
+        } else {
+            PREEMPTIVE_SYNC_MAX_WAIT_MILLIS
+        });
+        let poll_interval = Duration::from_millis(PREEMPTIVE_SYNC_POLL_INTERVAL_MILLIS);
+        if wait_for_machine_to_be_idle(idle_duration, max_wait, poll_interval)
+            .context("Failed waiting for machine to be idle")?
+        {
+            debug!("Machine is idle, continuing preemptive sync");
+        } else {
+            debug!("Machine is busy, cancelling preemptive sync");
+            return Ok(SyncResult {
+                checked_out: false,
+                commit_id: None,
+                status: SyncStatus::SkippedPreemptiveSyncCancelledByActivity,
+            });
+        }
+    }
 
     let _lock = locking::hold_lock(sparse_repo, Path::new("sync.lock"))
         .context("Failed to obtain synchronization lock")?;
@@ -34,14 +111,6 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
     if !sparse_profile_path.is_file() {
         bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
-    }
-
-    if preemptive && !repo.get_preemptive_sync_enabled()? {
-        return Ok(SyncResult {
-            checked_out: false,
-            commit_id: None,
-            skipped: true,
-        });
     }
 
     let selections = repo.selection_manager()?;
@@ -109,7 +178,7 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
                     return Ok(SyncResult {
                         checked_out: false,
                         commit_id: Some(commit.id()),
-                        skipped: true,
+                        status: SyncStatus::SkippedSyncPointUnchanged,
                     });
                 }
             } else if let Ok(Some(sync_point)) = working_tree.read_preemptive_sync_point_ref() {
@@ -119,11 +188,12 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
                     return Ok(SyncResult {
                         checked_out: false,
                         commit_id: Some(commit.id()),
-                        skipped: true,
+                        status: SyncStatus::SkippedSyncPointUnchanged,
                     });
                 }
             }
         }
+        // TODO: Skip outlining if there are no changes to the build graph between the last and new prospective sync point
     }
 
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
@@ -160,8 +230,60 @@ pub fn run(sparse_repo: &Path, preemptive: bool, app: Arc<App>) -> Result<SyncRe
     Ok(SyncResult {
         checked_out,
         commit_id: Some(commit.id()),
-        skipped: false,
+        status: SyncStatus::Success,
     })
+}
+
+/// Wait for the machine to be idle for a given time period, waiting up to some maximum, and polling at a given interval.
+fn wait_for_machine_to_be_idle(
+    idle_duration: Duration,
+    max_wait: Duration,
+    poll_interval: Duration,
+) -> Result<bool> {
+    use focus_platform::session_state;
+
+    if max_wait < idle_duration {
+        bail!("max_wait must be greater than idle_duration")
+    } else if poll_interval > max_wait {
+        bail!("poll_interval must be less than max_wait")
+    }
+
+    let started_at = SystemTime::now();
+    loop {
+        let elapsed = started_at
+            .elapsed()
+            .context("Determining elapsed time failed")?;
+        if elapsed > max_wait {
+            break;
+        }
+        let state = {
+            // If we are running under test, read from a variable instead of doing any polling.
+            if cfg!(test) {
+                debug!("Running under test!");
+                if test_only_get_preemptive_sync_machine_is_active() {
+                    debug!("Pretending machine is active");
+                    session_state::SessionStatus::Active
+                } else {
+                    debug!("Pretending machine is idle");
+                    session_state::SessionStatus::Idle
+                }
+            } else {
+                unsafe { session_state::has_session_been_idle_for(idle_duration) }
+            }
+        };
+
+        match state {
+            session_state::SessionStatus::Active => {
+                std::thread::sleep(poll_interval);
+            }
+            _ => {
+                // Note: If we can't determine whether the session is idle, just go ahead.
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
 }
 
 fn primary_branch_name(repo: &Repo) -> Result<String> {

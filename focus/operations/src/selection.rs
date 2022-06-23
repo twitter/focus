@@ -31,7 +31,7 @@ fn mutate(
             info!("Synchronizing after selection changed");
             let result = super::sync::run(sparse_repo.as_ref(), false, app)
                 .context("Synchronizing changes")?;
-            synced = !result.skipped;
+            synced = result.status == super::sync::SyncStatus::Success;
             backup.discard();
         }
     }
