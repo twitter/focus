@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::Context;
 use focus_internals::model::repo::Repo;
 use std::time::Duration;
