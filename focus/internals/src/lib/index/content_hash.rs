@@ -27,7 +27,7 @@ use super::DependencyKey;
 
 /// This value is mixed into all content hashes. Update this value when
 /// content-hashing changes in a backward-incompatible way.
-const VERSION: usize = 5;
+const VERSION: usize = 6;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -148,10 +148,14 @@ These are the keys currently being hashed: {:?}",
             buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
 
             if external_repository.is_none() {
-                let loaded_deps = match get_tree_for_path(ctx, &path)? {
+                let mut loaded_deps = match get_tree_for_path(ctx, &path)? {
                     Some(tree) => find_load_dependencies(ctx, &tree)?,
                     None => Default::default(),
                 };
+
+                let prelude_deps = get_prelude_deps(ctx)?;
+                loaded_deps.extend(prelude_deps);
+
                 for label in loaded_deps {
                     let key = DependencyKey::BazelBuildFile(label);
                     buf.push_str(", ");
@@ -276,6 +280,31 @@ These are the keys currently being hashed: {:?}",
         }
     }
     Ok(hash)
+}
+
+/// Get the dependencies induced by the special
+/// `tools/build_rules/prelude_bazel` file (if present). See
+/// https://github.com/bazelbuild/bazel/issues/1674 for discussion on what this
+/// file is.
+pub fn get_prelude_deps(ctx: &HashContext) -> anyhow::Result<BTreeSet<Label>> {
+    let prelude_dir = ["tools", "build_rules"];
+    let prelude_file_name = "prelude_bazel";
+    let prelude_path: PathBuf = prelude_dir.into_iter().chain([prelude_file_name]).collect();
+
+    match ctx.head_tree.get_path(&prelude_path) {
+        Ok(tree_entry) => {
+            let mut result = BTreeSet::new();
+            result.insert(Label {
+                external_repository: None,
+                path_components: prelude_dir.into_iter().map(|s| s.to_string()).collect(),
+                target_name: TargetName::Name(prelude_file_name.to_string()),
+            });
+            result.extend(extract_load_statements_from_tree_entry(ctx, &tree_entry)?);
+            Ok(result)
+        }
+        Err(err) if err.code() == git2::ErrorCode::NotFound => Ok(Default::default()),
+        Err(err) => return Err(err.into()),
+    }
 }
 
 fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<ContentHash> {
