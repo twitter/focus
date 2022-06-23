@@ -73,6 +73,9 @@ pub struct Caches {
     /// Cache of parsed load dependencies. The OIDs here are tree OIDs which
     /// have to be traversed to find any files relevant to the build graph.
     load_dependencies_cache: HashMap<git2::Oid, BTreeSet<Label>>,
+
+    /// Cache of dependencies loaded from the `prelude_bazel` file.
+    prelude_deps_cache: Option<BTreeSet<Label>>,
 }
 
 /// Context used to compute a content hash.
@@ -287,11 +290,15 @@ These are the keys currently being hashed: {:?}",
 /// https://github.com/bazelbuild/bazel/issues/1674 for discussion on what this
 /// file is.
 pub fn get_prelude_deps(ctx: &HashContext) -> anyhow::Result<BTreeSet<Label>> {
+    if let Some(prelude_deps) = &ctx.caches.borrow().prelude_deps_cache {
+        return Ok(prelude_deps.clone());
+    }
+
     let prelude_dir = ["tools", "build_rules"];
     let prelude_file_name = "prelude_bazel";
     let prelude_path: PathBuf = prelude_dir.into_iter().chain([prelude_file_name]).collect();
 
-    match ctx.head_tree.get_path(&prelude_path) {
+    let result = match ctx.head_tree.get_path(&prelude_path) {
         Ok(tree_entry) => {
             let mut result = BTreeSet::new();
             result.insert(Label {
@@ -300,11 +307,14 @@ pub fn get_prelude_deps(ctx: &HashContext) -> anyhow::Result<BTreeSet<Label>> {
                 target_name: TargetName::Name(prelude_file_name.to_string()),
             });
             result.extend(extract_load_statements_from_tree_entry(ctx, &tree_entry)?);
-            Ok(result)
+            result
         }
-        Err(err) if err.code() == git2::ErrorCode::NotFound => Ok(Default::default()),
+        Err(err) if err.code() == git2::ErrorCode::NotFound => Default::default(),
         Err(err) => return Err(err.into()),
-    }
+    };
+
+    ctx.caches.borrow_mut().prelude_deps_cache = Some(result.clone());
+    Ok(result)
 }
 
 fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<ContentHash> {
