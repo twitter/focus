@@ -179,24 +179,24 @@ pub enum PathsToMaterializeResult {
     },
 }
 
-fn try_label_into_path(label: Label) -> anyhow::Result<PathBuf> {
+fn label_into_path(label: Label) -> Option<PathBuf> {
     match label {
-        label @ Label {
+        Label {
             external_repository: Some(_),
             path_components: _,
             target_name: _,
         } => {
-            anyhow::bail!(
-                "Cannot read dependency on external repository for label: {:?}",
-                label
-            );
+            // This is an external repository. We don't need to materialize any
+            // extra files on disk for it; that should be handled by Bazel
+            // itself.
+            None
         }
 
         Label {
             external_repository: None,
             path_components,
             target_name: TargetName::Ellipsis,
-        } => Ok(path_components.into_iter().collect()),
+        } => Some(path_components.into_iter().collect()),
 
         Label {
             external_repository: None,
@@ -205,7 +205,7 @@ fn try_label_into_path(label: Label) -> anyhow::Result<PathBuf> {
         } => {
             let mut path: PathBuf = path_components.into_iter().collect();
             path.push(name);
-            Ok(path)
+            Some(path)
         }
     }
 }
@@ -257,14 +257,11 @@ pub fn get_files_to_materialize(
                     continue;
                 }
 
-                dep_value @ DependencyKey::BazelBuildFile(label) => {
-                    warn!(
-                        ?dep_key,
-                        dep_value = ?dep_value,
-                        "PackageInfo value corresponded to a key that was not a package"
-                    );
-                    let path = try_label_into_path(label.clone())?;
-                    paths_to_materialize.insert(path);
+                DependencyKey::BazelBuildFile(label) => {
+                    let path = label_into_path(label.clone());
+                    if let Some(path) = path {
+                        paths_to_materialize.insert(path);
+                    }
                     continue;
                 }
 
