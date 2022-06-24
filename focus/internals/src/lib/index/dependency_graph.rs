@@ -4,7 +4,6 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
 
-use crate::index::content_hash::get_prelude_deps;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -223,17 +222,6 @@ pub fn get_files_to_materialize(
     let mut dep_keys = dep_keys;
     debug!(?dep_keys, "Initial set of dependency keys");
 
-    // The result of `bazel query` appears to not include dependencies that are
-    // caused by `prelude_bazel`, so we have to manually add them as part of the
-    // file materialization process.
-    let prelude_deps = get_prelude_deps(ctx)?;
-    debug!(?prelude_deps, "Prelude deps");
-    dep_keys.extend(
-        prelude_deps
-            .into_iter()
-            .map(|label| DependencyKey::BazelBuildFile(label)),
-    );
-
     // Recursively resolve each dependency's content hashes.
     let mut paths_to_materialize = HashSet::new();
     let mut seen_keys = HashSet::new();
@@ -247,8 +235,7 @@ pub fn get_files_to_materialize(
                 DependencyKey::BazelPackage(Label {
                     external_repository: None,
                     path_components,
-                    // Ignore the target name. We want to materialize the entire directory.
-                    target_name: _,
+                    target_name: _, // TODO: use
                 }) => {
                     let path: PathBuf = path_components.iter().collect();
                     paths_to_materialize.insert(path);
@@ -270,12 +257,13 @@ pub fn get_files_to_materialize(
                     continue;
                 }
 
-                DependencyKey::BazelBuildFile(label) => {
-                    let containing_package = Label {
-                        target_name: TargetName::Ellipsis,
-                        ..label.clone()
-                    };
-                    let path = try_label_into_path(containing_package)?;
+                dep_value @ DependencyKey::BazelBuildFile(label) => {
+                    warn!(
+                        ?dep_key,
+                        dep_value = ?dep_value,
+                        "PackageInfo value corresponded to a key that was not a package"
+                    );
+                    let path = try_label_into_path(label.clone())?;
                     paths_to_materialize.insert(path);
                     continue;
                 }
@@ -436,7 +424,7 @@ sh_binary(
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        621a6472a51730cc1ec501a5069d714fc93ca744,
+                        b1d4fbbae036c10ae9254f1f6d616b62aea02f3a,
                     ),
                 ),
             },
@@ -672,7 +660,7 @@ def my_macro_inner(name):
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        383e25a427ae3fb408c05a181093bf9c3394e49e,
+                        2b0784096dba37a66b87163a11037e47f381b7a5,
                     ),
                 ),
             },
@@ -823,7 +811,7 @@ def some_macro():
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        7dc77d66041bd414db8f012e4ad1b170cdb07a43,
+                        0a1b175d7fd8406de40ed82f2ff7643fbebaf93e,
                     ),
                 ),
             },
@@ -831,180 +819,6 @@ def some_macro():
                 BazelPackage(
                     Label("//package1:foo"),
                 ),
-            },
-        }
-        "###);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_prelude_bazel_dependency() -> anyhow::Result<()> {
-        init_logging();
-
-        let temp = tempfile::tempdir()?;
-        let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
-
-        write_files(
-            &fix,
-            r#"
-file: WORKSPACE
-
-file: tools/build_rules/BUILD
-
-file: tools/build_rules/prelude_bazel
-load("//macro:macro.bzl", "macro")
-
-file: macro/BUILD
-
-file: macro/macro.bzl
-def macro(name):
-    native.genrule(
-        name = name,
-        outs = ["out.txt"],
-        cmd = "echo hi >$@",
-    )
-
-file: package1/BUILD
-macro("foo")
-"#,
-        )?;
-        let head_oid = fix.commit_all("Wrote files")?;
-        let repo = fix.repo()?;
-
-        let app = Arc::new(App::new_for_testing()?);
-        let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
-        let cache_options = CacheOptions::default();
-
-        let odb = HashMapOdb::new();
-        let files_to_materialize = {
-            let head_commit = repo.find_commit(head_oid)?;
-            let head_tree = head_commit.tree()?;
-            let ctx = HashContext {
-                repo: &repo,
-                head_tree: &head_tree,
-                caches: Default::default(),
-            };
-
-            let target_set = hashset! { "bazel://package1:foo".try_into()? };
-            let request = ResolutionRequest {
-                repo: fix.path().to_path_buf(),
-                targets: target_set,
-            };
-            let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
-            update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
-            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
-        };
-        insta::assert_debug_snapshot!(files_to_materialize, @r###"
-        Ok {
-            seen_keys: {
-                BazelPackage(
-                    Label("//package1:foo"),
-                ),
-                BazelBuildFile(
-                    Label("//macro:macro.bzl"),
-                ),
-                BazelBuildFile(
-                    Label("//tools/build_rules:prelude_bazel"),
-                ),
-            },
-            paths: {
-                "macro",
-                "package1",
-                "tools/build_rules",
-            },
-        }
-        "###);
-
-        write_files(
-            &fix,
-            r#"
-file: macro/macro.bzl
-load("//macro2:macro2.bzl", "macro2")
-def macro(name):
-    macro2(name)
-
-file: macro2/BUILD
-
-file: macro2/macro2.bzl
-def macro2(name):
-    native.genrule(
-        name = name + "2",
-        outs = ["out.txt"],
-        cmd = "echo hi >$@",
-    )
-
-"#,
-        )?;
-        let head_oid = fix.commit_all("Wrote files")?;
-        let (old_files_to_materialize, new_files_to_materialize) = {
-            let head_commit = repo.find_commit(head_oid)?;
-            let head_tree = head_commit.tree()?;
-            let ctx = HashContext {
-                repo: &repo,
-                head_tree: &head_tree,
-                caches: Default::default(),
-            };
-            let old_files_to_materialize =
-                get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?;
-
-            let resolve_result = {
-                let target_set = hashset! { "bazel://package1:foo2".try_into()? };
-                let request = ResolutionRequest {
-                    repo: fix.path().to_path_buf(),
-                    targets: target_set,
-                };
-                resolver.resolve(&request, &cache_options, app)?
-            };
-            update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
-
-            let new_files_to_materialize =
-                get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo2")? })?;
-            (old_files_to_materialize, new_files_to_materialize)
-        };
-        insta::assert_debug_snapshot!(old_files_to_materialize, @r###"
-        MissingKeys {
-            missing_keys: {
-                (
-                    BazelPackage(
-                        Label("//package1:foo"),
-                    ),
-                    ContentHash(
-                        b9fa2e91fe368f51890be7fe9934d6cd218dcf23,
-                    ),
-                ),
-            },
-            seen_keys: {
-                BazelPackage(
-                    Label("//package1:foo"),
-                ),
-                BazelBuildFile(
-                    Label("//macro:macro.bzl"),
-                ),
-                BazelBuildFile(
-                    Label("//tools/build_rules:prelude_bazel"),
-                ),
-            },
-        }
-        "###);
-        insta::assert_debug_snapshot!(new_files_to_materialize, @r###"
-        Ok {
-            seen_keys: {
-                BazelPackage(
-                    Label("//package1:foo2"),
-                ),
-                BazelBuildFile(
-                    Label("//macro:macro.bzl"),
-                ),
-                BazelBuildFile(
-                    Label("//tools/build_rules:prelude_bazel"),
-                ),
-            },
-            paths: {
-                "macro",
-                "package1",
-                "tools/build_rules",
             },
         }
         "###);
@@ -1245,7 +1059,7 @@ def foo(name, srcs):
                         Label("//package1/some/sub/package:foo"),
                     ),
                     ContentHash(
-                        655e2897252ab8640a8f020ff3ce7f676b448c21,
+                        058bdf3a6ee56e50ffb6c3bb35d006fb0b7a74d2,
                     ),
                 ),
                 (
@@ -1253,7 +1067,7 @@ def foo(name, srcs):
                         Label("//package1/some/sub/package:foo.sh"),
                     ),
                     ContentHash(
-                        aa178735684b802cca86ff8c7b3599055f89e901,
+                        48df160ff6ba56e1dfb46b287521395a231625b9,
                     ),
                 ),
             },
