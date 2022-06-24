@@ -6,7 +6,7 @@ use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::model::selection::{Operation, OperationAction};
 
 use anyhow::{bail, Context, Result};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use content_addressed_cache::RocksDBCache;
 use focus_internals::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 
@@ -128,23 +128,20 @@ fn clone_local(
     let dense_repo = Repository::open(&dense_repo_path).context("Opening dense repo")?;
     let sparse_repo = Repository::open(&sparse_repo_path).context("Opening sparse repo")?;
 
-    set_up_remotes(&dense_repo, &sparse_repo, app.clone())
-        .context("Failed to set up the remotes")?;
-
-    // Set fetchspec for primary branch
-    {
-        let fetch_spec = format!("refs/heads/{}:refs/remotes/origin/{}", branch, branch);
-        sparse_repo
-            .remote_add_fetch("origin", &fetch_spec)
-            .context("Failed add fetchspec for branch")?;
-    }
-
     if copy_branches {
         let span = info_span!("Copying branches");
         let _guard = span.enter();
-        copy_local_branches(&dense_repo, &sparse_repo, branch, app)
-            .context("Failed to copy references")?;
+        copy_local_branches(
+            &dense_repo,
+            &sparse_repo,
+            branch,
+            app.clone(),
+            days_of_history,
+        )
+        .context("Failed to copy references")?;
     }
+
+    set_up_remotes(&dense_repo, &sparse_repo, app).context("Failed to set up the remotes")?;
 
     Ok(())
 }
@@ -287,14 +284,8 @@ fn clone_shallow(
 
     let description = format!("Cloning {} to {}", source_url, destination_path.display());
 
-    let shallow_since_datestamp = {
-        let today = Utc::now().date();
-        today
-            .checked_sub_signed(Duration::days(days_of_history))
-            .expect("Could not determine date 90 days ago")
-            .format("%Y-%m-%d")
-            .to_string()
-    };
+    let shallow_since_datestamp =
+        focus_util::time::formatted_datestamp_at_day_in_past(days_of_history)?;
 
     // TODO: Reconsider single-branch
     let (mut cmd, scmd) = git_helper::git_command(description, app)?;
@@ -436,11 +427,13 @@ fn copy_local_branches(
     dense_repo: &Repository,
     sparse_repo: &Repository,
     branch: &str,
-    _app: Arc<App>,
+    app: Arc<App>,
+    days_of_history: u64,
 ) -> Result<()> {
     let branches = dense_repo
         .branches(Some(git2::BranchType::Local))
         .context("Failed to enumerate local branches in the dense repo")?;
+    let mut valid_local_branches = Vec::new();
 
     for b in branches {
         let (b, _branch_type) = b?;
@@ -454,6 +447,7 @@ fn copy_local_branches(
                 continue;
             }
         };
+
         if name == branch {
             // Skip the primary branch since it should already be configured.
             continue;
@@ -465,6 +459,53 @@ fn copy_local_branches(
             .peel_to_commit()
             .context("Failed to peel branch ref to commit")?;
 
+        let dense_commit_date = DateTime::from_utc(
+            NaiveDateTime::from_timestamp(dense_commit.time().seconds(), 0),
+            Utc,
+        )
+        .date();
+
+        let days_of_history: i64 = days_of_history.try_into()?;
+        let shallow_since_datestamp = focus_util::time::date_at_day_in_past(days_of_history)?;
+
+        if dense_commit_date > shallow_since_datestamp {
+            valid_local_branches.push((name.to_owned(), dense_commit.to_owned()));
+        } else {
+            warn!(
+                "Branch {} is older than the configured limit ({}). Rebase it if you would like it to be included in the new repo.",
+                name, shallow_since_datestamp
+            );
+        }
+    }
+
+    let branch_list_output = valid_local_branches
+        .iter()
+        .map(|(name, _)| name.to_string())
+        .collect::<Vec<String>>()
+        .join(" ");
+    let description = format!("Fetching user branches {}", branch_list_output);
+
+    let (mut cmd, scmd) = git_helper::git_command(&description, app)?;
+    let mut args: Vec<OsString> = vec!["fetch".into(), "--no-tags".into()];
+    args.push("origin".into());
+    valid_local_branches
+        .iter()
+        .for_each(|(name, _)| args.push(name.into()));
+    scmd.ensure_success_or_log(
+        cmd.current_dir(sparse_repo.path()).args(args),
+        SandboxCommandOutput::Stderr,
+        &description,
+    )
+    .map(|_| ())
+    .with_context(|| {
+        format!(
+            "Failed to fetch user branches ({}) for {}",
+            branch_list_output,
+            whoami::username()
+        )
+    })?;
+
+    valid_local_branches.iter().for_each(|(name, dense_commit)| {
         match sparse_repo.find_commit(dense_commit.id()) {
             Ok(sparse_commit) => match sparse_repo.branch(name, &sparse_commit, false) {
                 Ok(_new_branch) => {
@@ -479,7 +520,7 @@ fn copy_local_branches(
                     name, dense_commit.id());
             }
         }
-    }
+    });
 
     Ok(())
 }
