@@ -5,8 +5,8 @@ use crate::app::App;
 use anyhow::{bail, Context, Result};
 use std::{
     ffi::OsStr,
-    fs::File,
-    io::{BufRead, BufReader},
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
     sync::{
@@ -40,6 +40,7 @@ pub struct SandboxCommand {
     stdout_path: PathBuf,
     stderr_path: PathBuf,
     git_trace2_path: PathBuf,
+    description_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -94,17 +95,14 @@ impl SandboxCommand {
         stderr: Option<&Path>,
         app: Arc<App>,
     ) -> Result<Self> {
-        use std::io::Write;
         let sandbox = app.sandbox();
 
         // Write the description and get the generated serial to name all the files the same.
-        let serial = {
-            let (mut description_file, _, serial) = sandbox
+        let (description_path, serial) = {
+            let (_, description_path, serial) = sandbox
                 .create_file(Some("sandboxed_command"), Some("script"), None)
                 .context("Failed creating description file")?;
-            writeln!(description_file, "# {}", description)?;
-            writeln!(description_file, "{}", Self::pretty_print_command(command))?;
-            serial
+            (description_path, serial)
         };
 
         let output_file = |extension: &str| -> Result<(Stdio, PathBuf)> {
@@ -136,6 +134,7 @@ impl SandboxCommand {
             stdout_path,
             stderr_path,
             git_trace2_path,
+            description_path,
         })
     }
 
@@ -237,6 +236,11 @@ impl SandboxCommand {
         let span = debug_span!("Running command", %description);
         let _guard = span.enter();
         let command_description = Self::pretty_print_command(cmd);
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(&self.description_path)?;
+        writeln!(file, "{}", Self::pretty_print_command(cmd))?;
 
         let mut launch = cmd
             .spawn()
