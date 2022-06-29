@@ -629,14 +629,22 @@ mod test {
             .status()
             .expect("git remote set-url failed");
 
-        // Make another branch
-        Command::new("git")
-            .arg("switch")
-            .arg("-c")
-            .arg("branch_two")
-            .current_dir(&fixture.dense_repo_path)
-            .status()
-            .expect("git switch failed");
+        // Make a branch that shouldn't end up in the sparse repo
+        fixture
+            .dense_repo
+            .create_and_switch_to_branch("old_branch")?;
+        fixture.dense_repo.make_empty_commit(
+            "I'm too old to be in the sparse repo!",
+            Some("Sun, Jan 27 22:32:18 2008"),
+        )?;
+
+        // Make a branch that should end up in the sparse repo.
+        fixture
+            .dense_repo
+            .create_and_switch_to_branch("branch_two")?;
+        fixture
+            .dense_repo
+            .make_empty_commit("I'm fresh and I should be in the sparse repo!", None)?;
 
         let app = Arc::new(App::new_for_testing()?);
 
@@ -685,6 +693,17 @@ mod test {
             }
         }
 
+        git_repo
+            .find_branch("branch_two", git2::BranchType::Local)
+            .context("Failed to find branch_two")?;
+
+        assert!(
+            git_repo
+                .find_branch("old_branch", git2::BranchType::Local)
+                .is_err(),
+            "old_branch was copied to sparse repo, despite being too old for the shallow window"
+        );
+
         // Check post-merge hook
         let focus_exe = &std::env::current_exe().unwrap_or_else(|_| PathBuf::from("focus"));
         let focus_exe_path = focus_exe.file_name().unwrap().to_string_lossy();
@@ -695,10 +714,6 @@ mod test {
             post_merge_hook_contents,
             format!("{} event post-merge\n", focus_exe_path)
         );
-
-        git_repo
-            .find_branch("branch_two", git2::BranchType::Local)
-            .context("Failed to find branch_two")?;
 
         // TODO: Test refspecs from remote config
         let model_repo = Repo::open(&fixture.sparse_repo_path, app)?;

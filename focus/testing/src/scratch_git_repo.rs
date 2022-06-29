@@ -97,6 +97,41 @@ impl ScratchGitRepo {
         Self::new_local_clone(self.path())
     }
 
+    pub fn create_and_switch_to_branch(&self, name: &str) -> Result<()> {
+        Command::new("git")
+            .current_dir(self.path())
+            .arg("switch")
+            .arg("-c")
+            .arg(name)
+            .status()
+            .with_context(|| format!("ScratchGitRepo failed to switch to branch {} in repo {:?}", name, self.path()))?;
+
+        Ok(())
+    }
+
+    /// Used to make an empty commit
+    ///
+    /// Commit date defaults to 'now' and passed in dates must be in RFC2822 format
+    pub fn make_empty_commit(&self, message: &str, commit_date: Option<&str>) -> Result<()> {
+        Command::new("git")
+            .current_dir(self.path())
+            .arg("commit")
+            .arg("--allow-empty")
+            .arg("-m")
+            .arg(message)
+            .arg(format!("--date='{}'", commit_date.unwrap_or("now")))
+            .env("GIT_COMMITTER_DATE", commit_date.unwrap_or_default())
+            .status()
+            .with_context(|| {
+                format!(
+                    "Could not create empty commit in ScratchGitRepo repo at {:?}",
+                    self.path()
+                )
+            })?;
+
+        Ok(())
+    }
+
     pub(crate) fn create_fixture_repo(containing_dir: &Path) -> Result<PathBuf> {
         let name = format!("repo_{}", Uuid::new_v4());
         Command::new("git")
