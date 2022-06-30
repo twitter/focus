@@ -59,7 +59,6 @@ fn sync_upstream_changes() -> Result<()> {
     assert_eq!(
         crate::detect_build_graph_changes::run(
             &fixture.sparse_repo_path,
-            false,
             vec![],
             fixture.app.clone(),
         )?,
@@ -85,33 +84,6 @@ fn sync_upstream_changes() -> Result<()> {
     )?;
 
     assert!(x_dir.is_dir());
-
-    Ok(())
-}
-
-#[test]
-fn sync_detect_graph_changes_advisory() -> Result<()> {
-    init_logging();
-
-    let fixture = RepoPairFixture::new()?;
-
-    fixture.perform_clone()?;
-
-    let _ = add_updated_content(&fixture.dense_repo)?;
-
-    // Fetch in the sparse repo from the dense repo
-    fixture.perform_pull(RepoDisposition::Sparse, "origin", "main")?;
-
-    // In advisory mode, detect_build_graph_changes exits successfully
-    assert_eq!(
-        crate::detect_build_graph_changes::run(
-            &fixture.sparse_repo_path,
-            true,
-            vec![],
-            fixture.app.clone(),
-        )?,
-        app::ExitCode(0)
-    );
 
     Ok(())
 }

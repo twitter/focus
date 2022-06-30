@@ -2,6 +2,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+
 use std::{
     convert::TryFrom,
     path::{Path, PathBuf},
@@ -97,11 +98,7 @@ enum Subcommand {
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        /// Whether to treat build graph changes as warnings rather than errors; if true (the default), we should never exit with a non-zero status code in normal operation
-        #[clap(long, default_value = "true")]
-        advisory: bool,
-
-        /// Arguments passed by the wrapper (a wrapper of `bazel` or otherwise)
+        /// Extra arguments.
         args: Vec<String>,
     },
 
@@ -735,15 +732,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
         },
 
-        Subcommand::DetectBuildGraphChanges {
-            repo,
-            advisory,
-            args,
-        } => {
+        Subcommand::DetectBuildGraphChanges { repo, args } => {
             let repo = paths::expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
-            focus_operations::detect_build_graph_changes::run(&repo, advisory, args, app)
+            focus_operations::detect_build_graph_changes::run(&repo, args, app)
         }
 
         Subcommand::Add {
