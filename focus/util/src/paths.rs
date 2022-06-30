@@ -33,7 +33,6 @@ pub fn focus_sandbox_dir() -> PathBuf {
         .expect("failed to determine data directory")
         .join("focus")
         .join("sandboxes")
-        .to_owned()
 }
 
 #[cfg(target_os = "macos")]

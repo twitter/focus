@@ -236,7 +236,7 @@ fn sync_adhoc_manipulation() -> Result<()> {
     crate::selection::remove(
         &fixture.sparse_repo_path,
         true,
-        targets.clone(),
+        targets,
         fixture.app.clone(),
     )?;
     assert!(!library_b_dir.is_dir());
@@ -307,7 +307,7 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
     crate::selection::add(
         &fixture.sparse_repo_path,
         false, // Note: Manual sync
-        targets.clone(),
+        targets,
         fixture.app.clone(),
     )?;
     // First sync performs a checkout.
@@ -365,7 +365,7 @@ fn regression_adding_directory_targets_present_in_mandatory_sets() -> Result<()>
     crate::selection::add(
         &fixture.sparse_repo_path,
         true,
-        targets.clone(),
+        targets,
         fixture.app.clone(),
     )?;
     assert!(swedish_txt_file.is_file());
