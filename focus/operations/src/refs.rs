@@ -5,7 +5,6 @@ use std::{collections::HashSet, fs::File, io::Write, process::Stdio, sync::Arc};
 
 use focus_util::{
     app::App,
-    git_helper,
     sandbox_command::{SandboxCommand, SandboxCommandOutput},
     time::FocusTime,
 };
@@ -208,8 +207,9 @@ pub fn expire_old_refs(
     };
 
     let ref_file = File::open(ref_file_path).context("re-opening the ref file")?;
-    let (mut cmd, scmd) = SandboxCommand::new_with_handles(
-        git_helper::git_binary(),
+    let mut cmd = app.git_binary().command();
+    let scmd = SandboxCommand::with_command_and_handles(
+        &mut cmd,
         Some(Stdio::from(ref_file)),
         None,
         None,

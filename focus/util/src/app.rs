@@ -6,6 +6,7 @@ use std::{borrow::Borrow, fmt::Debug};
 
 use crate::sandbox::Sandbox;
 use anyhow::{Context, Result};
+use focus_testing::GitBinary;
 use std::time::SystemTime;
 use tool_insights_client::Client;
 
@@ -15,6 +16,7 @@ pub struct ExitCode(pub i32);
 
 #[derive(Clone)]
 pub struct App {
+    git_binary: GitBinary,
     sandbox: Arc<Sandbox>,
     tool_insights_client: Client,
 }
@@ -35,6 +37,7 @@ impl App {
         app_name: Option<String>,
         app_version: Option<String>,
     ) -> Result<Self> {
+        let git_binary = GitBinary::from_env()?;
         let sandbox = Arc::from(
             Sandbox::new(preserve_sandbox_contents, with_cmd_prefix)
                 .context("Failed to create sandbox")?,
@@ -45,9 +48,15 @@ impl App {
             SystemTime::now(),
         );
         Ok(Self {
+            git_binary,
             sandbox,
             tool_insights_client,
         })
+    }
+
+    /// Get a reference to the Git binary that this app is using.
+    pub fn git_binary(&self) -> &GitBinary {
+        &self.git_binary
     }
 
     /// Get a reference to the app's sandbox.

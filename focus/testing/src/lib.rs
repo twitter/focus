@@ -9,7 +9,10 @@ use tracing_error::ErrorLayer;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 
+mod git_binary;
 mod scratch_git_repo;
+
+pub use git_binary::GitBinary;
 pub use scratch_git_repo::ScratchGitRepo;
 
 pub fn init_logging() {

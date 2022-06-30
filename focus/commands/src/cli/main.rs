@@ -13,6 +13,7 @@ use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use clap::Parser;
 use focus_migrations::production::perform_pending_migrations;
+use focus_testing::GitBinary;
 use git2::Repository;
 
 use focus_util::{
@@ -842,9 +843,10 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 git_config_path,
                 time_period,
             } => {
+                let git_binary = GitBinary::from_binary_path(git_binary_path)?;
                 focus_operations::maintenance::run(
                     focus_operations::maintenance::RunOptions {
-                        git_binary_path,
+                        git_binary: Some(git_binary),
                         git_config_key,
                         git_config_path,
                         tracked,

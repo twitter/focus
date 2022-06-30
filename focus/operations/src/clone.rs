@@ -559,7 +559,6 @@ mod test {
     use std::{
         collections::HashSet,
         path::{Path, PathBuf},
-        process::Command,
         sync::Arc,
     };
 
@@ -613,7 +612,10 @@ mod test {
         let fixture = RepoPairFixture::new()?;
 
         // Set up a remote that mimics source so that we can check that the setting of fetch and push URLs.
-        Command::new("git")
+        fixture
+            .app
+            .git_binary()
+            .command()
             .arg("remote")
             .arg("add")
             .arg("origin")

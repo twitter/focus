@@ -22,6 +22,8 @@ use focus_internals::model::repo::Repo;
 
 use crate::sync::SyncMode;
 
+pub use focus_testing::GitBinary;
+
 #[allow(dead_code)]
 pub enum RepoDisposition {
     Dense,
@@ -41,19 +43,19 @@ pub struct RepoPairFixture {
 }
 
 impl RepoPairFixture {
-    #[allow(dead_code)]
     pub fn new() -> Result<Self> {
+        let app = Arc::new(App::new_for_testing()?);
         let dir = TempDir::new()?;
         let dense_repo_path = dir.path().join("dense");
         let branch = String::from("main");
         let dense_repo = ScratchGitRepo::new_copied_fixture(
+            app.git_binary().clone(),
             Path::new("bazel_java_example"),
             &dense_repo_path,
             &branch,
         )?;
         let sparse_repo_path = dir.path().join("sparse");
         let projects_and_targets: Vec<String> = vec![];
-        let app = Arc::new(App::new_for_testing()?);
 
         Ok(Self {
             dir,
@@ -129,7 +131,9 @@ impl RepoPairFixture {
             RepoDisposition::Dense => &self.dense_repo_path,
             RepoDisposition::Sparse => &self.sparse_repo_path,
         };
-        Command::new("git")
+        self.app
+            .git_binary()
+            .command()
             .arg("fetch")
             .arg(remote_name)
             .current_dir(&path)
@@ -139,7 +143,6 @@ impl RepoPairFixture {
         Self::parse_fetch_head(fetch_head_path)
     }
 
-    #[allow(dead_code)]
     pub fn perform_pull(
         &self,
         repo: RepoDisposition,
@@ -151,7 +154,9 @@ impl RepoPairFixture {
             RepoDisposition::Sparse => &self.sparse_repo_path,
         };
 
-        Command::new("git")
+        self.app
+            .git_binary()
+            .command()
             .arg("pull")
             .arg(remote_name)
             .arg(branch)

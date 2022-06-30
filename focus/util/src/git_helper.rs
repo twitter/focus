@@ -1,14 +1,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    ffi::{OsStr, OsString},
-    os::unix::prelude::OsStringExt,
-    path::PathBuf,
-    process::Stdio,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{ffi::OsStr, path::PathBuf, process::Stdio, str::FromStr, sync::Arc};
 
 use anyhow::{anyhow, bail, Context, Result};
 use git2;
@@ -26,43 +19,17 @@ use crate::{
 
 use super::time::{FocusTime, GitTime};
 
-pub fn git_binary() -> OsString {
-    OsString::from("git")
-}
-
-/// resolves the git binary in PATH
-pub fn git_binary_path() -> Result<PathBuf> {
-    Ok(which::which(&git_binary())?)
-}
-
-const NL: u8 = b'\n';
-
-pub fn git_exec_path(git_binary_path: &Path) -> Result<PathBuf> {
-    let mut output = Command::new(git_binary_path)
-        .arg("--exec-path")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()?;
-
-    if !output.status.success() {
-        bail!("git --exec-path failed to run");
-    }
-
-    let stdout = &mut output.stdout;
-    if *stdout.last().unwrap() == NL {
-        stdout.pop();
-    }
-
-    let out = OsString::from_vec(output.stdout);
-    Ok(PathBuf::from(out).canonicalize()?)
-}
+pub use focus_testing::GitBinary;
 
 pub fn git_dir(path: &Path) -> Result<PathBuf> {
     Ok(git2::Repository::open(path)?.path().to_path_buf())
 }
 
 pub fn git_command(app: Arc<App>) -> Result<(Command, SandboxCommand)> {
-    SandboxCommand::new(git_binary(), app)
+    let git_binary = app.git_binary();
+    let mut cmd = git_binary.command();
+    let scmd = SandboxCommand::with_command(&mut cmd, app)?;
+    Ok((cmd, scmd))
 }
 
 pub fn remote_add<P: AsRef<Path>>(
@@ -378,11 +345,9 @@ static VERSION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^git version ([0-9]+)\.([0-9]+)\.([0-9]+)").unwrap());
 
 impl GitVersion {
-    pub fn current() -> Result<GitVersion> {
-        let out = Command::new(git_binary())
-            .arg("version")
-            .stderr(Stdio::inherit())
-            .output()?;
+    pub fn current(git_binary: &GitBinary) -> Result<GitVersion> {
+        let mut cmd = git_binary.command();
+        let out = cmd.arg("version").stderr(Stdio::inherit()).output()?;
 
         let s = String::from_utf8(out.stdout)?;
         Self::from_str(&s)
@@ -542,7 +507,8 @@ mod tests {
     #[test]
     fn test_git_version_current() -> Result<()> {
         // just make sure this doesn't return an error
-        let _gv = GitVersion::current().unwrap();
+        let git_binary = GitBinary::from_env()?;
+        let _gv = GitVersion::current(&git_binary).unwrap();
         Ok(())
     }
 
@@ -569,16 +535,9 @@ mod tests {
     }
 
     #[test]
-    fn test_git_binary_path() -> Result<()> {
+    fn test_git_binary_from_env() -> Result<()> {
         // just make sure this doesn't barf
-        git_binary_path()?;
-        Ok(())
-    }
-
-    #[test]
-    fn test_git_exec_path() -> Result<()> {
-        // just make sure this doesn't barf
-        git_exec_path(&git_binary_path()?)?;
+        GitBinary::from_env()?;
         Ok(())
     }
 
