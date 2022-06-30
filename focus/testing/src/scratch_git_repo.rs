@@ -67,6 +67,7 @@ impl ScratchGitRepo {
             .current_dir(destination_path)
             .status()
             .expect("init failed");
+        Self::configure_repo(&git_binary, destination_path)?;
 
         // Create the named branch
         git_binary
@@ -163,6 +164,7 @@ impl ScratchGitRepo {
             .status()
             .expect("git init failed");
         let repo_path = containing_dir.join(&name);
+        Self::configure_repo(git_binary, &repo_path)?;
 
         git_binary
             .command()
@@ -233,6 +235,22 @@ impl ScratchGitRepo {
             .spawn()?
             .wait()
             .expect("clone failed");
+        Ok(())
+    }
+
+    fn configure_repo(git_binary: &GitBinary, repo_dir: &Path) -> Result<()> {
+        git_binary
+            .command()
+            .args(["config", "user.email", "example@example.com"])
+            .current_dir(repo_dir)
+            .status()
+            .expect("git config user.email failed");
+        git_binary
+            .command()
+            .args(["config", "user.name", "Example"])
+            .current_dir(repo_dir)
+            .status()
+            .expect("git config user.name failed");
         Ok(())
     }
 
