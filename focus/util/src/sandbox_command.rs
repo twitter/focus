@@ -53,18 +53,13 @@ pub enum SandboxCommandOutput {
 }
 
 impl SandboxCommand {
-    pub fn new(
-        description: impl Into<String>,
-        program: impl AsRef<OsStr>,
-        app: Arc<App>,
-    ) -> Result<(Command, Self)> {
+    pub fn new(program: impl AsRef<OsStr>, app: Arc<App>) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
-        let sandbox_command = Self::with_command(description.into(), &mut command, app)?;
+        let sandbox_command = Self::with_command(&mut command, app)?;
         Ok((command, sandbox_command))
     }
 
     pub fn new_with_handles(
-        description: impl Into<String>,
         program: impl AsRef<OsStr>,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
@@ -72,23 +67,16 @@ impl SandboxCommand {
         app: Arc<App>,
     ) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
-        let sandbox_command = Self::with_command_and_handles(
-            description.into(),
-            &mut command,
-            stdin,
-            stdout,
-            stderr,
-            app,
-        )?;
+        let sandbox_command =
+            Self::with_command_and_handles(&mut command, stdin, stdout, stderr, app)?;
         Ok((command, sandbox_command))
     }
 
-    pub fn with_command(description: String, command: &mut Command, app: Arc<App>) -> Result<Self> {
-        Self::with_command_and_handles(description, command, None, None, None, app)
+    pub fn with_command(command: &mut Command, app: Arc<App>) -> Result<Self> {
+        Self::with_command_and_handles(command, None, None, None, app)
     }
 
     pub fn with_command_and_handles(
-        description: String,
         command: &mut Command,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
@@ -231,11 +219,10 @@ impl SandboxCommand {
         &self,
         cmd: &mut Command,
         output: SandboxCommandOutput,
-        description: &str,
     ) -> Result<ExitStatus> {
-        let span = debug_span!("Running command", %description);
-        let _guard = span.enter();
         let command_description = Self::pretty_print_command(cmd);
+        let span = debug_span!("Running command", description = %command_description);
+        let _guard = span.enter();
         let mut file = OpenOptions::new()
             .write(true)
             .append(true)
@@ -244,21 +231,19 @@ impl SandboxCommand {
 
         let mut launch = cmd
             .spawn()
-            .with_context(|| format!("Failed to spawn command {}", description))?;
+            .with_context(|| format!("Failed to spawn command {}", &command_description))?;
 
-        let tailer = Self::tail(
-            &cmd.get_program().to_string_lossy().to_owned(),
-            &self.stderr_path,
-        )
-        .context("Could not create log tailer");
+        let tailer = Self::tail(&command_description, &self.stderr_path)
+            .context("Could not create log tailer");
 
         let status = launch
             .wait()
-            .with_context(|| format!("Failed to wait for command {}", description))?;
+            .with_context(|| format!("Failed to wait for command {}", &command_description))?;
         tailer.iter().for_each(|t| t.stop());
         debug!(command = %command_description, %status, "Command exited");
         if !status.success() {
-            self.log(output, description).context("logging output")?;
+            self.log(output, &command_description)
+                .context("logging output")?;
             bail!("Command failed: {}", command_description);
         }
 
@@ -306,7 +291,7 @@ impl Tailer {
     fn work(description: String, file: File, cancel_rx: mpsc::Receiver<()>) {
         let buffered_reader = BufReader::new(file);
         let mut lines = buffered_reader.lines();
-        let span = info_span!("Output", program=?description);
+        let span = info_span!("Output", command=?description);
         let _guard = span.enter();
         while cancel_rx.try_recv().is_err() {
             while let Some(Ok(line)) = lines.next() {
@@ -340,7 +325,7 @@ mod tests {
         let app = Arc::from(App::new_for_testing()?);
         // Make sure to keep the `App` alive until the end of this scope.
         let app = app.clone();
-        let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app)?;
+        let (mut cmd, scmd) = SandboxCommand::new("echo", app)?;
         cmd.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
         scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
@@ -361,7 +346,6 @@ mod tests {
             path
         };
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
-            "Testing with cat".to_owned(),
             "cat",
             Some(Stdio::from(File::open(&path)?)),
             None,
