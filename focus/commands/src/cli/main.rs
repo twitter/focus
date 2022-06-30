@@ -590,8 +590,8 @@ struct FocusOpts {
     cmd: Subcommand,
 }
 
-fn ensure_directories_exist() -> Result<()> {
-    Tracker::default()
+fn ensure_directories_exist(tracker: &Tracker) -> Result<()> {
+    tracker
         .ensure_directories_exist()
         .context("creating directories for the tracker")?;
 
@@ -603,7 +603,7 @@ fn hold_lock_file(repo: &Path) -> Result<LockFile> {
     LockFile::new(&path)
 }
 
-fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
+fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
     let feature_name = feature_name_for(&options.cmd);
@@ -644,6 +644,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 projects_and_targets,
                 copy_branches,
                 days_of_history,
+                tracker,
                 app,
             )?;
 
@@ -727,11 +728,11 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
 
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List {} => {
-                focus_operations::repo::list()?;
+                focus_operations::repo::list(tracker)?;
                 Ok(ExitCode(0))
             }
             RepoSubcommand::Repair {} => {
-                focus_operations::repo::repair(app)?;
+                focus_operations::repo::repair(tracker, app)?;
                 Ok(ExitCode(0))
             }
         },
@@ -852,6 +853,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                         tracked,
                     },
                     time_period,
+                    tracker,
                     app,
                 )?;
 
@@ -1092,6 +1094,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     let is_tty = termion::is_tty(&std::io::stdout());
 
     let sandbox_dir = app.sandbox().path().to_owned();
+    let tracker = Tracker::from_config_dir()?;
 
     let _guard = focus_tracing::init_tracing(focus_tracing::TracingOpts {
         is_tty,
@@ -1101,10 +1104,10 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     info!(path = ?sandbox_dir, "Created sandbox");
 
-    ensure_directories_exist().context("Failed to create necessary directories")?;
+    ensure_directories_exist(&tracker).context("Failed to create necessary directories")?;
     setup_maintenance_scheduler(&options).context("Failed to setup maintenance scheduler")?;
 
-    let exit_code = match run_subcommand(app.clone(), options) {
+    let exit_code = match run_subcommand(app.clone(), &tracker, options) {
         Ok(exit_code) => {
             ti_context
                 .get_inner()

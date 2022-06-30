@@ -19,7 +19,7 @@ use tracing::{info, warn};
 use focus_testing::ScratchGitRepo;
 use focus_util::app::App;
 
-use focus_internals::model::repo::Repo;
+use focus_internals::{model::repo::Repo, tracker::Tracker};
 
 use crate::sync::SyncMode;
 
@@ -39,6 +39,7 @@ pub struct RepoPairFixture {
     pub dense_repo: ScratchGitRepo,
     pub branch: String,
     pub projects_and_targets: Vec<String>,
+    pub tracker: Tracker,
     pub app: Arc<App>,
     pub preserve: bool,
 }
@@ -57,6 +58,8 @@ impl RepoPairFixture {
         )?;
         let sparse_repo_path = dir.path().join("sparse");
         let projects_and_targets: Vec<String> = vec![];
+        let tracker = Tracker::for_testing()?;
+        tracker.ensure_directories_exist()?;
 
         Ok(Self {
             dir,
@@ -66,6 +69,7 @@ impl RepoPairFixture {
             branch,
             projects_and_targets,
             app,
+            tracker,
             preserve: false,
         })
     }
@@ -92,6 +96,7 @@ impl RepoPairFixture {
             self.projects_and_targets.clone(),
             true,
             90,
+            &self.tracker,
             self.app.clone(),
         )
     }

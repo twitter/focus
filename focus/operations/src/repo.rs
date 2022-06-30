@@ -8,8 +8,7 @@ use anyhow::{Context, Result};
 use focus_internals::tracker::Tracker;
 use focus_util::app::App;
 
-pub fn list() -> Result<()> {
-    let tracker = Tracker::default();
+pub fn list(tracker: &Tracker) -> Result<()> {
     let snapshot = tracker.scan().context("scanning repositories")?;
     for repo in snapshot.repos() {
         println!("{}", repo)
@@ -18,8 +17,8 @@ pub fn list() -> Result<()> {
     Ok(())
 }
 
-pub fn repair(app: Arc<App>) -> Result<()> {
-    Tracker::default()
+pub fn repair(tracker: &Tracker, app: Arc<App>) -> Result<()> {
+    tracker
         .repair(app)
         .context("Failed to repair repository registry")
 }
