@@ -15,11 +15,8 @@ use std::{
 use focus_internals::{locking, tracker::Tracker};
 
 use anyhow::{bail, Context, Result};
-use focus_util::{
-    app::App,
-    git_helper::{self, ConfigExt},
-    sandbox_command::{SandboxCommand, SandboxCommandOutput},
-};
+use focus_util::git_helper::{git_command, GitBinary};
+use focus_util::{app::App, git_helper::ConfigExt, sandbox_command::SandboxCommandOutput};
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
@@ -175,7 +172,7 @@ enum MaintResult {
 }
 
 pub struct Runner {
-    pub git_binary_path: PathBuf,
+    pub git_binary: GitBinary,
     /// the config key in the global git config that contains the list of paths to check.
     /// By default this is "maintenance.repo", a multi value key.
     pub config_key: String,
@@ -188,7 +185,7 @@ pub struct Runner {
 impl Debug for Runner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Runner")
-            .field("git_binary_path", &self.git_binary_path)
+            .field("git_binary", &self.git_binary)
             .field("config_key", &self.config_key)
             .finish_non_exhaustive()
     }
@@ -197,20 +194,19 @@ impl Debug for Runner {
 impl Runner {
     pub fn new(opts: RunOptions, app: Arc<App>) -> Result<Runner> {
         let RunOptions {
-            git_binary_path,
+            git_binary,
             git_config_key: config_key,
             git_config_path: config_path,
             tracked,
         } = opts;
 
-        let git_binary_path = if git_binary_path == Path::new(DEFAULT_GIT_BINARY_PATH) {
-            git_helper::git_binary_path()?
-        } else {
-            git_binary_path
+        let git_binary = match git_binary {
+            Some(git_binary) => git_binary,
+            None => GitBinary::from_env()?,
         };
 
         Ok(Runner {
-            git_binary_path,
+            git_binary,
             config_key,
             config: use_config_path_or_default_global(config_path.as_deref())?,
             tracked_repos: tracked,
@@ -220,32 +216,17 @@ impl Runner {
 
     #[tracing::instrument]
     fn run_git_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
-        let exec_path: PathBuf = git_helper::git_exec_path(&self.git_binary_path)?;
-
-        let (mut cmd, sb_cmd) = SandboxCommand::new(&self.git_binary_path, self.app.clone())?;
+        let (mut cmd, scmd) = git_command(self.app.clone())?;
 
         // TODO: this needs to log and capture output for debugging if necessary
         Ok(MaintResult::Success(
-            sb_cmd
-                .ensure_success_or_log(
-                    cmd.arg({
-                        let mut s = OsString::new();
-                        s.push("--exec-path=");
-                        s.push(exec_path);
-                        s
-                    })
-                    .arg("maintenance")
+            scmd.ensure_success_or_log(
+                cmd.arg("maintenance")
                     .arg("run")
                     .arg(format!("--schedule={}", time_period.name()))
                     .current_dir(repo_path),
-                    SandboxCommandOutput::Stderr,
-                )
-                .with_context(|| {
-                    format!(
-                        "running maintenance failed for {}",
-                        repo_path.to_string_lossy()
-                    )
-                })?,
+                SandboxCommandOutput::Stderr,
+            )?,
         ))
     }
 
@@ -381,18 +362,16 @@ impl Runner {
 // lets us test the construction of the Maintenance instance
 #[derive(Debug, Clone)]
 pub struct RunOptions {
-    pub git_binary_path: PathBuf,
+    pub git_binary: Option<GitBinary>,
     pub git_config_key: String,
     pub git_config_path: Option<PathBuf>,
     pub tracked: bool,
 }
 
-pub const DEFAULT_GIT_BINARY_PATH: &str = "git";
-
 impl Default for RunOptions {
     fn default() -> Self {
         Self {
-            git_binary_path: DEFAULT_GIT_BINARY_PATH.into(),
+            git_binary: None,
             git_config_key: DEFAULT_CONFIG_KEY.to_owned(),
             git_config_path: None,
             tracked: false,
@@ -535,12 +514,15 @@ mod tests {
             conf.set_bool("testing.testing.onetwothree", true)?;
         }
 
-        let git_binary_path = "/path/to/bin/git";
+        let git_binary = GitBinary {
+            git_binary_path: "/path/to/bin/git".into(),
+            git_exec_path: "/path/to/lib/gitcore".into(),
+        };
         let config_key = "other.key";
         let config_path = fix.config_path;
 
         let opts = RunOptions {
-            git_binary_path: git_binary_path.into(),
+            git_binary: Some(git_binary.clone()),
             git_config_key: config_key.into(),
             git_config_path: Some(config_path),
             tracked: false,
@@ -548,7 +530,7 @@ mod tests {
 
         let runner = Runner::new(opts, fix.app)?;
 
-        assert_eq!(runner.git_binary_path, PathBuf::from(git_binary_path));
+        assert_eq!(runner.git_binary, git_binary);
         assert_eq!(runner.config_key, config_key.to_string());
 
         let conf = &runner.config;
