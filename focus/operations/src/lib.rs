@@ -1,6 +1,8 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+#![allow(clippy::too_many_arguments)]
+
 pub mod background;
 pub mod clone;
 pub mod detect_build_graph_changes;

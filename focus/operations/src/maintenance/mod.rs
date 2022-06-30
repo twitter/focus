@@ -171,18 +171,19 @@ enum MaintResult {
     LockFailed,
 }
 
-pub struct Runner {
+pub struct Runner<'a> {
     pub git_binary: GitBinary,
     /// the config key in the global git config that contains the list of paths to check.
     /// By default this is "maintenance.repo", a multi value key.
     pub config_key: String,
     pub config: git2::Config,
+    pub tracker: &'a Tracker,
     /// if true, use the focus Tracker to discover repos
     pub tracked_repos: bool,
     pub app: Arc<App>,
 }
 
-impl Debug for Runner {
+impl Debug for Runner<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Runner")
             .field("git_binary", &self.git_binary)
@@ -191,8 +192,8 @@ impl Debug for Runner {
     }
 }
 
-impl Runner {
-    pub fn new(opts: RunOptions, app: Arc<App>) -> Result<Runner> {
+impl Runner<'_> {
+    pub fn new(opts: RunOptions, tracker: &Tracker, app: Arc<App>) -> Result<Runner> {
         let RunOptions {
             git_binary,
             git_config_key: config_key,
@@ -209,6 +210,7 @@ impl Runner {
             git_binary,
             config_key,
             config: use_config_path_or_default_global(config_path.as_deref())?,
+            tracker,
             tracked_repos: tracked,
             app,
         })
@@ -272,8 +274,7 @@ impl Runner {
         if !self.tracked_repos {
             return Ok(());
         }
-        let tracker = Tracker::default();
-        tracker.repair(self.app.clone())
+        self.tracker.repair(self.app.clone())
     }
 
     fn get_repo_paths_from_config(&self) -> Result<Vec<PathBuf>> {
@@ -292,8 +293,7 @@ impl Runner {
     }
 
     fn get_repo_paths_from_tracker(&self) -> Result<Vec<PathBuf>> {
-        let tracker = Tracker::default();
-        let snapshot = tracker.scan().context("scanning repositories")?;
+        let snapshot = self.tracker.scan().context("scanning repositories")?;
 
         let repos: Vec<PathBuf> = snapshot
             .repos()
@@ -384,8 +384,13 @@ pub(crate) fn regex_escape<S: AsRef<str>>(s: S) -> String {
 }
 
 #[tracing::instrument]
-pub fn run(cli: RunOptions, time_period: TimePeriod, app: Arc<App>) -> Result<()> {
-    Runner::new(cli, app)?.run(time_period)?;
+pub fn run(
+    cli: RunOptions,
+    time_period: TimePeriod,
+    tracker: &Tracker,
+    app: Arc<App>,
+) -> Result<()> {
+    Runner::new(cli, tracker, app)?.run(time_period)?;
     Ok(())
 }
 
@@ -426,6 +431,7 @@ mod tests {
     #[test]
     fn test_handle_missing_config_entry() -> Result<()> {
         let fix = ConfigFixture::new()?;
+        let tracker = Tracker::for_testing()?;
 
         {
             let mut config = fix.config()?;
@@ -438,6 +444,7 @@ mod tests {
                     git_config_path: Some(fix.config_path.to_owned()),
                     ..Default::default()
                 },
+                &tracker,
                 fix.app.clone(),
             )?;
 
@@ -456,6 +463,7 @@ mod tests {
     #[test]
     fn test_get_repo_paths() -> Result<()> {
         let fix = ConfigFixture::new()?;
+        let tracker = Tracker::for_testing()?;
 
         {
             let mut config = fix.config()?;
@@ -469,6 +477,7 @@ mod tests {
                     git_config_path: Some(fix.config_path),
                     ..Default::default()
                 },
+                &tracker,
                 fix.app,
             )?;
 
@@ -509,6 +518,7 @@ mod tests {
     #[test]
     fn test_try_from_cli_options() -> Result<()> {
         let fix = ConfigFixture::new()?;
+        let tracker = Tracker::for_testing()?;
         {
             let mut conf = fix.config()?;
             conf.set_bool("testing.testing.onetwothree", true)?;
@@ -528,7 +538,7 @@ mod tests {
             tracked: false,
         };
 
-        let runner = Runner::new(opts, fix.app)?;
+        let runner = Runner::new(opts, &tracker, fix.app)?;
 
         assert_eq!(runner.git_binary, git_binary);
         assert_eq!(runner.config_key, config_key.to_string());

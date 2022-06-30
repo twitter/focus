@@ -55,6 +55,7 @@ pub fn run(
     projects_and_targets: Vec<String>,
     copy_branches: bool,
     days_of_history: u64,
+    tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
     match origin {
@@ -75,7 +76,7 @@ pub fn run(
         ),
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, app)?;
+    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, tracker, app)?;
     set_up_hooks(&sparse_repo_path)
 }
 
@@ -198,6 +199,7 @@ fn clone_remote(
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
+    tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
     {
@@ -211,7 +213,7 @@ fn set_up_sparse_repo(
         repo.create_working_tree()
             .context("Failed to create the working tree")?;
 
-        Tracker::default()
+        tracker
             .ensure_registered(sparse_repo_path, app.clone())
             .context("Registering repo")?;
     }
@@ -240,7 +242,7 @@ fn set_up_sparse_repo(
 
     set_up_bazel_preflight_script(sparse_repo_path)?;
 
-    Tracker::default()
+    tracker
         .ensure_registered(sparse_repo_path, app)
         .context("adding sparse repo to the list of tracked repos")?;
 
