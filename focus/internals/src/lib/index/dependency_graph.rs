@@ -228,11 +228,7 @@ pub fn get_files_to_materialize(
     // file materialization process.
     let prelude_deps = get_prelude_deps(ctx)?;
     debug!(?prelude_deps, "Prelude deps");
-    dep_keys.extend(
-        prelude_deps
-            .into_iter()
-            .map(|label| DependencyKey::BazelBuildFile(label)),
-    );
+    dep_keys.extend(prelude_deps.into_iter().map(DependencyKey::BazelBuildFile));
 
     // Recursively resolve each dependency's content hashes.
     let mut paths_to_materialize = HashSet::new();

@@ -23,6 +23,7 @@ pub use macos::has_session_been_idle_for;
 
 /// Default implementation
 #[cfg(not(target_os = "macos"))]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn has_session_been_idle_for(_at_least: std::time::Duration) -> SessionStatus {
     SessionStatus::Unknown
 }

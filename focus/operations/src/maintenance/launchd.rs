@@ -236,6 +236,8 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument]
+#[cfg(target_os = "macos")]
 fn schedule_defaults_for(tp: TimePeriod, plist_opts: ScheduledJobOpts) -> ScheduledJobOpts {
     match tp {
         // for the hourly time period we use every_n_minutes to schedule
