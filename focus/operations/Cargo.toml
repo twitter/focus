@@ -3,6 +3,9 @@ name = "focus-operations"
 version = "0.5.4"
 edition = "2021"
 
+[features]
+ci = []
+
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 content-addressed-cache = { path = "../../content-addressed-cache" }

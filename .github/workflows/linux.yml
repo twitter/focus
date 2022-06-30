@@ -44,4 +44,4 @@ jobs:
 
       - name: Run Rust tests (no default features)
         timeout-minutes: 10
-        run: cargo test --no-default-features --examples --tests --workspace
+        run: cargo test --no-default-features --features ci --examples --tests --workspace
