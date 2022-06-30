@@ -118,6 +118,7 @@ pub fn fetch_all_tags<P: AsRef<Path>>(
     let description = format!("Fetching from {}", &remote);
     let mut args = vec![
         String::from("fetch"),
+        remote.to_owned(),
         String::from("--prune"),
         String::from("--prune-tags"),
         String::from("--tags"),
