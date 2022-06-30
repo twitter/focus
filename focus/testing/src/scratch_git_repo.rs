@@ -104,13 +104,7 @@ impl ScratchGitRepo {
             .arg("-c")
             .arg(name)
             .status()
-            .with_context(|| {
-                format!(
-                    "ScratchGitRepo failed to switch to branch {} in repo {:?}",
-                    name,
-                    self.path()
-                )
-            })?;
+            .with_context(|| format!("ScratchGitRepo failed to switch to branch {} in repo {:?}", name, self.path()))?;
 
         Ok(())
     }

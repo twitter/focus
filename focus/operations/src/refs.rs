@@ -209,6 +209,7 @@ pub fn expire_old_refs(
 
     let ref_file = File::open(ref_file_path).context("re-opening the ref file")?;
     let (mut cmd, scmd) = SandboxCommand::new_with_handles(
+        "expire refs with update-ref",
         git_helper::git_binary(),
         Some(Stdio::from(ref_file)),
         None,
@@ -222,6 +223,7 @@ pub fn expire_old_refs(
             .arg("--stdin")
             .arg("-z"),
         SandboxCommandOutput::All,
+        "expiring refs",
     )
     .map(|_| ())
 }

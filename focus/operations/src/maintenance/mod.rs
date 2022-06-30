@@ -222,7 +222,8 @@ impl Runner {
     fn run_git_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
         let exec_path: PathBuf = git_helper::git_exec_path(&self.git_binary_path)?;
 
-        let (mut cmd, sb_cmd) = SandboxCommand::new(&self.git_binary_path, self.app.clone())?;
+        let (mut cmd, sb_cmd) =
+            SandboxCommand::new("git maintenance", &self.git_binary_path, self.app.clone())?;
 
         // TODO: this needs to log and capture output for debugging if necessary
         Ok(MaintResult::Success(
@@ -239,6 +240,7 @@ impl Runner {
                     .arg(format!("--schedule={}", time_period.name()))
                     .current_dir(repo_path),
                     SandboxCommandOutput::Stderr,
+                    "git maintenance",
                 )
                 .with_context(|| {
                     format!(

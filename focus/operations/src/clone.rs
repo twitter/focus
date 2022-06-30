@@ -282,10 +282,13 @@ fn clone_shallow(
         .parent()
         .context("Failed to determine sparse repo parent directory")?;
 
+    let description = format!("Cloning {} to {}", source_url, destination_path.display());
+
     let shallow_since_datestamp =
         focus_util::time::formatted_datestamp_at_day_in_past(days_of_history)?;
 
-    let (mut cmd, scmd) = git_helper::git_command(app)?;
+    // TODO: Reconsider single-branch
+    let (mut cmd, scmd) = git_helper::git_command(description, app)?;
     let mut args: Vec<OsString> = vec![
         "clone".into(),
         "--no-checkout".into(),
@@ -302,9 +305,10 @@ fn clone_shallow(
     scmd.ensure_success_or_log(
         cmd.current_dir(sparse_repo_dir_parent).args(args),
         SandboxCommandOutput::Stderr,
+        "clone",
     )
-    .context("git clone failed")?;
-    Ok(())
+    .map(|_| ())
+    .context("git clone failed")
 }
 
 fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<App>) -> Result<()> {
@@ -362,13 +366,14 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
 
         // Delete existing remote in the sparse repo if it exists. This is a workaround because `remote_delete` is not working correctly.
         if sparse_repo.find_remote(remote_name).is_ok() {
-            let (mut cmd, scmd) = git_helper::git_command(app.clone())?;
+            let (mut cmd, scmd) = git_helper::git_command("Removing remote", app.clone())?;
             let _ = scmd.ensure_success_or_log(
                 cmd.current_dir(sparse_workdir)
                     .arg("remote")
                     .arg("remove")
                     .arg(remote_name),
                 SandboxCommandOutput::Stderr,
+                "Removing remote",
             )?;
         }
 
@@ -478,8 +483,9 @@ fn copy_local_branches(
         .map(|(name, _)| name.to_string())
         .collect::<Vec<String>>()
         .join(" ");
+    let description = format!("Fetching user branches {}", branch_list_output);
 
-    let (mut cmd, scmd) = git_helper::git_command(app)?;
+    let (mut cmd, scmd) = git_helper::git_command(&description, app)?;
     let mut args: Vec<OsString> = vec!["fetch".into(), "--no-tags".into()];
     args.push("origin".into());
     valid_local_branches
@@ -488,6 +494,7 @@ fn copy_local_branches(
     scmd.ensure_success_or_log(
         cmd.current_dir(sparse_repo.path()).args(args),
         SandboxCommandOutput::Stderr,
+        &description,
     )
     .map(|_| ())
     .with_context(|| {

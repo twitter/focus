@@ -21,8 +21,7 @@ use super::git_trace2;
 #[derive(
     Debug,
     Clone,
-    PartialEq,
-    Eq,
+    PartialEq, Eq,
     Serialize,
     Deserialize,
     strum_macros::Display,
@@ -451,8 +450,7 @@ impl From<GitEvent> for Complete {
 #[derive(
     Debug,
     Clone,
-    PartialEq,
-    Eq,
+    PartialEq, Eq,
     Serialize,
     Deserialize,
     strum_macros::Display,

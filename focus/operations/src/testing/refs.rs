@@ -46,13 +46,7 @@ impl Fixture {
             .arg(&name)
             .current_dir(containing_dir)
             .status()
-            .with_context(|| {
-                format!(
-                    "Initialzing {} repository in {}",
-                    &name,
-                    containing_dir.display()
-                )
-            })?;
+            .context("git init failed")?;
 
         let repo_path = containing_dir.join(&name);
 
@@ -62,9 +56,7 @@ impl Fixture {
             .arg("main")
             .current_dir(&repo_path)
             .status()
-            .with_context(|| {
-                format!("Creating main branch in {} repository", repo_path.display())
-            })?;
+            .context("git switch failed")?;
 
         Ok(repo_path)
     }
