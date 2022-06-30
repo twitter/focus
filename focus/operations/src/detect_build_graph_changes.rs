@@ -105,8 +105,8 @@ fn notify(repo: &Repo, repo_name: &str, message: &str, _persistent: bool) -> Res
 }
 
 #[cfg(not(target_os = "macos"))]
-fn notify(_repo: &Repo, _subtitle: &str, message: &str, _persistent: bool) -> Result<()> {
-    warn!(repo = repo_name, message);
+fn notify(repo: &Repo, _subtitle: &str, message: &str, _persistent: bool) -> Result<()> {
+    warn!(repo_path = ?repo.git_dir(), message);
     Ok(())
 }
 
