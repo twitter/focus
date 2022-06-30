@@ -563,6 +563,7 @@ mod test {
     };
 
     use anyhow::{bail, Context, Result};
+    use assert_cmd::prelude::OutputAssertExt;
     use git2::Repository;
     use tracing::info;
 
@@ -621,8 +622,8 @@ mod test {
             .arg("origin")
             .arg("https://git.twitter.biz/focus-test-repo")
             .current_dir(&fixture.dense_repo_path)
-            .status()
-            .expect("git remote set-url failed");
+            .assert()
+            .success();
 
         // Make a branch that shouldn't end up in the sparse repo
         fixture

@@ -11,6 +11,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
+use assert_cmd::prelude::OutputAssertExt;
 use tempfile::TempDir;
 
 use tracing::{info, warn};
@@ -137,8 +138,8 @@ impl RepoPairFixture {
             .arg("fetch")
             .arg(remote_name)
             .current_dir(&path)
-            .status()
-            .expect("git pull failed");
+            .assert()
+            .success();
         let fetch_head_path = path.join(".git").join("FETCH_HEAD");
         Self::parse_fetch_head(fetch_head_path)
     }
@@ -161,8 +162,8 @@ impl RepoPairFixture {
             .arg(remote_name)
             .arg(branch)
             .current_dir(&path)
-            .status()
-            .expect("git pull failed");
+            .assert()
+            .success();
 
         Ok(())
     }

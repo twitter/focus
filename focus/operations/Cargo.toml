@@ -40,6 +40,7 @@ which = "4.2.4"
 whoami = "1.2.1"
 
 [dev-dependencies]
+assert_cmd = "2.0.4"
 criterion = "0.3.5"
 focus-testing = { path = "../testing" }
 insta = "1.13.0"

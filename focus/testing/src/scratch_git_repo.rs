@@ -3,6 +3,7 @@
 
 use crate::GitBinary;
 use anyhow::{bail, Context, Result};
+use assert_cmd::prelude::OutputAssertExt;
 use git2::Repository;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -57,16 +58,16 @@ impl ScratchGitRepo {
             .arg("-r")
             .arg(fixture_path)
             .arg(destination_path)
-            .status()
-            .expect("copy failed");
+            .assert()
+            .success();
 
         // Initialize the destination path as a Git repo
         git_binary
             .command()
             .arg("init")
             .current_dir(destination_path)
-            .status()
-            .expect("init failed");
+            .assert()
+            .success();
         Self::configure_repo(&git_binary, destination_path)?;
 
         // Create the named branch
@@ -77,8 +78,8 @@ impl ScratchGitRepo {
             .arg("-b")
             .arg(branch)
             .current_dir(destination_path)
-            .status()
-            .expect("checkout branch failed");
+            .assert()
+            .success();
 
         // Add everything and commit it
         git_binary
@@ -87,8 +88,8 @@ impl ScratchGitRepo {
             .arg("--")
             .arg(".")
             .current_dir(&destination_path)
-            .status()
-            .expect("add failed");
+            .assert()
+            .success();
 
         git_binary
             .command()
@@ -96,8 +97,9 @@ impl ScratchGitRepo {
             .arg("-m")
             .arg("Initial import")
             .current_dir(&destination_path)
-            .status()
-            .expect("commit failed");
+            .assert()
+            .success();
+
         Ok(Self {
             git_binary,
             path: destination_path.to_owned(),
@@ -161,8 +163,8 @@ impl ScratchGitRepo {
             .arg("init")
             .arg(&name)
             .current_dir(containing_dir)
-            .status()
-            .expect("git init failed");
+            .assert()
+            .success();
         let repo_path = containing_dir.join(&name);
         Self::configure_repo(git_binary, &repo_path)?;
 
@@ -172,8 +174,8 @@ impl ScratchGitRepo {
             .arg("-c")
             .arg("main")
             .current_dir(&repo_path)
-            .status()
-            .expect("git switch failed");
+            .assert()
+            .success();
 
         let mut test_file = repo_path.clone();
         test_file.push("d_0_0");
@@ -199,8 +201,8 @@ impl ScratchGitRepo {
             .arg("--")
             .arg(".")
             .current_dir(&repo_path)
-            .status()
-            .expect("add failed");
+            .assert()
+            .success();
 
         git_binary
             .command()
@@ -209,8 +211,8 @@ impl ScratchGitRepo {
             .arg("-m")
             .arg("Test commit")
             .current_dir(&repo_path)
-            .status()
-            .expect("commit failed");
+            .assert()
+            .success();
 
         Ok(repo_path)
     }
@@ -232,9 +234,8 @@ impl ScratchGitRepo {
                 &qualified_origin,
                 destination.as_os_str(),
             ])
-            .spawn()?
-            .wait()
-            .expect("clone failed");
+            .assert()
+            .success();
         Ok(())
     }
 
@@ -243,14 +244,14 @@ impl ScratchGitRepo {
             .command()
             .args(["config", "user.email", "example@example.com"])
             .current_dir(repo_dir)
-            .status()
-            .expect("git config user.email failed");
+            .assert()
+            .success();
         git_binary
             .command()
             .args(["config", "user.name", "Example"])
             .current_dir(repo_dir)
-            .status()
-            .expect("git config user.name failed");
+            .assert()
+            .success();
         Ok(())
     }
 
