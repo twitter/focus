@@ -146,12 +146,10 @@ impl WorkingTree {
                 "init",
                 if cone { "--cone" } else { "--no-cone" },
             ];
-            let description = format!("Running git {:?} in {}", args, self.work_dir().display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app.clone())?;
+            let (mut cmd, scmd) = git_helper::git_command(app.clone())?;
             scmd.ensure_success_or_log(
                 cmd.current_dir(self.work_dir()).args(args),
                 SandboxCommandOutput::Stderr,
-                &description,
             )
             .with_context(|| format!("In working tree {}", self.work_dir().display()))
             .context("git sparse-checkout init failed")?;
@@ -161,12 +159,10 @@ impl WorkingTree {
         info!("Checking out");
         {
             let args = vec!["checkout"];
-            let description = format!("Running git {:?} in {}", args, self.work_dir().display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
+            let (mut cmd, scmd) = git_helper::git_command(app)?;
             scmd.ensure_success_or_log(
                 cmd.current_dir(self.work_dir()).args(args),
                 SandboxCommandOutput::Stderr,
-                &description,
             )
             .with_context(|| format!("In working tree {:?}", self.work_dir()))
             .context("git checkout failed")?;
@@ -197,14 +193,17 @@ impl WorkingTree {
         }
         args.push(&commit_id_str);
 
-        let description = format!("Running git {:?} in {}", args, self.work_dir().display());
-        let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
+        let (mut cmd, scmd) = git_helper::git_command(app)?;
         scmd.ensure_success_or_log(
             cmd.current_dir(self.work_dir()).args(args),
             SandboxCommandOutput::Stderr,
-            &description,
         )
-        .context("git switch failed")?;
+        .with_context(|| {
+            format!(
+                "Switching to commit {} failed (detach={}, discard_changes={})",
+                &commit_id_str, detach, discard_changes
+            )
+        })?;
 
         Ok(())
     }
@@ -342,14 +341,11 @@ impl WorkingTree {
 
     /// Determine if the working tree is clean
     pub fn is_clean(&self, app: Arc<App>) -> Result<bool> {
-        Ok(git_helper::run_consuming_stdout(
-            "git status",
-            self.work_dir(),
-            vec!["status", "--porcelain"],
-            app,
-        )?
-        .trim()
-        .is_empty())
+        Ok(
+            git_helper::run_consuming_stdout(self.work_dir(), vec!["status", "--porcelain"], app)?
+                .trim()
+                .is_empty(),
+        )
     }
 
     pub fn read_uuid(&self) -> Result<Option<Uuid>> {
@@ -776,8 +772,7 @@ impl Repo {
 
         // Add the worktree
         {
-            let description = format!("Creating outlining tree worktree in {}", path.display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), self.app.clone())?;
+            let (mut cmd, scmd) = git_helper::git_command(self.app.clone())?;
             let cmd = cmd
                 .current_dir(&self.path)
                 .arg("worktree")
@@ -785,9 +780,8 @@ impl Repo {
                 .arg("--no-checkout")
                 .arg(&path)
                 .arg("HEAD");
-            scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr, &description)
-                .context("git worktree add failed")
-                .map(|_| ())?;
+            scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr)
+                .context("git worktree add failed")?;
         }
 
         let working_tree = WorkingTree::new(git2::Repository::open(self.working_tree_git_dir())?)?;
