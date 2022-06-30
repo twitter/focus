@@ -61,11 +61,8 @@ pub fn git_dir(path: &Path) -> Result<PathBuf> {
     Ok(git2::Repository::open(path)?.path().to_path_buf())
 }
 
-pub fn git_command<S: AsRef<str>>(
-    description: S,
-    app: Arc<App>,
-) -> Result<(Command, SandboxCommand)> {
-    SandboxCommand::new(description.as_ref().to_owned(), git_binary(), app)
+pub fn git_command(app: Arc<App>) -> Result<(Command, SandboxCommand)> {
+    SandboxCommand::new(git_binary(), app)
 }
 
 pub fn remote_add<P: AsRef<Path>>(
@@ -74,8 +71,7 @@ pub fn remote_add<P: AsRef<Path>>(
     url: &OsStr,
     app: Arc<App>,
 ) -> Result<()> {
-    let description = format!("Adding remote {} ({})", &name, &url.to_string_lossy());
-    let (mut cmd, scmd) = git_command(description, app)?;
+    let (mut cmd, scmd) = git_command(app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(repo_path)
             .arg("remote")
@@ -83,7 +79,6 @@ pub fn remote_add<P: AsRef<Path>>(
             .arg(name)
             .arg(url),
         SandboxCommandOutput::Stderr,
-        "git remote add",
     )
     .map(|_| ())
 }
@@ -95,8 +90,7 @@ pub fn fetch_refs<P: AsRef<Path>>(
     app: Arc<App>,
     depth: Option<u64>,
 ) -> Result<()> {
-    let description = format!("Fetching from {}", &remote);
-    let (mut cmd, scmd) = git_command(description, app)?;
+    let (mut cmd, scmd) = git_command(app)?;
     cmd.current_dir(repo_path).arg("fetch").arg("--force");
     if let Some(d) = depth {
         cmd.arg(format!("--depth={}", d));
@@ -105,7 +99,7 @@ pub fn fetch_refs<P: AsRef<Path>>(
     for s in refspecs {
         cmd.arg(s.as_ref());
     }
-    scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr, "git fetch refspec")
+    scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr)
         .map(|_| ())
 }
 
@@ -115,7 +109,6 @@ pub fn fetch_all_tags<P: AsRef<Path>>(
     app: Arc<App>,
     depth: Option<u64>,
 ) -> Result<String> {
-    let description = format!("Fetching from {}", &remote);
     let mut args = vec![
         String::from("fetch"),
         remote.to_owned(),
@@ -128,13 +121,11 @@ pub fn fetch_all_tags<P: AsRef<Path>>(
     if let Some(d) = depth {
         args.push(format!("--depth={}", d));
     }
-    run_consuming_stdout(&description, repo_path.as_ref(), args, app)
+    run_consuming_stdout(repo_path.as_ref(), args, app)
 }
 
 pub fn ls_remote(remote: &str, app: Arc<App>) -> Result<String> {
-    let description = format!("ls-remote on {}", &remote);
     run_consuming_stdout(
-        &description,
         std::env::current_dir().unwrap(),
         vec!["ls-remote", "--tags", remote],
         app,
@@ -149,12 +140,10 @@ pub fn push_refs<P: AsRef<Path>>(
 ) -> Result<()> {
     let mut args = vec![String::from("push"), remote.to_owned()];
     args.extend(refspecs);
-    let description = format!("Pushing to {}", &remote);
-    let (mut cmd, scmd) = git_command(description, app)?;
+    let (mut cmd, scmd) = git_command(app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(repo_path).args(args),
         SandboxCommandOutput::Stderr,
-        "git push",
     )
     .map(|_| ())
 }
@@ -165,12 +154,10 @@ pub fn write_config<P: AsRef<Path>>(
     val: &str,
     app: Arc<App>,
 ) -> Result<()> {
-    let description = format!("Setting Git config {} {}", key, val);
-    let (mut cmd, scmd) = git_command(description, app)?;
+    let (mut cmd, scmd) = git_command(app)?;
     scmd.ensure_success_or_log(
         cmd.current_dir(repo_path).arg("config").arg(key).arg(val),
         SandboxCommandOutput::Stderr,
-        "git config (write)",
     )
     .map(|_| ())
 }
@@ -180,8 +167,7 @@ pub fn read_config<P: AsRef<Path>>(
     key: &str,
     app: Arc<App>,
 ) -> Result<Option<String>> {
-    let description = format!("Reading Git config {}", key);
-    if let Ok(result) = run_consuming_stdout(description, repo_path, &["config", key], app) {
+    if let Ok(result) = run_consuming_stdout(repo_path, &["config", key], app) {
         return Ok(Some(result));
     }
 
@@ -189,8 +175,7 @@ pub fn read_config<P: AsRef<Path>>(
 }
 
 pub fn unset_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> Result<()> {
-    let description = format!("git config --unset {}", key);
-    let (mut cmd, _scmd) = git_command(description, app)?;
+    let (mut cmd, _scmd) = git_command(app)?;
     cmd.arg("config")
         .arg("--unset")
         .arg(key)
@@ -200,19 +185,13 @@ pub fn unset_config<P: AsRef<Path>>(repo_path: P, key: &str, app: Arc<App>) -> R
     Ok(())
 }
 
-pub fn run_consuming_stdout<S, P, I, O>(
-    description: S,
-    repo: P,
-    args: I,
-    app: Arc<App>,
-) -> Result<String>
+pub fn run_consuming_stdout<P, I, O>(repo: P, args: I, app: Arc<App>) -> Result<String>
 where
-    S: AsRef<str>,
     P: AsRef<Path>,
     I: IntoIterator<Item = O>,
     O: AsRef<OsStr>,
 {
-    let (mut cmd, scmd) = git_command(description, app)?;
+    let (mut cmd, scmd) = git_command(app)?;
     if let Err(e) = cmd.current_dir(repo).args(args).status() {
         scmd.log(SandboxCommandOutput::Stderr, "git command")?;
         bail!("git command failed: {}", e);
@@ -225,13 +204,8 @@ where
 pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
     if let Ok(path) = std::fs::canonicalize(path) {
         Ok(PathBuf::from(
-            run_consuming_stdout(
-                format!("Finding top level of repo in {}", path.display()),
-                path,
-                &["rev-parse", "--show-toplevel"],
-                app,
-            )
-            .context("Finding the repo's top level failed")?,
+            run_consuming_stdout(path, &["rev-parse", "--show-toplevel"], app)
+                .context("Finding the repo's top level failed")?,
         ))
     } else {
         bail!(
@@ -242,21 +216,11 @@ pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
 }
 
 pub fn get_current_revision(app: Arc<App>, repo: &Path) -> Result<String> {
-    run_consuming_stdout(
-        format!("Determining the current commit in repo {}", repo.display()),
-        repo,
-        &["rev-parse", "HEAD"],
-        app,
-    )
+    run_consuming_stdout(repo, &["rev-parse", "HEAD"], app)
 }
 
 pub fn get_current_branch(app: Arc<App>, repo: &Path) -> Result<String> {
-    run_consuming_stdout(
-        format!("Determining the current branch in repo {}", repo.display()),
-        repo,
-        &["branch", "--show-current"],
-        app,
-    )
+    run_consuming_stdout(repo, &["branch", "--show-current"], app)
 }
 
 // Switches to a branch in a given repository, switching back to the previous branch afterwards
@@ -326,14 +290,7 @@ impl BranchSwitch {
     }
 
     fn switch(&self, branch_name: &str, detach: bool) -> Result<()> {
-        let attachment_description = if detach { "detached" } else { "attached" };
-        let description = format!(
-            "Switching to {} in {} ({})",
-            &branch_name,
-            self.repo.display(),
-            attachment_description,
-        );
-        let (mut cmd, scmd) = git_command(description.clone(), self.app.clone())?;
+        let (mut cmd, scmd) = git_command(self.app.clone())?;
         let cmd = cmd.arg("switch").current_dir(&self.repo);
         if detach {
             cmd.arg("--detach");
@@ -346,7 +303,7 @@ impl BranchSwitch {
                 alternate_path.as_os_str(),
             );
         }
-        scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr, &description)?;
+        scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr)?;
 
         Ok(())
     }
