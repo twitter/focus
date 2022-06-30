@@ -19,12 +19,8 @@ pub fn run_clone(mut clone_builder: CloneBuilder, app: Arc<App>) -> Result<()> {
     (&mut clone_builder).add_clone_args(vec!["--progress"]);
     let (mut cmd, scmd) = clone_builder.build(app)?;
 
-    scmd.ensure_success_or_log(
-        &mut cmd,
-        SandboxCommandOutput::Stderr,
-        "perform clone of the repo",
-    )
-    .map(|_| ())
+    scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr)
+        .map(|_| ())
 }
 
 #[derive(Debug, Eq, Hash, PartialEq)]
@@ -106,14 +102,13 @@ pub fn run(
     }
 
     {
-        let (mut cmd, scmd) = git_helper::git_command("Clone repo", app)?;
+        let (mut cmd, scmd) = git_helper::git_command(app)?;
         scmd.ensure_success_or_log(
             cmd.arg("fetch")
                 .arg("--no-tags")
                 .arg("origin")
                 .current_dir(temp_path),
             SandboxCommandOutput::Stderr,
-            "do first fetch in new repo",
         )?;
     }
 
@@ -198,7 +193,7 @@ impl CloneBuilder {
             opt_args.push(kv);
         }
 
-        let (mut cmd, scmd) = git_helper::git_command("Clone repo", app)?;
+        let (mut cmd, scmd) = git_helper::git_command(app)?;
 
         cmd.args(self.git_args)
             .arg("clone")
