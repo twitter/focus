@@ -92,27 +92,37 @@ fn is_ignored_subcommand(subcommand: &str) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-fn notify(repo_name: &str, message: &str, _persistent: bool) -> Result<()> {
+#[allow(unused_variables)]
+fn notify(repo: &Repo, repo_name: &str, message: &str, _persistent: bool) -> Result<()> {
     warn!(repo = repo_name, message);
-    #[allow(unused_variables)]
-    let subtitle = format!("\u{1F4C1} {} \u{1F3AF} Focused Repo", repo_name);
+
     #[cfg(not(test))]
-    let _ = notify_rust::Notification::new()
-        .appname("focus")
-        .subtitle(&subtitle)
-        .body(message)
-        .show();
+    {
+        use focus_internals::model::configuration::NotificationCategory;
+        if repo
+            .config()
+            .notification
+            .is_allowed(NotificationCategory::BuildGraphState)
+        {
+            let subtitle = format!("\u{1F4C1} {} \u{1F3AF} Focused Repo", repo_name);
+            let _ = notify_rust::Notification::new()
+                .appname("focus")
+                .subtitle(&subtitle)
+                .body(message)
+                .show();
+        }
+    }
 
     Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
-fn notify(_subtitle: &str, message: &str, _persistent: bool) -> Result<()> {
+fn notify(_repo: &Repo, _subtitle: &str, message: &str, _persistent: bool) -> Result<()> {
     warn!(repo = repo_name, message);
     Ok(())
 }
 
-pub fn run(repo: &Path, advisory: bool, args: Vec<String>, app: Arc<App>) -> Result<ExitCode> {
+pub fn run(repo_path: &Path, advisory: bool, args: Vec<String>, app: Arc<App>) -> Result<ExitCode> {
     if let Some(subcommand) = args.get(0) {
         if is_ignored_subcommand(subcommand) {
             return Ok(ExitCode(0));
@@ -122,7 +132,7 @@ pub fn run(repo: &Path, advisory: bool, args: Vec<String>, app: Arc<App>) -> Res
     // TODO: Consider removing uncommitted change detection since we can't perform operations in repos without a clean working tree anyway.
     let (uncommitted_tx, uncommitted_rx) = mpsc::channel();
     let uncommited_finder_thread = {
-        let cloned_repo = repo.to_path_buf();
+        let cloned_repo = repo_path.to_path_buf();
         let cloned_sandbox = app.clone();
 
         std::thread::spawn(move || {
@@ -137,8 +147,8 @@ pub fn run(repo: &Path, advisory: bool, args: Vec<String>, app: Arc<App>) -> Res
 
     let (committed_tx, committed_rx) = mpsc::channel();
     let committed_finder_thread = {
-        let cloned_repo = repo.to_path_buf();
-        let cloned_sandbox = app;
+        let cloned_repo = repo_path.to_path_buf();
+        let cloned_sandbox = app.clone();
 
         std::thread::spawn(move || {
             committed_tx
@@ -167,23 +177,25 @@ pub fn run(repo: &Path, advisory: bool, args: Vec<String>, app: Arc<App>) -> Res
     let failing_exit_code = if advisory { ExitCode(0) } else { ExitCode(1) }; // If we are running in advisory mode, just report the error and exit 0.
 
     // Treat the repo's file name as the title of the repo. It should be absolute in most cases since `main` sends us the result of calling `git rev-parse --show-toplevel`, which canonicalizes paths. For tests, etc, we treat the name as "unknown" otherwise.
-    let repo_name = if repo.is_absolute() {
-        repo.file_name().unwrap().to_str().unwrap_or("Unknown")
+    let repo_name = if repo_path.is_absolute() {
+        repo_path.file_name().unwrap().to_str().unwrap_or("Unknown")
     } else {
         "Unknown"
     };
 
+    let repo = Repo::open(repo_path, app)?;
     if !committed_changes.is_empty() && !uncommitted_changes.is_empty() {
-        notify(repo_name, "Committed and uncommitted changes affect the build graph, please commit changes and run `focus sync` to update the sparse checkout!", true)?;
+        notify(&repo, repo_name, "Committed and uncommitted changes affect the build graph, please commit changes and run `focus sync` to update the sparse checkout!", true)?;
         Ok(failing_exit_code)
     } else if !committed_changes.is_empty() {
-        notify(repo_name, "Committed changes affect the build graph, please run `focus sync` to update the sparse checkout!", true)?;
+        notify(&repo, repo_name, "Committed changes affect the build graph, please run `focus sync` to update the sparse checkout!", true)?;
         Ok(failing_exit_code)
     } else if !uncommitted_changes.is_empty() {
-        notify(repo_name, "Uncommitted changes affect the build graph, please commit changes and run `focus sync` to update the sparse checkout!", true)?;
+        notify(&repo, repo_name, "Uncommitted changes affect the build graph, please commit changes and run `focus sync` to update the sparse checkout!", true)?;
         Ok(failing_exit_code)
     } else {
         notify(
+            &repo,
             repo_name,
             "No changes to files affecting the build graph were detected",
             false,
