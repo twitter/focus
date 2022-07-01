@@ -525,6 +525,7 @@ mod tests {
         }
 
         let git_binary = GitBinary {
+            home_temp_dir: None,
             git_binary_path: "/path/to/bin/git".into(),
             git_exec_path: "/path/to/lib/gitcore".into(),
         };

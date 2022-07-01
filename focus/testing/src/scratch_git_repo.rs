@@ -68,7 +68,6 @@ impl ScratchGitRepo {
             .current_dir(destination_path)
             .assert()
             .success();
-        Self::configure_repo(&git_binary, destination_path)?;
 
         // Create the named branch
         git_binary
@@ -166,7 +165,6 @@ impl ScratchGitRepo {
             .assert()
             .success();
         let repo_path = containing_dir.join(&name);
-        Self::configure_repo(git_binary, &repo_path)?;
 
         git_binary
             .command()
@@ -234,22 +232,6 @@ impl ScratchGitRepo {
                 &qualified_origin,
                 destination.as_os_str(),
             ])
-            .assert()
-            .success();
-        Ok(())
-    }
-
-    fn configure_repo(git_binary: &GitBinary, repo_dir: &Path) -> Result<()> {
-        git_binary
-            .command()
-            .args(["config", "user.email", "example@example.com"])
-            .current_dir(repo_dir)
-            .assert()
-            .success();
-        git_binary
-            .command()
-            .args(["config", "user.name", "Example"])
-            .current_dir(repo_dir)
             .assert()
             .success();
         Ok(())
