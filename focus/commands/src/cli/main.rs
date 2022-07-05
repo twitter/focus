@@ -248,6 +248,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         },
         Subcommand::Branch { subcommand, .. } => match subcommand {
             BranchSubcommand::List { .. } => "branch-list".to_string(),
+            BranchSubcommand::Search { .. } => "branch-search".to_string(),
         },
         Subcommand::Init { .. } => "init".to_string(),
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
@@ -413,6 +414,16 @@ enum RepoSubcommand {
 enum BranchSubcommand {
     /// List branches in repo
     List {},
+
+    /// Search for branches using a search term
+    Search {
+        /// Substring used to search refs in the remote server
+        /// 
+        /// Ex: 
+        /// 
+        /// 'user' would match with branch 'user' and 'user/branch-1'.
+        search_term: String,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -750,7 +761,11 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
 
         Subcommand::Branch { subcommand, repo, remote_name } => match subcommand {
             BranchSubcommand::List {} => {
-                focus_operations::branch::list(app.clone(), repo, &remote_name)?;
+                focus_operations::branch::list(app, repo, &remote_name)?;
+                Ok(ExitCode(0))
+            },
+            BranchSubcommand::Search { search_term } => {
+                focus_operations::branch::search(app, repo, &remote_name, &search_term)?;
                 Ok(ExitCode(0))
             }
         },
