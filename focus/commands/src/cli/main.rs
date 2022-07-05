@@ -116,6 +116,19 @@ enum Subcommand {
         subcommand: RefsSubcommand,
     },
 
+    /// Manage branches and branch prefixes in the repo
+    Branch {
+        /// The repo path to manage branches for
+        #[clap(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+
+        #[clap(long, default_value = "origin")]
+        remote_name: String,
+
+        #[clap(subcommand)]
+        subcommand: BranchSubcommand
+    },
+
     /// Set up an initial clone of the repo from the remote
     Init {
         /// By default we take 90 days of history, pass a date with this option
@@ -232,6 +245,9 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             RefsSubcommand::Delete { .. } => "refs-delete".to_string(),
             RefsSubcommand::ListExpired { .. } => "refs-list-expired".to_string(),
             RefsSubcommand::ListCurrent { .. } => "refs-list-current".to_string(),
+        },
+        Subcommand::Branch { subcommand, .. } => match subcommand {
+            BranchSubcommand::List { .. } => "branch-list".to_string(),
         },
         Subcommand::Init { .. } => "init".to_string(),
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
@@ -391,6 +407,12 @@ enum RepoSubcommand {
 
     /// Attempt to repair the registry of repositories
     Repair {},
+}
+
+#[derive(Parser, Debug)]
+enum BranchSubcommand {
+    /// List branches in repo
+    List {},
 }
 
 #[derive(Parser, Debug)]
@@ -725,6 +747,13 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 }
             }
         }
+
+        Subcommand::Branch { subcommand, repo, remote_name } => match subcommand {
+            BranchSubcommand::List {} => {
+                focus_operations::branch::list(app.clone(), repo, &remote_name)?;
+                Ok(ExitCode(0))
+            }
+        },
 
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List {} => {
