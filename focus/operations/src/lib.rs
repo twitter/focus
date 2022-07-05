@@ -4,6 +4,7 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod background;
+pub mod branch;
 pub mod clone;
 pub mod detect_build_graph_changes;
 pub mod ensure_clean;
