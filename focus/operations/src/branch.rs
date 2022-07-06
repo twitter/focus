@@ -6,7 +6,10 @@ use std::{path::PathBuf, sync::Arc};
 use anyhow::{Context, Result};
 
 use focus_internals::model::repo::Repo;
-use focus_util::{app::App, git_helper::ConfigExt};
+use focus_util::{
+    app::{App, ExitCode},
+    git_helper::ConfigExt,
+};
 use tracing::error;
 
 pub fn list(app: Arc<App>, sparse_repo_path: PathBuf, remote_name: &str) -> Result<()> {
@@ -21,10 +24,10 @@ pub fn list(app: Arc<App>, sparse_repo_path: PathBuf, remote_name: &str) -> Resu
     let fetchspecs = config
         .multivar_values(format!("remote.{}.fetch", remote_name), None)
         .context("Could not get refspecs from git config")?;
+    let str_fetchspecs = fetchspecs.iter().map(|spec| spec.as_str()).collect();
 
-    let branch_names =
-        get_ref_names_from_refspecs(fetchspecs.iter().map(|spec| spec.as_str()).collect())
-            .context("Could not determine ref names from refspecs in config")?;
+    let branch_names = get_ref_names_from_refspecs(str_fetchspecs)
+        .context("Could not determine ref names from refspecs in config")?;
     for branch in branch_names {
         println!("{}", branch);
     }
@@ -55,6 +58,30 @@ pub fn search(
     }
 
     Ok(())
+}
+
+pub fn add(
+    app: Arc<App>,
+    sparse_repo_path: PathBuf,
+    remote_name: &str,
+    branch: &str,
+) -> Result<ExitCode> {
+    let repo = Repo::open(&sparse_repo_path, app).context("Failed to open repo")?;
+    let underlying_repo = repo.underlying();
+
+    // This will probably be more complex when we add `--prefix` option
+    if branch.ends_with("/*") || branch.ends_with('/') {
+        error!(
+            "Invalid branch name {}. The specified branch name should not end with a wildcard or '/'.",
+            branch
+        );
+        return Ok(ExitCode(1));
+    } else {
+        let fetch_refspec = format!("+refs/heads/{}:refs/remotes/origin/{}", branch, branch);
+        underlying_repo.remote_add_fetch(remote_name, &fetch_refspec)?;
+    }
+
+    Ok(ExitCode(0))
 }
 
 fn filter_ref_names_from_remote<'a>(
@@ -106,6 +133,46 @@ mod testing {
     use git2::Repository;
 
     use super::*;
+
+    #[test]
+    fn test_add_then_list_outputs_correct() -> anyhow::Result<()> {
+        let temp_sparse_dir = tempfile::tempdir()?;
+        let scratch_sparse = ScratchGitRepo::new_static_fixture(temp_sparse_dir.path())?;
+        let app = Arc::new(App::new_for_testing()?);
+
+        let success_exit = super::add(
+            app.clone(),
+            scratch_sparse.path().to_path_buf(),
+            "origin",
+            "test1",
+        )?;
+        assert_eq!(success_exit, ExitCode(0));
+        let fail_exit_1 = super::add(
+            app.clone(),
+            scratch_sparse.path().to_path_buf(),
+            "origin",
+            "test2/",
+        )?;
+        assert_eq!(fail_exit_1, ExitCode(1));
+
+        let fail_exit_2 = super::add(
+            app.clone(),
+            scratch_sparse.path().to_path_buf(),
+            "origin",
+            "test3/*",
+        )?;
+        assert_eq!(fail_exit_2, ExitCode(1));
+
+        let sparse_repo = Repository::open(scratch_sparse.path())?;
+        let refspecs = sparse_repo
+            .config()?
+            .multivar_values(format!("remote.{}.fetch", "origin"), None)?;
+        let str_refspecs = refspecs.iter().map(|r| r.as_str()).collect();
+
+        assert_eq!(vec!["test1"], get_ref_names_from_refspecs(str_refspecs)?);
+
+        Ok(())
+    }
 
     #[test]
     fn test_get_ref_names_from_ref_locations() -> anyhow::Result<()> {
