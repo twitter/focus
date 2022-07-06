@@ -26,9 +26,9 @@ pub enum Target {
 impl Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Target::Bazel(c) => write!(f, "{}", c),
-            Target::Directory(c) => write!(f, "{}", c),
-            Target::Pants(c) => write!(f, "{}", c),
+            Target::Bazel(c) => write!(f, "bazel:{}", c),
+            Target::Directory(c) => write!(f, "directory:{}", c),
+            Target::Pants(c) => write!(f, "pants:{}", c),
         }
     }
 }
@@ -122,7 +122,11 @@ impl Display for Label {
                 write!(f, ":{}", name)?;
             }
             TargetName::Ellipsis => {
-                write!(f, "/...")?;
+                if self.path_components.is_empty() {
+                    write!(f, "...")?;
+                } else {
+                    write!(f, "/...")?;
+                }
             }
         }
 
@@ -240,6 +244,18 @@ mod tests {
                 path_components: vec!["foo".to_string(), "bar".to_string()],
                 target_name: TargetName::Name("baz/qux.py".to_string()),
             }))
+        );
+        assert_eq!(
+            Target::try_from("bazel://..."),
+            Ok(Target::Bazel(Label {
+                external_repository: None,
+                path_components: vec![],
+                target_name: TargetName::Ellipsis
+            }))
+        );
+        assert_eq!(
+            Target::try_from("bazel://...").unwrap().to_string(),
+            "bazel://...",
         );
 
         assert_eq!(
