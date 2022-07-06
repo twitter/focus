@@ -126,7 +126,7 @@ enum Subcommand {
         remote_name: String,
 
         #[clap(subcommand)]
-        subcommand: BranchSubcommand
+        subcommand: BranchSubcommand,
     },
 
     /// Set up an initial clone of the repo from the remote
@@ -419,17 +419,15 @@ enum BranchSubcommand {
     /// Search for branches using a search term
     Search {
         /// Substring used to search refs in the remote server
-        /// 
-        /// Ex: 
-        /// 
+        ///
+        /// Ex:
+        ///
         /// 'user' would match with branch 'user' and 'user/branch-1'.
         search_term: String,
     },
 
     /// Add a branch or branch prefix track from the remote server
-    Add {
-        branch: String
-    }
+    Add { branch: String },
 }
 
 #[derive(Parser, Debug)]
@@ -765,15 +763,19 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             }
         }
 
-        Subcommand::Branch { subcommand, repo, remote_name } => match subcommand {
+        Subcommand::Branch {
+            subcommand,
+            repo,
+            remote_name,
+        } => match subcommand {
             BranchSubcommand::List {} => {
                 focus_operations::branch::list(app, repo, &remote_name)?;
                 Ok(ExitCode(0))
-            },
+            }
             BranchSubcommand::Search { search_term } => {
                 focus_operations::branch::search(app, repo, &remote_name, &search_term)?;
                 Ok(ExitCode(0))
-            },
+            }
             BranchSubcommand::Add { branch } => {
                 focus_operations::branch::add(app, repo, &remote_name, &branch)
             }
