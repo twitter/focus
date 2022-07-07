@@ -156,7 +156,7 @@ mod testing {
         assert_eq!(fail_exit_1, ExitCode(1));
 
         let fail_exit_2 = super::add(
-            app.clone(),
+            app,
             scratch_sparse.path().to_path_buf(),
             "origin",
             "test3/*",
