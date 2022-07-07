@@ -532,6 +532,10 @@ enum IndexSubcommand {
 
     /// Calculate and print the content hashes of the provided targets.
     Hash {
+        /// The commit at which to hash the provided targets.
+        #[clap(long, default_value = "HEAD")]
+        commit: String,
+
         /// The targets to hash.
         targets: Vec<String>,
     },
@@ -1022,8 +1026,9 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Hash { targets } => {
-                let exit_code = focus_operations::index::hash(app, Path::new("."), &targets)?;
+            IndexSubcommand::Hash { commit, targets } => {
+                let exit_code =
+                    focus_operations::index::hash(app, Path::new("."), commit, &targets)?;
                 Ok(exit_code)
             }
 

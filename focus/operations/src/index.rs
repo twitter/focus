@@ -170,14 +170,18 @@ pub fn resolve(
 pub fn hash(
     _app: Arc<App>,
     sparse_repo_path: &Path,
+    commit: String,
     targets: &[String],
 ) -> anyhow::Result<ExitCode> {
     let repo = git2::Repository::open(sparse_repo_path)?;
-    let head_commit = git_helper::get_head_commit(&repo)?;
-    let head_tree = head_commit.tree()?;
+    let object = repo
+        .revparse_single(&commit)
+        .with_context(|| format!("Resolving commit {commit}"))?;
+    let commit = object.as_commit().expect("Object was not a commit");
+    let tree = commit.tree()?;
     let hash_context = HashContext {
         repo: &repo,
-        head_tree: &head_tree,
+        head_tree: &tree,
         caches: Default::default(),
     };
     info!(?hash_context, "Using this hash context");
