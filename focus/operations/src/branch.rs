@@ -70,9 +70,9 @@ pub fn add(
     let underlying_repo = repo.underlying();
 
     // This will probably be more complex when we add `--prefix` option
-    if branch.ends_with("/*") || branch.ends_with('/') {
+    if branch.ends_with('/') {
         error!(
-            "Invalid branch name {}. The specified branch name should not end with a wildcard or '/'.",
+            "Cannot determine if name, {}, is a prefix or a ref name. Name should not end with '/'.",
             branch
         );
         return Ok(ExitCode(1));
@@ -140,13 +140,13 @@ mod testing {
         let scratch_sparse = ScratchGitRepo::new_static_fixture(temp_sparse_dir.path())?;
         let app = Arc::new(App::new_for_testing()?);
 
-        let success_exit = super::add(
+        let success_exit_1 = super::add(
             app.clone(),
             scratch_sparse.path().to_path_buf(),
             "origin",
             "test1",
         )?;
-        assert_eq!(success_exit, ExitCode(0));
+        assert_eq!(success_exit_1, ExitCode(0));
         let fail_exit_1 = super::add(
             app.clone(),
             scratch_sparse.path().to_path_buf(),
@@ -155,13 +155,29 @@ mod testing {
         )?;
         assert_eq!(fail_exit_1, ExitCode(1));
 
-        let fail_exit_2 = super::add(
-            app,
+        let success_exit_2 = super::add(
+            app.clone(),
             scratch_sparse.path().to_path_buf(),
             "origin",
             "test3/*",
         )?;
-        assert_eq!(fail_exit_2, ExitCode(1));
+        assert_eq!(success_exit_2, ExitCode(0));
+
+        let success_exit_3 = super::add(
+            app.clone(),
+            scratch_sparse.path().to_path_buf(),
+            "origin",
+            "test4/special/*",
+        )?;
+        assert_eq!(success_exit_3, ExitCode(0));
+
+        let success_exit_4 = super::add(
+            app,
+            scratch_sparse.path().to_path_buf(),
+            "origin",
+            "test5/special",
+        )?;
+        assert_eq!(success_exit_4, ExitCode(0));
 
         let sparse_repo = Repository::open(scratch_sparse.path())?;
         let refspecs = sparse_repo
@@ -169,7 +185,10 @@ mod testing {
             .multivar_values(format!("remote.{}.fetch", "origin"), None)?;
         let str_refspecs = refspecs.iter().map(|r| r.as_str()).collect();
 
-        assert_eq!(vec!["test1"], get_ref_names_from_refspecs(str_refspecs)?);
+        assert_eq!(
+            vec!["test1", "test3/*", "test4/special/*", "test5/special"],
+            get_ref_names_from_refspecs(str_refspecs)?
+        );
 
         Ok(())
     }
