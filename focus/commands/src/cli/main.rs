@@ -426,8 +426,13 @@ enum BranchSubcommand {
         search_term: String,
     },
 
-    /// Add a branch or branch prefix track from the remote server
-    Add { branch: String },
+    /// Add a branch or set of branches to track from the remote server.
+    ///
+    /// To track a single branch, run e.g. `focus branch add username/my-feature`.
+    /// To track a set of branches, run e.g. `focus branch add 'username/*'`.
+    ///
+    /// The passed in name should not end in `/`.
+    Add { name: String },
 }
 
 #[derive(Parser, Debug)]
@@ -780,8 +785,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 focus_operations::branch::search(app, repo, &remote_name, &search_term)?;
                 Ok(ExitCode(0))
             }
-            BranchSubcommand::Add { branch } => {
-                focus_operations::branch::add(app, repo, &remote_name, &branch)
+            BranchSubcommand::Add { name } => {
+                focus_operations::branch::add(app, repo, &remote_name, &name)
             }
         },
 
