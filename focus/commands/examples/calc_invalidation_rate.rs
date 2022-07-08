@@ -17,7 +17,7 @@ use std::{
 use clap::Parser;
 use focus_internals::{
     index::{content_hash_dependency_key, ContentHash, DependencyKey, HashContext},
-    model::repo::Repo,
+    model::{repo::Repo, selection::Project},
     target::{Target, TargetSet},
 };
 use focus_util::{app::App, git_helper};
@@ -96,13 +96,25 @@ fn main() -> anyhow::Result<()> {
     let app = Arc::new(App::new(false, None, None, None)?);
     let repo = Repo::open(&sparse_repo_path, app)?;
     let selections = repo.selection_manager()?;
-    let all_targets = {
-        let mut targets = TargetSet::try_from(&selections.project_catalog().mandatory_projects)?;
-        targets.extend(TargetSet::try_from(
-            &selections.project_catalog().optional_projects,
-        )?);
-        targets
-    };
+    let all_projects: HashMap<String, Project> = selections
+        .project_catalog()
+        .mandatory_projects
+        .underlying
+        .iter()
+        .chain(
+            selections
+                .project_catalog()
+                .optional_projects
+                .underlying
+                .iter(),
+        )
+        .map(|(name, project)| (name.clone(), project.clone()))
+        .collect();
+    let all_targets: TargetSet = all_projects
+        .iter()
+        .map(|(_name, project)| project)
+        .flat_map(|project| TargetSet::try_from(project).unwrap())
+        .collect();
 
     let repo = git2::Repository::open(sparse_repo_path.clone())?;
     let commits = {
@@ -152,51 +164,127 @@ fn main() -> anyhow::Result<()> {
                 .collect::<Vec<_>>()
         })
         .collect();
-    #[derive(Clone, Debug)]
-    struct HashChangeInfo {
-        current_hash: ContentHash,
-        commits_since_last_hash_change: usize,
-    }
-    let mut target_stats: HashMap<&Target, Vec<HashChangeInfo>> = all_targets
-        .iter()
-        .map(|target| (target, Vec::new()))
-        .collect();
 
-    for commit_oid in &commits {
-        for (target, hash_change_infos) in target_stats.iter_mut() {
-            let hash = hashes[&(*commit_oid, *target)].clone();
-            match hash_change_infos.last_mut() {
-                Some(hash_change_info) if hash_change_info.current_hash == hash => {
-                    hash_change_info.commits_since_last_hash_change += 1;
-                }
-                _ => {
-                    hash_change_infos.push(HashChangeInfo {
-                        current_hash: hash,
-                        commits_since_last_hash_change: 0,
-                    });
+    let target_average_churns: HashMap<Target, f64> = {
+        #[derive(Clone, Debug)]
+        struct HashChangeInfo {
+            current_hash: ContentHash,
+            commits_since_last_hash_change: usize,
+        }
+        let mut target_stats: HashMap<&Target, Vec<HashChangeInfo>> = all_targets
+            .iter()
+            .map(|target| (target, Vec::new()))
+            .collect();
+
+        for commit_oid in &commits {
+            for (target, hash_change_infos) in target_stats.iter_mut() {
+                let hash = hashes[&(*commit_oid, *target)].clone();
+                match hash_change_infos.last_mut() {
+                    Some(hash_change_info) if hash_change_info.current_hash == hash => {
+                        hash_change_info.commits_since_last_hash_change += 1;
+                    }
+                    _ => {
+                        hash_change_infos.push(HashChangeInfo {
+                            current_hash: hash,
+                            commits_since_last_hash_change: 0,
+                        });
+                    }
                 }
             }
         }
-    }
 
-    let mut averages: Vec<_> = target_stats
-        .iter()
-        .map(|(target, hash_change_infos)| {
-            let changes: Vec<_> = hash_change_infos
-                .iter()
-                .map(|hash_change_info| hash_change_info.commits_since_last_hash_change as f64)
-                .collect();
-            (target, average(changes))
-        })
-        .collect();
-    averages.sort_by(|(_, lhs), (_, rhs)| lhs.partial_cmp(rhs).unwrap());
-    println!("Most churning targets:");
-    for (target, value) in &averages[..10] {
-        println!("{target} {value:.2}");
-    }
+        let mut target_average_churns: Vec<(Target, f64)> = target_stats
+            .iter()
+            .map(|(target, hash_change_infos)| {
+                let changes: Vec<_> = hash_change_infos
+                    .iter()
+                    .map(|hash_change_info| hash_change_info.commits_since_last_hash_change as f64)
+                    .collect();
+                ((*target).clone(), average(changes))
+            })
+            .collect();
+        target_average_churns.sort_by(|(_, lhs), (_, rhs)| lhs.partial_cmp(rhs).unwrap());
+        println!("Most churning targets:");
+        for (target, value) in &target_average_churns[..10] {
+            println!("{target} {value:.2}");
+        }
 
-    let average_churn = average(averages.iter().map(|(_, value)| *value));
-    println!("Average churn rate: {average_churn:.2}");
+        let average_churn = average(target_average_churns.iter().map(|(_, value)| *value));
+        println!("Average target churn rate: {average_churn:.2}");
+        target_average_churns.into_iter().collect()
+    };
+
+    println!();
+
+    {
+        #[derive(Clone, Debug)]
+        struct ProjectChangeInfo {
+            current_hashes: HashMap<Target, ContentHash>,
+            commits_since_last_hash_change: usize,
+        }
+        let mut project_stats: HashMap<&Project, Vec<ProjectChangeInfo>> = all_projects
+            .iter()
+            .map(|(_name, project)| (project, Vec::new()))
+            .collect();
+
+        for commit_oid in &commits {
+            for (project, hash_change_infos) in project_stats.iter_mut() {
+                let target_hashes: HashMap<Target, ContentHash> = TargetSet::try_from(*project)?
+                    .into_iter()
+                    .map(|target| {
+                        let target_hash = hashes[&(*commit_oid, &target)].clone();
+                        (target, target_hash)
+                    })
+                    .collect();
+                match hash_change_infos.last_mut() {
+                    Some(hash_change_info) if hash_change_info.current_hashes == target_hashes => {
+                        hash_change_info.commits_since_last_hash_change += 1;
+                    }
+                    _ => {
+                        hash_change_infos.push(ProjectChangeInfo {
+                            current_hashes: target_hashes,
+                            commits_since_last_hash_change: 0,
+                        });
+                    }
+                }
+            }
+        }
+
+        let mut averages: Vec<_> = project_stats
+            .iter()
+            .map(|(target, hash_change_infos)| {
+                let changes: Vec<_> = hash_change_infos
+                    .iter()
+                    .map(|hash_change_info| hash_change_info.commits_since_last_hash_change as f64)
+                    .collect();
+                (target, average(changes))
+            })
+            .collect();
+        averages.sort_by(|(_, lhs), (_, rhs)| lhs.partial_cmp(rhs).unwrap());
+
+        println!("Most churning projects:");
+        for (project, value) in &averages[..10] {
+            let most_churning_targets = {
+                let mut result: Vec<(Target, f64)> = TargetSet::try_from(**project)?
+                    .iter()
+                    .map(|target| (target.clone(), target_average_churns[target]))
+                    .collect();
+                result.sort_by(|(_, lhs), (_, rhs)| lhs.partial_cmp(rhs).unwrap());
+                result
+            };
+
+            println!("{} {value:.2}, upper-bounded by:", project.name);
+            if project.mandatory {
+                println!("\tNote that this is a mandatory project, so its churn is on the critical path for all users!");
+            }
+            for (target, churn) in most_churning_targets.into_iter().take(3) {
+                println!("\t{target} {churn:.2}");
+            }
+        }
+
+        let average_churn = average(averages.iter().map(|(_, value)| *value));
+        println!("Average project churn rate: {average_churn:.2}");
+    }
 
     Ok(())
 }
