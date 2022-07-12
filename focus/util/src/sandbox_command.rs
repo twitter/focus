@@ -239,7 +239,9 @@ impl SandboxCommand {
         let status = launch
             .wait()
             .with_context(|| format!("Failed to wait for command {}", &command_description))?;
-        tailer.iter().for_each(|t| t.stop());
+        if let Ok(tailer) = tailer {
+            tailer.stop();
+        }
         debug!(command = %command_description, %status, "Command exited");
         if !status.success() {
             self.log(output, &command_description)
@@ -293,8 +295,22 @@ impl Tailer {
         let mut lines = buffered_reader.lines();
         let span = info_span!("Output", command=?description);
         let _guard = span.enter();
+
         while cancel_rx.try_recv().is_err() {
             while let Some(Ok(line)) = lines.next() {
+                // A carriage return at the end of the line is often used for
+                // interactive applications to update the line of output which
+                // is already present in the terminal. We can't do that here
+                // because we immediately overwrite the just-printed line with
+                // information about the parameters in `info!`. Instead,
+                // simulate clearing the line which removing anything that
+                // appears before a `\r` and strip the last one.
+                let line = line
+                    .trim_end_matches('\r')
+                    .split('\r')
+                    .last()
+                    .unwrap_or_default();
+
                 info!("{}", line);
             }
             std::thread::sleep(Duration::from_millis(50));
