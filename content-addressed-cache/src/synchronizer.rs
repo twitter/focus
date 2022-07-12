@@ -18,7 +18,10 @@ pub type Keyset = HashSet<(CacheKeyKind, CacheKey)>;
 pub type KeysetID = Oid;
 
 pub fn refspec_fmt(namespace: impl Display, tag_name: impl Display) -> String {
-    format!("+refs/tags/{namespace}/{}:refs/tags/{namespace}/{}", tag_name, tag_name)
+    format!(
+        "+refs/tags/{namespace}/{}:refs/tags/{namespace}/{}",
+        tag_name, tag_name
+    )
 }
 
 pub fn tag_fmt(namespace: impl Display, tag_name: impl Display) -> String {
@@ -108,9 +111,19 @@ impl fmt::Debug for GitBackedCacheSynchronizer {
 }
 
 impl GitBackedCacheSynchronizer {
-    pub fn create(path: PathBuf, remote: String, app: Arc<App>, namespace: String, email: String, username: String) -> Result<Self> {
+    pub fn create(
+        path: PathBuf,
+        remote: String,
+        app: Arc<App>,
+        namespace: String,
+        email: String,
+        username: String,
+    ) -> Result<Self> {
         let repo = Repository::init(path.clone()).context("initializing Git repository")?;
-        let regex_string = format!("{}{}{}", r#"^[0-9a-f]{40}\trefs/tags/"#, namespace, r#"/([0-9a-f]{40})$"#);
+        let regex_string = format!(
+            "{}{}{}",
+            r#"^[0-9a-f]{40}\trefs/tags/"#, namespace, r#"/([0-9a-f]{40})$"#
+        );
         let parse_tags_regex: Regex = Regex::new(&regex_string).unwrap();
         Ok(Self {
             repo,
@@ -120,7 +133,7 @@ impl GitBackedCacheSynchronizer {
             email,
             username,
             namespace,
-            parse_tags_regex
+            parse_tags_regex,
         })
     }
 }
@@ -377,7 +390,7 @@ mod tests {
             Arc::new(App::new_for_testing().unwrap()),
             "cache".to_string(),
             "test@example.com".to_string(),
-            "test".to_string()
+            "test".to_string(),
         )
         .unwrap();
         (tmp_dir, memocache)
@@ -395,7 +408,7 @@ mod tests {
             Arc::new(App::new_for_testing().unwrap()),
             "cache".to_string(),
             "test@example.com".to_string(),
-            "test".to_string()
+            "test".to_string(),
         )
         .unwrap();
         (tmp_dir, memocache)
