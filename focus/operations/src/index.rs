@@ -26,6 +26,9 @@ use focus_internals::model::selection::OperationAction;
 use focus_internals::target::{Target, TargetSet};
 
 const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
+const TAG_NAMESPACE: &str = "focus";
+const COMMIT_USER_NAME: &str = "focus";
+const COMMIT_USER_EMAIL: &str = "source-eng-team@twitter.com";
 
 pub fn clear(sparse_repo_path: PathBuf) -> anyhow::Result<()> {
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
@@ -261,7 +264,7 @@ pub(crate) fn fetch_internal(
 
     let index_dir = index_repo_dir(&sparse_repo_path);
     let synchronizer =
-        GitBackedCacheSynchronizer::create(index_dir, index_config.remote.clone(), app.clone())?;
+        GitBackedCacheSynchronizer::create(index_dir, index_config.remote.clone(), app.clone(), TAG_NAMESPACE.to_string(), COMMIT_USER_EMAIL.to_string(), COMMIT_USER_NAME.to_string())?;
     let repo = Repo::open(sparse_repo_path.as_path(), app).context("Failed to open repo")?;
     let mut commit = repo.get_head_commit()?;
 
@@ -310,7 +313,7 @@ pub fn push(
 
     let index_dir = index_repo_dir(&sparse_repo_path);
     std::fs::create_dir_all(&index_dir).context("creating index directory")?;
-    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
+    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone(), TAG_NAMESPACE.to_string(), COMMIT_USER_EMAIL.to_string(), COMMIT_USER_NAME.to_string())?;
 
     let head_commit = repo.get_head_commit()?;
     let head_tree = head_commit.tree().context("finding HEAD tree")?;

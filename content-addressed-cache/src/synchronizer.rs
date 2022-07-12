@@ -8,7 +8,6 @@ use core::fmt;
 use focus_util::{app::App, git_helper};
 use git2::Oid;
 use git2::{Commit, Repository};
-use lazy_static::lazy_static;
 use regex::Regex;
 use std::fmt::{Debug, Display};
 use std::ops::AddAssign;
@@ -18,19 +17,12 @@ use tracing::{info, instrument, warn};
 pub type Keyset = HashSet<(CacheKeyKind, CacheKey)>;
 pub type KeysetID = Oid;
 
-const COMMIT_USER_NAME: &str = "focus";
-const COMMIT_USER_EMAIL: &str = "source-eng-team@twitter.com";
-lazy_static! {
-    static ref LS_REMOTE_REGEX: Regex =
-        Regex::new(r#"^[0-9a-f]{40}\trefs/tags/focus/([0-9a-f]{40})$"#).unwrap();
+pub fn refspec_fmt(namespace: impl Display, tag_name: impl Display) -> String {
+    format!("+refs/tags/{namespace}/{}:refs/tags/{namespace}/{}", tag_name, tag_name)
 }
 
-pub fn refspec_fmt(value: impl Display) -> String {
-    format!("+refs/tags/focus/{}:refs/tags/focus/{}", value, value)
-}
-
-pub fn tag_fmt(value: impl Display) -> String {
-    format!("refs/tags/focus/{}", value)
+pub fn tag_fmt(namespace: impl Display, tag_name: impl Display) -> String {
+    format!("refs/tags/{}/{}", namespace, tag_name)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -99,6 +91,10 @@ pub struct GitBackedCacheSynchronizer {
     app: Arc<App>,
     remote: String,
     path: PathBuf,
+    email: String,
+    username: String,
+    namespace: String,
+    parse_tags_regex: Regex,
 }
 
 impl fmt::Debug for GitBackedCacheSynchronizer {
@@ -112,13 +108,19 @@ impl fmt::Debug for GitBackedCacheSynchronizer {
 }
 
 impl GitBackedCacheSynchronizer {
-    pub fn create(path: PathBuf, remote: String, app: Arc<App>) -> Result<Self> {
+    pub fn create(path: PathBuf, remote: String, app: Arc<App>, namespace: String, email: String, username: String) -> Result<Self> {
         let repo = Repository::init(path.clone()).context("initializing Git repository")?;
+        let regex_string = format!("{}{}{}", r#"^[0-9a-f]{40}\trefs/tags/"#, namespace, r#"/([0-9a-f]{40})$"#);
+        let parse_tags_regex: Regex = Regex::new(&regex_string).unwrap();
         Ok(Self {
             repo,
             app,
             remote,
             path,
+            email,
+            username,
+            namespace,
+            parse_tags_regex
         })
     }
 }
@@ -128,7 +130,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
     fn fetch(&self, keyset_id: KeysetID) -> Result<KeysetID> {
         git_helper::fetch_refs(
             self.path.as_path(),
-            [refspec_fmt(keyset_id)].iter(),
+            [refspec_fmt(&self.namespace, keyset_id)].iter(),
             self.remote.as_str(),
             self.app.clone(),
             Some(1),
@@ -141,7 +143,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
     fn populate(&self, keyset_id: &KeysetID, dest_cache: &dyn Cache) -> Result<PopulateResult> {
         let commit = self
             .repo
-            .find_reference(&tag_fmt(keyset_id))
+            .find_reference(&tag_fmt(&self.namespace, keyset_id))
             .context("Resolving reference")?;
         let kv_tree = commit.peel_to_tree().context("Resolving tree")?;
 
@@ -266,11 +268,11 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
         }
 
         let kv_tree_oid = kv_tree.write().context("writing new tree")?;
-        let signature = git2::Signature::now(COMMIT_USER_NAME, COMMIT_USER_EMAIL)?;
+        let signature = git2::Signature::now(&self.username, &self.email)?;
         let prev_commit_vec = match previous_keyset_id {
             Some(prev_commit_oid) => vec![self
                 .repo
-                .find_reference(&tag_fmt(prev_commit_oid)[..])?
+                .find_reference(&tag_fmt(&self.namespace, prev_commit_oid)[..])?
                 .peel_to_commit()?],
             None => vec![],
         };
@@ -285,11 +287,11 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
             &vec_of_prev_commit_references[..],
         )?;
 
-        let refspecs = vec![refspec_fmt(&keyset_id)];
+        let refspecs = vec![refspec_fmt(&self.namespace, &keyset_id)];
 
         self.repo
             .reference(
-                &tag_fmt(keyset_id)[..],
+                &tag_fmt(&self.namespace, keyset_id)[..],
                 commit_oid,
                 true,
                 "Tree is used as key-value store.",
@@ -308,7 +310,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
         let mut available_keys = HashSet::<KeysetID>::new();
         let result = git_helper::ls_remote(&self.remote, self.app.clone())?;
         for (_line_number, line) in result.lines().enumerate() {
-            if let Some(captures) = LS_REMOTE_REGEX.captures(line) {
+            if let Some(captures) = self.parse_tags_regex.captures(line) {
                 if let Ok(keyset_id) = captures
                     .get(1)
                     .ok_or_else(|| anyhow::anyhow!("Error parsing '{}'", line))
@@ -373,6 +375,9 @@ mod tests {
             file_path,
             remote_repo.to_string(),
             Arc::new(App::new_for_testing().unwrap()),
+            "cache".to_string(),
+            "test@example.com".to_string(),
+            "test".to_string()
         )
         .unwrap();
         (tmp_dir, memocache)
@@ -388,6 +393,9 @@ mod tests {
             file_path,
             remote_repo.to_string(),
             Arc::new(App::new_for_testing().unwrap()),
+            "cache".to_string(),
+            "test@example.com".to_string(),
+            "test".to_string()
         )
         .unwrap();
         (tmp_dir, memocache)
@@ -449,8 +457,8 @@ mod tests {
             setup_local_sync_cache("fairly-local", server_string.as_str());
         let (_git_cache_dir_2, memo_cache_sync_2) =
             setup_local_sync_cache("fairly-local2", server_string.as_str());
-        let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("focus-rocks1");
-        let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("focus-rocks2");
+        let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("cache-rocks1");
+        let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("cache-rocks2");
 
         let keyset_id = keyset_id_1();
         let kind = kind();
@@ -493,8 +501,8 @@ mod tests {
             setup_local_sync_cache("fairly-local", server_string.as_str());
         let (_git_cache_dir_2, memo_cache_sync_2) =
             setup_local_git_cache("fairly-local2", server_string.as_str());
-        let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("focus-rocks1");
-        let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("focus-rocks2");
+        let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("cache-rocks1");
+        let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("cache-rocks2");
 
         let kind = kind();
         let keyset_id1 = keyset_id_1();
@@ -515,7 +523,7 @@ mod tests {
 
         let commit = memo_cache_sync_2
             .repo
-            .find_reference(&tag_fmt(commit_2_id)[..])
+            .find_reference(&tag_fmt("cache", commit_2_id)[..])
             .unwrap()
             .peel_to_commit()?;
         assert!(commit.parent_count() == 1);
@@ -533,8 +541,8 @@ mod tests {
             setup_local_sync_cache("fairly-local", server_string.as_str());
         let (_git_cache_dir_2, memo_cache_sync_2) =
             setup_local_sync_cache("fairly-local2", server_string.as_str());
-        let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("focus-rocks1");
-        let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("focus-rocks2");
+        let (_rocks_dir_1, memo_cache_1) = setup_rocks_db("cache-rocks1");
+        let (_rocks_dir_2, memo_cache_2) = setup_rocks_db("cache-rocks2");
 
         let keyset_id = keyset_id_1();
         let kind = kind();
@@ -572,19 +580,19 @@ mod tests {
 
     #[test]
     pub fn refspec_formatting() {
-        assert_eq!(refspec_fmt(&keyset_id_1()), String::from("+refs/tags/focus/abcd1abcd1abcd1abcd100000000000000000000:refs/tags/focus/abcd1abcd1abcd1abcd100000000000000000000"));
+        assert_eq!(refspec_fmt("cache", &keyset_id_1()), String::from("+refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000:refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000"));
         assert_eq!(
-            refspec_fmt("foo"),
-            String::from("+refs/tags/focus/foo:refs/tags/focus/foo")
+            refspec_fmt("cache", "foo"),
+            String::from("+refs/tags/cache/foo:refs/tags/cache/foo")
         );
     }
 
     #[test]
     pub fn tag_formatting() {
         assert_eq!(
-            tag_fmt(&keyset_id_1()),
-            String::from("refs/tags/focus/abcd1abcd1abcd1abcd100000000000000000000"),
+            tag_fmt("cache", &keyset_id_1()),
+            String::from("refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000"),
         );
-        assert_eq!(tag_fmt("foo"), String::from("refs/tags/focus/foo"));
+        assert_eq!(tag_fmt("cache", "foo"), String::from("refs/tags/cache/foo"));
     }
 }
