@@ -30,35 +30,43 @@ use focus_operations::{
     sync::SyncMode,
 };
 use strum::VariantNames;
+use termion::{color, style};
 use tracing::{debug, debug_span, info};
+
+#[derive(Parser, Debug)]
+struct NewArgs {
+    /// Path to the repository to clone.
+    #[clap(long, default_value = "~/workspace/source")]
+    dense_repo: String,
+
+    /// Path where the new sparse repository should be created.
+    #[clap(parse(from_os_str))]
+    sparse_repo: PathBuf,
+
+    /// The name of the branch to clone.
+    #[clap(long, default_value = "master")]
+    branch: String,
+
+    /// Days of history to maintain in the sparse repo.
+    #[clap(long, default_value = "90")]
+    days_of_history: u64,
+
+    /// Copy only the specified branch rather than all local branches.
+    #[clap(long, parse(try_from_str), default_value = "true")]
+    copy_branches: bool,
+
+    /// Initial projects and targets to add to the repo.
+    projects_and_targets: Vec<String>,
+}
 
 #[derive(Parser, Debug)]
 enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build targets
-    Clone {
-        /// Path to the repository to clone.
-        #[clap(long, default_value = "~/workspace/source")]
-        dense_repo: String,
+    New(NewArgs),
 
-        /// Path where the new sparse repository should be created.
-        #[clap(parse(from_os_str))]
-        sparse_repo: PathBuf,
-
-        /// The name of the branch to clone.
-        #[clap(long, default_value = "master")]
-        branch: String,
-
-        /// Days of history to maintain in the sparse repo.
-        #[clap(long, default_value = "90")]
-        days_of_history: u64,
-
-        /// Copy only the specified branch rather than all local branches.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        copy_branches: bool,
-
-        /// Initial projects and targets to add to the repo.
-        projects_and_targets: Vec<String>,
-    },
+    /// Deprecated; use `focus new` instead.
+    #[clap(hide = true)]
+    Clone(NewArgs),
 
     /// Update the sparse checkout to reflect changes to the build graph.
     Sync {
@@ -230,7 +238,7 @@ enum Subcommand {
 /// feature name.
 fn feature_name_for(subcommand: &Subcommand) -> String {
     match subcommand {
-        Subcommand::Clone { .. } => "clone".to_string(),
+        Subcommand::New { .. } | Subcommand::Clone { .. } => "new".to_string(),
         Subcommand::Sync { .. } => "sync".to_string(),
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List { .. } => "repo-list".to_string(),
@@ -657,15 +665,32 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
     let span = debug_span!("Running subcommand", ?feature_name);
     let _guard = span.enter();
 
+    if let Subcommand::Clone(_) = &options.cmd {
+        eprintln!(
+            "{}{}The command `focus clone` is deprecated; use `focus new` instead!{}",
+            style::Bold,
+            color::Fg(color::Yellow),
+            style::Reset,
+        );
+    }
+
     match options.cmd {
-        Subcommand::Clone {
+        Subcommand::New(NewArgs {
             dense_repo,
             sparse_repo,
             branch,
             days_of_history,
             copy_branches,
             projects_and_targets,
-        } => {
+        })
+        | Subcommand::Clone(NewArgs {
+            dense_repo,
+            sparse_repo,
+            branch,
+            days_of_history,
+            copy_branches,
+            projects_and_targets,
+        }) => {
             let origin = focus_operations::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
                 let current_dir =
