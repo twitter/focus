@@ -56,6 +56,7 @@ pub fn run(
     projects_and_targets: Vec<String>,
     copy_branches: bool,
     days_of_history: u64,
+    do_post_clone_fetch: bool,
     tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
@@ -77,7 +78,17 @@ pub fn run(
         ),
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, tracker, app)?;
+    set_up_sparse_repo(
+        &sparse_repo_path,
+        projects_and_targets,
+        tracker,
+        app.clone(),
+    )?;
+
+    if do_post_clone_fetch {
+        fetch_default_remote(&sparse_repo_path, app).context("Could not complete post clone fetch")?;
+    }
+
     set_up_hooks(&sparse_repo_path)
 }
 
@@ -409,6 +420,19 @@ fn set_up_hooks(sparse_repo: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Issues a git command to fetch from the default remote.
+///
+/// Uses a git command instead of using git2 since git2 does not seem to read from the correct config on fetch.
+fn fetch_default_remote(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
+    let (mut cmd, scmd) = git_helper::git_command(app)?;
+    let _ = scmd.ensure_success_or_log(
+        cmd.current_dir(&sparse_repo).arg("fetch").arg("origin"),
+        SandboxCommandOutput::Stderr,
+    )?;
+
+    Ok(())
+}
+
 fn copy_local_branches(
     dense_repo: &Repository,
     sparse_repo: &Repository,
@@ -635,7 +659,7 @@ mod test {
 
         let app = Arc::new(App::new_for_testing()?);
 
-        fixture.perform_clone()?;
+        fixture.perform_clone().context("Clone failed")?;
 
         let git_repo = Repository::open(&fixture.sparse_repo_path)?;
         assert!(!git_repo.is_bare());

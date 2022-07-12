@@ -96,6 +96,7 @@ impl RepoPairFixture {
             self.projects_and_targets.clone(),
             true,
             90,
+            false,
             &self.tracker,
             self.app.clone(),
         )

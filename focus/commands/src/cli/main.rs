@@ -715,6 +715,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 projects_and_targets,
                 copy_branches,
                 days_of_history,
+                true,
                 tracker,
                 app,
             )?;
