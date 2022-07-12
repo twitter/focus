@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::event;
+use crate::init::{run_clone, CloneBuilder};
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::model::selection::{Operation, OperationAction};
 
@@ -280,32 +281,20 @@ fn clone_shallow(
     // Unfortunately time::duration is signed
     let days_of_history: i64 = days_of_history.try_into()?;
 
-    let sparse_repo_dir_parent = destination_path
-        .parent()
-        .context("Failed to determine sparse repo parent directory")?;
-
     let shallow_since_datestamp =
         focus_util::time::formatted_datestamp_at_day_in_past(days_of_history)?;
 
-    let (mut cmd, scmd) = git_helper::git_command(app)?;
-    let mut args: Vec<OsString> = vec![
-        "clone".into(),
-        "--no-checkout".into(),
-        "--no-tags".into(),
-        "-b".into(),
-        branch.into(),
-    ];
-    args.push(format!("--shallow-since={}", shallow_since_datestamp).into());
+    let mut builder = CloneBuilder::new(destination_path.into());
+    builder
+        .fetch_url(source_url.as_str().into())
+        .no_checkout(true)
+        .follow_tags(false)
+        .branch(branch.into())
+        .add_clone_arg(format!("--shallow-since={}", shallow_since_datestamp));
     if !copy_branches {
-        args.push("--single-branch".into());
+        builder.add_clone_arg("--single-branch");
     }
-    args.push(source_url.as_str().into());
-    args.push(destination_path.into());
-    scmd.ensure_success_or_log(
-        cmd.current_dir(sparse_repo_dir_parent).args(args),
-        SandboxCommandOutput::Stderr,
-    )
-    .context("git clone failed")?;
+    run_clone(builder, app)?;
     Ok(())
 }
 
