@@ -26,6 +26,7 @@ use focus_util::{
 
 use focus_internals::tracker::Tracker;
 use focus_operations::{
+    clone::CloneArgs,
     maintenance::{self, ScheduleOpts},
     sync::SyncMode,
 };
@@ -726,17 +727,16 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 projects_and_targets.len().to_string(),
             );
 
-            focus_operations::clone::run(
-                origin,
-                sparse_repo.clone(),
+            let clone_args = CloneArgs {
+                origin: Some(origin),
                 branch,
-                projects_and_targets,
-                copy_branches,
                 days_of_history,
-                true,
-                tracker,
-                app,
-            )?;
+                copy_branches,
+                projects_and_targets,
+                ..Default::default()
+            };
+
+            focus_operations::clone::run(sparse_repo.clone(), clone_args, tracker, app)?;
 
             perform_pending_migrations(&sparse_repo)
                 .context("Performing initial migrations after clone")?;
