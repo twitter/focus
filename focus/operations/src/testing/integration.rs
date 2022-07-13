@@ -21,7 +21,7 @@ use focus_util::app::App;
 
 use focus_internals::{model::repo::Repo, tracker::Tracker};
 
-use crate::sync::SyncMode;
+use crate::{clone::CloneArgs, sync::SyncMode};
 
 pub use focus_testing::GitBinary;
 
@@ -89,14 +89,18 @@ impl RepoPairFixture {
 
     #[allow(dead_code)]
     pub fn perform_clone(&self) -> Result<()> {
+        let clone_args = CloneArgs {
+            origin: Some(crate::clone::Origin::Local(self.dense_repo_path.clone())),
+            branch: self.branch.clone(),
+            projects_and_targets: self.projects_and_targets.clone(),
+            copy_branches: true,
+            days_of_history: 90,
+            do_post_clone_fetch: false,
+        };
+
         crate::clone::run(
-            crate::clone::Origin::Local(self.dense_repo_path.clone()),
             self.sparse_repo_path.clone(),
-            self.branch.clone(),
-            self.projects_and_targets.clone(),
-            true,
-            90,
-            false,
+            clone_args,
             &self.tracker,
             self.app.clone(),
         )

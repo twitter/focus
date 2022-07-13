@@ -47,19 +47,51 @@ impl TryFrom<&str> for Origin {
     }
 }
 
+#[derive(Debug)]
+pub struct CloneArgs {
+    pub origin: Option<Origin>,
+    pub branch: String,
+    pub projects_and_targets: Vec<String>,
+    pub copy_branches: bool,
+    pub days_of_history: u64,
+    pub do_post_clone_fetch: bool,
+}
+
+impl Default for CloneArgs {
+    fn default() -> CloneArgs {
+        Self {
+            origin: None,
+            branch: String::from("master"),
+            projects_and_targets: Vec::default(),
+            copy_branches: true,
+            days_of_history: 90,
+            do_post_clone_fetch: true,
+        }
+    }
+}
+
 /// Entrypoint for clone operations.
 #[tracing::instrument]
 pub fn run(
-    origin: Origin,
     sparse_repo_path: PathBuf,
-    branch: String,
-    projects_and_targets: Vec<String>,
-    copy_branches: bool,
-    days_of_history: u64,
-    do_post_clone_fetch: bool,
+    clone_args: CloneArgs,
     tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
+    let CloneArgs {
+        origin,
+        branch,
+        projects_and_targets,
+        copy_branches,
+        days_of_history,
+        do_post_clone_fetch,
+    } = clone_args;
+
+    let origin = match origin {
+        Some(origin) => origin,
+        None => bail!("Clone does not have a valid origin"),
+    };
+
     match origin {
         Origin::Local(dense_repo_path) => clone_local(
             &dense_repo_path,
