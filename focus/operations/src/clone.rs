@@ -86,7 +86,8 @@ pub fn run(
     )?;
 
     if do_post_clone_fetch {
-        fetch_default_remote(&sparse_repo_path, app).context("Could not complete post clone fetch")?;
+        fetch_default_remote(&sparse_repo_path, app)
+            .context("Could not complete post clone fetch")?;
     }
 
     set_up_hooks(&sparse_repo_path)
