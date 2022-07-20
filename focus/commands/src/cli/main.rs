@@ -526,6 +526,11 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// Force fetching an index, even if index fetching is disabled for this
+        /// repository.
+        #[clap(short = 'f', long = "force")]
+        force: bool,
     },
 
     Get {
@@ -1038,8 +1043,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 Ok(ExitCode(0))
             }
 
-            IndexSubcommand::Fetch { sparse_repo } => {
-                let exit_code = focus_operations::index::fetch(app, sparse_repo)?;
+            IndexSubcommand::Fetch { sparse_repo, force } => {
+                let exit_code = focus_operations::index::fetch(app, sparse_repo, force)?;
                 Ok(exit_code)
             }
 
