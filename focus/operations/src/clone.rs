@@ -677,6 +677,15 @@ mod test {
             .snapshot()?
             .get_bool("twitter.statsenabled")?);
 
+        // Check `ci.alt.enabled` gets set
+        assert!(git_repo.config()?.snapshot()?.get_bool("ci.alt.enabled")?);
+
+        // Check `ci.alt.remote` gets set
+        assert_eq!(
+            git_repo.config()?.snapshot()?.get_str("ci.alt.remote")?,
+            "https://git.twitter.biz/source-ci"
+        );
+
         // Check the remote URLs
         let origin_remote = git_repo.find_remote("origin")?;
         assert_eq!(
