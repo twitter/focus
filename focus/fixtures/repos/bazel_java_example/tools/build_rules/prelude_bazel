@@ -1,0 +1,1 @@
+load("//tools/build_rules:macros.bzl", "my_java_binary")

@@ -7,4 +7,5 @@ expression: "std::fs::read_to_string(&profile_path)?"
 /focus/
 /mandatory_y/very_important_info/
 /mandatory_z/
+/tools/build_rules/
 
