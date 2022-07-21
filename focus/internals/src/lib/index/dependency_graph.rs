@@ -136,15 +136,14 @@ pub fn update_object_database_from_resolution(
 
     for (dep_key, dep_value) in package_deps {
         match dep_key {
-            DependencyKey::BazelPackage { .. } => {
+            DependencyKey::BazelPackage { .. } | DependencyKey::BazelBuildFile(_) => {
                 // Do nothing.
             }
-            DependencyKey::BazelBuildFile(_)
             | DependencyKey::Path(_)
             | DependencyKey::DummyForTesting(_) => {
                 debug!(
                     ?dep_key,
-                    "Non-package dependency key returned in `ResolutionResult`"
+                    "Non-Bazel dependency key returned in `ResolutionResult`"
                 )
             }
         }

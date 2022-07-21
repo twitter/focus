@@ -380,11 +380,25 @@ pub fn push(
     let keyset = {
         let mut result = HashSet::new();
         for key in seen_keys {
-            let (hash, value) = cache.get(&ctx, &key)?;
-            if value.is_none() {
-                panic!("Value not found for key: {key:?}");
+            match key {
+                key @ DependencyKey::BazelPackage(_) => {
+                    let (hash, value) = cache.get(&ctx, &key)?;
+                    if value.is_none() {
+                        panic!("Failed to find value associated with this key, which we should have previously generated and cached: {key:?}");
+                    }
+                    result.insert((*FUNCTION_ID, git2::Oid::from(hash)));
+                }
+
+                DependencyKey::BazelBuildFile(_) | DependencyKey::Path(_) => {
+                    // The paths to materialize for these kinds of dependencies
+                    // are known statically, so we don't need to insert or
+                    // propagate cache entries.
+                }
+
+                key @ DependencyKey::DummyForTesting(_) => {
+                    panic!("Encountered dummy testing value; this should not appear in real-world data: {key:?}");
+                }
             }
-            result.insert((*FUNCTION_ID, git2::Oid::from(hash)));
         }
         result
     };
@@ -470,13 +484,19 @@ mod tests {
                             Label("//project_a/src/main/java/com/example/cmdline:runner"),
                         ),
                         ContentHash(
-                            0cc845b7d7336f93772f3b9da7e950a72e278c36,
+                            c4cd43f054fa73cde0fd6b6a0b80fc75b20aaf76,
                         ),
                     ),
                 },
                 seen_keys: {
                     BazelPackage(
                         Label("//project_a/src/main/java/com/example/cmdline:runner"),
+                    ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:macros.bzl"),
+                    ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:prelude_bazel"),
                     ),
                 },
             }
@@ -506,10 +526,17 @@ mod tests {
                     BazelPackage(
                         Label("//project_a/src/main/java/com/example/cmdline:runner"),
                     ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:macros.bzl"),
+                    ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:prelude_bazel"),
+                    ),
                 },
                 paths: {
                     "library_a",
                     "project_a/src/main/java/com/example/cmdline",
+                    "tools/build_rules",
                 },
             }
             "###);
