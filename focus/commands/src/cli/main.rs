@@ -573,6 +573,11 @@ enum IndexSubcommand {
         #[clap(long, default_value = focus_operations::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
 
+        /// Do not actually push the index data to the remote. (It will still be
+        /// generated and cached locally.)
+        #[clap(short = 'N', long = "dry-run")]
+        dry_run: bool,
+
         /// If index keys are found to be missing, pause for debugging.
         #[clap(long)]
         break_on_missing_keys: bool,
@@ -1079,10 +1084,16 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             IndexSubcommand::Push {
                 sparse_repo,
                 remote,
+                dry_run,
                 break_on_missing_keys,
             } => {
-                let exit_code =
-                    focus_operations::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
+                let exit_code = focus_operations::index::push(
+                    app,
+                    sparse_repo,
+                    remote,
+                    dry_run,
+                    break_on_missing_keys,
+                )?;
                 Ok(exit_code)
             }
 
