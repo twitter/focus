@@ -245,19 +245,38 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
-pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf, force: bool) -> anyhow::Result<ExitCode> {
+pub fn fetch(
+    app: Arc<App>,
+    sparse_repo_path: PathBuf,
+    force: bool,
+    remote: Option<String>,
+) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())
         .with_context(|| format!("Opening repository at {}", &sparse_repo_path.display()))?;
     let cache = RocksDBCache::new(repo.underlying());
 
-    let index_config = &repo.config().index;
-    if index_config.enabled || force {
-        fetch_internal(app, &cache, sparse_repo_path, index_config)
+    let index_config = repo.config().index.clone();
+    let index_config = if force {
+        IndexConfig {
+            enabled: true,
+            ..index_config
+        }
     } else {
-        info!(
-            ?index_config,
-            "Skipping fetch: was not enabled in repository config and --force was not passed"
-        );
+        index_config
+    };
+    let index_config = match remote {
+        Some(remote) => IndexConfig {
+            remote,
+            ..index_config
+        },
+        None => index_config,
+    };
+
+    debug!(?index_config, "Using index config");
+    if index_config.enabled {
+        fetch_internal(app, &cache, sparse_repo_path, &index_config)
+    } else {
+        debug!("Skipping fetch: was not enabled in repository config and --force was not passed");
         Ok(ExitCode(0))
     }
 }
@@ -454,7 +473,7 @@ mod tests {
             "###);
         }
 
-        let ExitCode(exit_code) = fetch(app, fixture.sparse_repo_path.clone(), false)?;
+        let ExitCode(exit_code) = fetch(app, fixture.sparse_repo_path.clone(), false, None)?;
         assert_eq!(exit_code, 0);
 
         // Try to materialize files again -- this should be a cache hit.

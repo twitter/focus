@@ -531,6 +531,10 @@ enum IndexSubcommand {
         /// repository.
         #[clap(short = 'f', long = "force")]
         force: bool,
+
+        /// Override the remote provided in the config.
+        #[clap(long)]
+        remote: Option<String>,
     },
 
     Get {
@@ -1043,8 +1047,12 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 Ok(ExitCode(0))
             }
 
-            IndexSubcommand::Fetch { sparse_repo, force } => {
-                let exit_code = focus_operations::index::fetch(app, sparse_repo, force)?;
+            IndexSubcommand::Fetch {
+                sparse_repo,
+                force,
+                remote,
+            } => {
+                let exit_code = focus_operations::index::fetch(app, sparse_repo, force, remote)?;
                 Ok(exit_code)
             }
 
