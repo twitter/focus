@@ -105,7 +105,7 @@ impl BazelResolver {
                 // repository, because `.bzl` files, etc., in external
                 // repositories are typically not supported, so querying them
                 // fails.
-                "deps({0}) union (buildfiles(deps({0})) intersect //...)",
+                "deps({0}) union kind(rule, filter('^//', buildfiles(deps({0}))))",
                 Self::make_bazel_set(labels.iter().copied())
             );
 
