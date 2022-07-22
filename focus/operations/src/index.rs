@@ -330,6 +330,7 @@ pub fn push(
     app: Arc<App>,
     sparse_repo_path: PathBuf,
     remote: String,
+    dry_run: bool,
     break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
@@ -368,6 +369,10 @@ pub fn push(
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
+    info!(
+        num_keys_resolved = seen_keys.len(),
+        "Number of keys resolved"
+    );
 
     let odb = RocksDBCache::new(repo.underlying());
     let cache: &dyn ObjectDatabase = &odb;
@@ -384,8 +389,12 @@ pub fn push(
         result
     };
 
-    info!("Pushing index");
-    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
+    if !dry_run {
+        info!("Pushing index");
+        synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
+    } else {
+        info!("This is a dry run, so not pushing index");
+    }
 
     Ok(ExitCode(0))
 }
@@ -419,6 +428,7 @@ mod tests {
                 app.clone(),
                 fixture.sparse_repo_path.clone(),
                 remote.clone(),
+                false,
                 false,
             )?;
             assert_eq!(exit_code, 0);
