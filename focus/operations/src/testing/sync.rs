@@ -458,6 +458,44 @@ fn regression_adding_directory_targets_present_in_mandatory_sets() -> Result<()>
     Ok(())
 }
 
+#[test]
+fn regression_adding_deep_directory_target_materializes_correctly() -> Result<()> {
+    init_logging();
+
+    let fixture = RepoPairFixture::new()?;
+    fixture.perform_clone()?;
+
+    let path = fixture.sparse_repo_path.clone();
+
+    let w_dir = path.join("w_dir");
+    let x_dir = w_dir.join("x_dir");
+    let y_dir = x_dir.join("y_dir");
+    let z_dir = y_dir.join("z_dir");
+    let w_build_file = w_dir.join("BUILD.bazel");
+    let x_text_file = x_dir.join("x.txt");
+    let z_text_file = z_dir.join("z.txt");
+    let targets = vec![String::from("directory:w_dir/x_dir/y_dir/z_dir")];
+
+    // None of these should exist since they aren't mandatory.
+    assert!(!z_dir.is_dir());
+    assert!(!w_build_file.is_file());
+    assert!(!x_text_file.is_file());
+    assert!(!z_text_file.is_file());
+
+    crate::selection::add(
+        &fixture.sparse_repo_path,
+        true,
+        targets,
+        fixture.app.clone(),
+    )?;
+
+    assert!(w_build_file.is_file());
+    assert!(x_text_file.is_file());
+    assert!(z_text_file.is_file());
+
+    Ok(())
+}
+
 struct PreemptiveSyncFixture {
     pub underlying: RepoPairFixture,
     pub repo: Repo,
