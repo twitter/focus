@@ -67,15 +67,19 @@ impl GitBinary {
     }
 
     pub fn command(&self) -> Command {
-        let mut command = Command::new(&self.git_binary_path);
-        command.env_clear();
-        command.env("HOME", &self.git_exec_path);
-        command.env("GIT_EXEC_PATH", &self.git_exec_path);
-        command.env("GIT_AUTHOR_NAME", "Focus Testing");
-        command.env("GIT_AUTHOR_EMAIL", "focus@example.com");
-        command.env("GIT_COMMITTER_NAME", "Focus Testing");
-        command.env("GIT_COMMITTER_EMAIL", "focus@example.com");
-        command
+        if cfg!(test) {
+            let mut command = Command::new(&self.git_binary_path);
+            command.env_clear();
+            command.env("HOME", &self.git_exec_path);
+            command.env("GIT_EXEC_PATH", &self.git_exec_path);
+            command.env("GIT_AUTHOR_NAME", "Focus Testing");
+            command.env("GIT_AUTHOR_EMAIL", "focus@example.com");
+            command.env("GIT_COMMITTER_NAME", "Focus Testing");
+            command.env("GIT_COMMITTER_EMAIL", "focus@example.com");
+            command
+        } else {
+            Command::new(&self.git_binary_path)
+        }
     }
 }
 
