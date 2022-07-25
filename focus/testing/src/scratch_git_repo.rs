@@ -20,14 +20,14 @@ pub struct ScratchGitRepo {
 impl ScratchGitRepo {
     // Create a new fixture repo with a unique random name in the given directory
     pub fn new_static_fixture(containing_dir: &Path) -> Result<Self> {
-        let git_binary = GitBinary::from_env()?;
+        let git_binary = GitBinary::for_testing()?;
         let path = Self::create_fixture_repo(&git_binary, containing_dir)?;
         Ok(Self { git_binary, path })
     }
 
     // Create a new repo by cloning another repo from the local filesystem
     pub fn new_local_clone(local_origin: &Path) -> Result<Self> {
-        let git_binary = GitBinary::from_env()?;
+        let git_binary = GitBinary::for_testing()?;
         let uuid = uuid::Uuid::new_v4();
         let mut target_path = local_origin.to_owned();
         target_path.set_extension(format!("clone_{}", &uuid));

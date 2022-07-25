@@ -29,7 +29,9 @@ impl Debug for App {
 
 impl App {
     pub fn new_for_testing() -> Result<Self> {
-        Self::new(false, None, None, None)
+        let mut app = Self::new(false, None, None, None)?;
+        app.git_binary = GitBinary::for_testing()?;
+        Ok(app)
     }
     pub fn new(
         preserve_sandbox_contents: bool,

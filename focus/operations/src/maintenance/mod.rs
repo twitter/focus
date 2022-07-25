@@ -528,6 +528,7 @@ mod tests {
             home_temp_dir: None,
             git_binary_path: "/path/to/bin/git".into(),
             git_exec_path: "/path/to/lib/gitcore".into(),
+            env: Default::default(),
         };
         let config_key = "other.key";
         let config_path = fix.config_path;

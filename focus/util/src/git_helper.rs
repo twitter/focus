@@ -507,7 +507,7 @@ mod tests {
     #[test]
     fn test_git_version_current() -> Result<()> {
         // just make sure this doesn't return an error
-        let git_binary = GitBinary::from_env()?;
+        let git_binary = GitBinary::for_testing()?;
         let _gv = GitVersion::current(&git_binary).unwrap();
         Ok(())
     }
@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn test_git_binary_from_env() -> Result<()> {
         // just make sure this doesn't barf
-        GitBinary::from_env()?;
+        GitBinary::for_testing()?;
         Ok(())
     }
 
