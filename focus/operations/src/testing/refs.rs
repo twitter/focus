@@ -26,7 +26,7 @@ impl Fixture {
     pub fn new() -> Result<Fixture> {
         let tempdir = tempfile::tempdir()?;
         let app = Arc::new(App::new_for_testing()?);
-        let repo_path = Self::init(app.git_binary(), tempdir.path())?;
+        let repo_path = Self::init(&GitBinary::for_testing()?, tempdir.path())?;
 
         let repo = git2::Repository::open(&repo_path).context("failed to open Repository")?;
 
