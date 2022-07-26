@@ -1,0 +1,30 @@
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+
+jobs:
+  check-licensing:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install `addlicense``
+        run: go install github.com/google/addlicense@latest
+
+      - name: Check licensing
+        run: |
+          git diff || (echo "Working copy should be clean" && exit 1)
+          ./scripts/add-license.sh
+          if ! git diff --quiet; then
+            git diff --name-only | awk '{ print "::error file=" $1 "::File requires license (run `scripts/add-license.sh`)" }'
+            exit 1
+          fi
