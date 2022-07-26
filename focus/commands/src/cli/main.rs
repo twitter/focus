@@ -83,6 +83,10 @@ enum Subcommand {
 
     /// Add projects and targets to the selection.
     Add {
+        /// Select projects to add interactively.
+        #[clap(short = 'i', long)]
+        interactive: bool,
+
         /// Project and targets to add to the selection.
         projects_and_targets: Vec<String>,
     },
@@ -853,6 +857,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }
 
         Subcommand::Add {
+            interactive,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -860,7 +865,12 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             let _lock_file = hold_lock_file(&sparse_repo)?;
             focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+
+            if interactive {
+                focus_operations::selection::add_interactive(&sparse_repo, app)?;
+            } else {
+                focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+            }
             Ok(ExitCode(0))
         }
 
