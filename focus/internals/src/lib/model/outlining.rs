@@ -10,8 +10,6 @@ use std::{
     cmp::Ordering,
     collections::{BTreeSet, HashSet},
     ffi::OsString,
-    fs::File,
-    io::Write,
     os::unix::prelude::{OsStrExt, OsStringExt},
     path::{Path, PathBuf, MAIN_SEPARATOR},
     str::FromStr,
@@ -197,12 +195,7 @@ impl PatternSetWriter for PatternSet {
         static ENDLINE: &[u8] = b"\n";
 
         let mut written_productions = HashSet::<OsString>::new();
-
-        let mut file = File::options()
-            .create(true)
-            .write(true)
-            .open(path)
-            .with_context(|| format!("failed opening '{}' for write", path.display()))?;
+        let mut buf = Vec::<u8>::new();
 
         let mut digest = Sha256::new();
         for pattern in self.iter() {
@@ -217,15 +210,16 @@ impl PatternSetWriter for PatternSet {
                     continue;
                 }
 
-                let line_bytes = line.as_bytes();
-                digest.update(line_bytes);
-                file.write_all(line_bytes)
-                    .context("Writing pattern failed")?;
-                file.write_all(ENDLINE).context("Writing endline failed")?;
+                buf.extend(line.as_bytes());
+                buf.extend(ENDLINE);
             }
         }
 
-        Ok(digest.finalize().to_vec())
+        digest.update(&buf);
+        std::fs::write(path, buf)
+            .with_context(|| format!("Writing the sparse profile to {}", path.display()))?;
+        let hash = digest.finalize().to_vec();
+        Ok(hash)
     }
 }
 
