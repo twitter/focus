@@ -14,11 +14,12 @@ use crate::util::{
     get_zipkin_compatible_id, merge_maps, seconds_since_time,
 };
 
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 const TOOL_INSIGHTS_NESTING_LEVEL_ENV_VAR: &str = "TOOL_INSIGHTS_NESTING_LEVEL";
 const TOOL_INSIGHTS_SESSION_ID_ENV_VAR: &str = "TOOL_INSIGHTS_SESSION_ID";
 const GITSTATS_TRACE_ID: &str = "X_B3_TRACEID";
 const GITSTATS_SPAN_ID: &str = "X_B3_SPANID";
+const LIBRARY_VERSION: &str = "Rust v1"; // update when changes are made to the library
 
 // Even though there is a provision to have more than one message here, I'm only
 // seeing a single message for every record so that's how we will use it.
@@ -89,6 +90,7 @@ pub struct CoreData {
     machine_hostname: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     custom_map: Option<HashMap<String, String>>,
+    lib_ver: String,
 }
 
 impl CoreData {
@@ -116,6 +118,7 @@ impl CoreData {
             user_username: whoami::username(),
             machine_hostname: whoami::hostname(),
             custom_map: final_map,
+            lib_ver: LIBRARY_VERSION.to_string(),
         };
         set_env_vars(&core_data);
         core_data
