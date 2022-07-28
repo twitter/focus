@@ -3,6 +3,7 @@
 
 use focus_internals::model::repo::Repo;
 use focus_testing::ScratchGitRepo;
+use insta::assert_snapshot;
 use std::{collections::HashSet, path::Path, time::Duration};
 
 use anyhow::Result;
@@ -303,6 +304,13 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
     fixture.perform_clone()?;
 
     let path = fixture.sparse_repo_path.clone();
+    let profile_path = fixture
+        .sparse_repo()
+        .unwrap()
+        .working_tree()
+        .unwrap()
+        .sparse_checkout_path();
+
     let targets = vec![String::from("bazel://library_b/...")];
     crate::selection::add(
         &fixture.sparse_repo_path,
@@ -312,9 +320,15 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
     )?;
     // First sync performs a checkout.
     assert!(crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?.checked_out);
+    let original_profile_contents = std::fs::read_to_string(&profile_path)?;
+    assert_snapshot!(original_profile_contents);
 
     // Subsequent sync does not perform a checkout.
-    assert!(!crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?.checked_out);
+    let sync_result = crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?;
+    let updated_profile_contents = std::fs::read_to_string(&profile_path)?;
+    assert_snapshot!(original_profile_contents);
+    assert_eq!(&original_profile_contents, &updated_profile_contents);
+    assert!(!sync_result.checked_out);
 
     Ok(())
 }
