@@ -1,0 +1,101 @@
+---
+source: focus/internals/src/lib/model/outlining.rs
+expression: "&hierarchical_patterns"
+---
+[
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 0,
+      "path": "",
+      "recursive": true
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "a",
+      "recursive": false
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "a/b",
+      "recursive": false
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "a/b/c",
+      "recursive": true
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "a/b/c/d",
+      "recursive": false
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "a/b/c/d/e",
+      "recursive": false
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "a/b/c/d/e/f",
+      "recursive": false
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "a/b/c/d/e/f/g",
+      "recursive": true
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "foo",
+      "recursive": false
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "foo/bar",
+      "recursive": false
+    }
+  },
+  {
+    "kind": "Directory",
+    "pattern": {
+      "precedence": 18446744073709551615,
+      "path": "foo/bar/baz",
+      "recursive": true
+    }
+  },
+  {
+    "kind": "Verbatim",
+    "pattern": {
+      "precedence": 0,
+      "fragment": ":-O lol ;("
+    }
+  }
+]

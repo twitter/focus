@@ -23,7 +23,7 @@ use crate::{
         get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
         HashContext, PathsToMaterializeResult,
     },
-    model::outlining::{LeadingPatternInserter, Pattern},
+    model::outlining::{create_hierarchical_patterns, Pattern},
     target::TargetSet,
     target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
@@ -103,17 +103,24 @@ impl WorkingTree {
     }
 
     /// The location of the current sparse checkout file within the working tree.
-    fn sparse_checkout_path(&self) -> PathBuf {
+    pub fn sparse_checkout_path(&self) -> PathBuf {
         self.info_dir().join("sparse-checkout")
     }
 
     /// Writes the given `patterns` to the working tree.
     pub fn apply_sparse_patterns(
         &self,
-        patterns: &PatternSet,
+        patterns: PatternSet,
         cone: bool,
         app: Arc<App>,
     ) -> Result<bool> {
+        // Make sure the patterns form a hierarchy
+        let patterns = if cone {
+            create_hierarchical_patterns(&patterns)
+        } else {
+            patterns
+        };
+
         // Write the patterns
         let info_dir = self.info_dir();
         std::fs::create_dir_all(&info_dir)
@@ -128,7 +135,7 @@ impl WorkingTree {
         let new_content_hash = patterns.write_to_file(&candidate_sparse_profile_path)?;
 
         if sparse_profile_path.is_file() {
-            let existing_content_hash = hashing::hash_file_lines(&sparse_profile_path)
+            let existing_content_hash = hashing::hash_file(&sparse_profile_path)
                 .context("Hashing contents of existing sparse profile failed")?;
             if !existing_content_hash.is_empty() && existing_content_hash == new_content_hash {
                 // We wrote the exact same thing. Skip everything.
@@ -136,6 +143,8 @@ impl WorkingTree {
                 std::fs::remove_file(&candidate_sparse_profile_path)
                     .context("Removing candidate sparse profile")?;
                 return Ok(false);
+            } else {
+                info!(profile = ?sparse_profile_path, "Sparse profile changed");
             }
         }
         std::fs::rename(&candidate_sparse_profile_path, &sparse_profile_path)
@@ -262,7 +271,7 @@ impl WorkingTree {
 
     fn apply_working_tree_patterns(&self, app: Arc<App>) -> Result<bool> {
         let patterns = self.default_working_tree_patterns()?;
-        self.apply_sparse_patterns(&patterns, true, app)
+        self.apply_sparse_patterns(patterns, true, app)
             .context("Failed to apply root-only patterns")
     }
 
@@ -415,7 +424,7 @@ impl OutliningTree {
     ) -> Result<bool> {
         let patterns = self.configured_outlining_patterns(commit_id)?;
         self.underlying
-            .apply_sparse_patterns(&patterns, false, app)
+            .apply_sparse_patterns(patterns, false, app)
             .context("Failed to apply build file patterns")
     }
 
@@ -501,7 +510,7 @@ impl OutliningTree {
                 .context("locating closest build file")?
                 .unwrap_or(qualified_path);
             if let Some(path) = treat_path(&path)? {
-                patterns.insert_leading(Pattern::Directory {
+                patterns.insert(Pattern::Directory {
                     precedence: LAST,
                     path,
                     recursive: true,
@@ -753,14 +762,15 @@ impl Repo {
 
         trace!(?outline_patterns);
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
+        let pattern_count = outline_patterns.len();
         let checked_out = if skip_pattern_application {
             false
         } else {
             working_tree
-                .apply_sparse_patterns(&outline_patterns, true, app)
+                .apply_sparse_patterns(outline_patterns, true, app)
                 .context("Failed to apply outlined patterns to working tree")?
         };
-        Ok((outline_patterns.len(), checked_out))
+        Ok((pattern_count, checked_out))
     }
 
     /// Creates an outlining tree for the repository.

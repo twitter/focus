@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::{Context, Result};
+use nix::NixPath;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -187,7 +188,7 @@ pub trait PatternSetWriter {
 }
 
 pub trait LeadingPatternInserter {
-    fn insert_leading(&mut self, pattern: Pattern);
+    fn insert_leading(&mut self, pattern: Pattern, ceilings: &HashSet<PathBuf>);
 }
 
 impl PatternSetWriter for PatternSet {
@@ -224,7 +225,7 @@ impl PatternSetWriter for PatternSet {
 }
 
 impl LeadingPatternInserter for PatternSet {
-    fn insert_leading(&mut self, pattern: Pattern) {
+    fn insert_leading(&mut self, pattern: Pattern, ceilings: &HashSet<PathBuf>) {
         {
             match pattern {
                 verbatim @ Pattern::Verbatim { .. } => {
@@ -245,7 +246,11 @@ impl LeadingPatternInserter for PatternSet {
                         let inner = current.clone().into_inner();
                         if let Some(parent) = inner.parent() {
                             // Skip the root path.
-                            if parent == ROOT_PATH.as_path() {
+                            if parent.is_empty() {
+                                break;
+                            }
+
+                            if ceilings.contains(parent) {
                                 break;
                             }
 
@@ -263,6 +268,46 @@ impl LeadingPatternInserter for PatternSet {
             }
         }
     }
+}
+
+pub fn create_hierarchical_patterns(patterns: &PatternSet) -> PatternSet {
+    let mut resulting_patterns = PatternSet::new();
+    let mut recursive_patterns = PatternSet::new();
+    let mut recursive_paths = HashSet::<PathBuf>::new();
+    let mut nonrecursive_patterns = PatternSet::new();
+
+    // Separate patterns out
+    for pattern in patterns {
+        match pattern {
+            verbatim_pattern @ Pattern::Verbatim { .. } => {
+                // Verbatim patterns are just copied over
+                resulting_patterns.insert(verbatim_pattern.clone());
+            }
+            directory_pattern @ Pattern::Directory {
+                precedence: _,
+                path,
+                recursive,
+            } => {
+                if *recursive {
+                    // Recursive patterns are added to both the recursive pattern list and their paths are recorded for use as ceilings when inserting leading patterns
+                    recursive_patterns.insert(directory_pattern.clone());
+                    recursive_paths.insert(path.clone());
+                } else {
+                    nonrecursive_patterns.insert(directory_pattern.clone());
+                }
+            }
+        }
+    }
+
+    // For all paths, insert leading paths.
+    for pattern in recursive_patterns
+        .iter()
+        .chain(nonrecursive_patterns.iter())
+    {
+        resulting_patterns.insert_leading(pattern.clone(), &recursive_paths);
+    }
+
+    resulting_patterns
 }
 
 lazy_static! {
@@ -375,18 +420,32 @@ mod testing {
     #[test]
     fn test_insert_leading() {
         let mut pattern_set = PatternSet::new();
+        let mut recursive_paths = HashSet::<PathBuf>::new();
+        recursive_paths.insert(PathBuf::from("1/2/3"));
         let nested_pattern = Pattern::Directory {
             precedence: 0,
-            path: PathBuf::from("/a/b/c/d/e/"),
+            path: PathBuf::from("a/b/c/d/e"),
             recursive: true,
         };
-        pattern_set.insert_leading(nested_pattern.clone());
+        let nested_pattern_with_ceiling = Pattern::Directory {
+            precedence: 1,
+            path: PathBuf::from("1/2/3"),
+            recursive: true,
+        };
+        let nested_pattern_exceeding_ceiling = Pattern::Directory {
+            precedence: 2,
+            path: PathBuf::from("1/2/3/4/5/6"),
+            recursive: true,
+        };
+        pattern_set.insert_leading(nested_pattern.clone(), &recursive_paths);
+        pattern_set.insert_leading(nested_pattern_with_ceiling.clone(), &recursive_paths);
+        pattern_set.insert_leading(nested_pattern_exceeding_ceiling.clone(), &recursive_paths);
         let mut iter = pattern_set.iter();
         assert_eq!(
             iter.next().unwrap(),
             &Pattern::Directory {
                 precedence: 0,
-                path: PathBuf::from("/a/"),
+                path: PathBuf::from("a"),
                 recursive: true,
             }
         );
@@ -394,7 +453,7 @@ mod testing {
             iter.next().unwrap(),
             &Pattern::Directory {
                 precedence: 0,
-                path: PathBuf::from("/a/b/"),
+                path: PathBuf::from("a/b"),
                 recursive: true,
             }
         );
@@ -402,7 +461,7 @@ mod testing {
             iter.next().unwrap(),
             &Pattern::Directory {
                 precedence: 0,
-                path: PathBuf::from("/a/b/c/"),
+                path: PathBuf::from("a/b/c"),
                 recursive: true,
             }
         );
@@ -410,11 +469,69 @@ mod testing {
             iter.next().unwrap(),
             &Pattern::Directory {
                 precedence: 0,
-                path: PathBuf::from("/a/b/c/d/"),
+                path: PathBuf::from("a/b/c/d"),
                 recursive: true,
             }
         );
-        assert_eq!(iter.next().unwrap(), &nested_pattern);
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 0,
+                path: PathBuf::from("a/b/c/d/e"),
+                recursive: true,
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 1,
+                path: PathBuf::from("1"),
+                recursive: false,
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 1,
+                path: PathBuf::from("1/2"),
+                recursive: false,
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 1,
+                path: PathBuf::from("1/2/3"),
+                recursive: true,
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 2,
+                path: PathBuf::from("1/2/3/4"),
+                recursive: false,
+            }
+        );
+
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 2,
+                path: PathBuf::from("1/2/3/4/5"),
+                recursive: false,
+            }
+        );
+
+        assert_eq!(
+            iter.next().unwrap(),
+            &Pattern::Directory {
+                precedence: 2,
+                path: PathBuf::from("1/2/3/4/5/6"),
+                recursive: false,
+            }
+        );
+        assert!(iter.next().is_none());
     }
 
     #[test]
@@ -436,5 +553,42 @@ mod testing {
         });
         patterns.write_to_file(file.path()).unwrap();
         insta::assert_snapshot!(std::fs::read_to_string(file.path()).unwrap());
+    }
+
+    #[test]
+    fn test_create_hierarchical_patterns() {
+        let mut patterns = PatternSet::new();
+        patterns.insert(Pattern::Directory {
+            precedence: 0,
+            path: PathBuf::default(),
+            recursive: true,
+        });
+        patterns.insert(Pattern::Verbatim {
+            precedence: 0,
+            fragment: String::from(":-O lol ;("),
+        });
+        patterns.insert(Pattern::Directory {
+            precedence: usize::MAX,
+            path: PathBuf::from("a/b/c/d/e/f/g"),
+            recursive: true,
+        });
+        patterns.insert(Pattern::Directory {
+            precedence: usize::MAX,
+            path: PathBuf::from("a/b/c/d/e"),
+            recursive: false,
+        });
+        patterns.insert(Pattern::Directory {
+            precedence: usize::MAX,
+            path: PathBuf::from("a/b/c"),
+            recursive: true,
+        });
+        patterns.insert(Pattern::Directory {
+            precedence: usize::MAX,
+            path: PathBuf::from("foo/bar/baz"),
+            recursive: true,
+        });
+
+        let hierarchical_patterns = create_hierarchical_patterns(&patterns);
+        insta::assert_json_snapshot!(&hierarchical_patterns);
     }
 }

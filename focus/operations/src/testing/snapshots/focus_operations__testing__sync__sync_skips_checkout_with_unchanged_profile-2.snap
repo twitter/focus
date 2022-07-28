@@ -1,6 +1,6 @@
 ---
 source: focus/operations/src/testing/sync.rs
-expression: "std::fs::read_to_string(&profile_path)?"
+expression: original_profile_contents
 ---
 /*
 !/*/
