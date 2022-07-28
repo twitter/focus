@@ -1,6 +1,8 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{
     path::{Path, PathBuf},
-    process::Command,
     sync::Arc,
 };
 
@@ -9,6 +11,7 @@ use anyhow::{Context, Result};
 use focus_util::app::App;
 use git2::Repository;
 
+use focus_testing::GitBinary;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -21,14 +24,14 @@ pub struct Fixture {
 
 impl Fixture {
     pub fn new() -> Result<Fixture> {
-        let _tempdir = tempfile::tempdir()?;
-        let repo_path = Self::init(_tempdir.path())?;
-
+        let tempdir = tempfile::tempdir()?;
         let app = Arc::new(App::new_for_testing()?);
+        let repo_path = Self::init(&GitBinary::for_testing()?, tempdir.path())?;
+
         let repo = git2::Repository::open(&repo_path).context("failed to open Repository")?;
 
         Ok(Fixture {
-            _tempdir,
+            _tempdir: tempdir,
             repo_path,
             app,
             repo,
@@ -36,24 +39,34 @@ impl Fixture {
     }
 
     /// creates the temp repo and returns the path created
-    fn init(containing_dir: &Path) -> Result<PathBuf> {
+    fn init(git_binary: &GitBinary, containing_dir: &Path) -> Result<PathBuf> {
         let name = format!("repo_{}", Uuid::new_v4());
-        Command::new("git")
+        git_binary
+            .command()
             .arg("init")
             .arg(&name)
             .current_dir(containing_dir)
             .status()
-            .context("git init failed")?;
+            .with_context(|| {
+                format!(
+                    "Initialzing {} repository in {}",
+                    &name,
+                    containing_dir.display()
+                )
+            })?;
 
         let repo_path = containing_dir.join(&name);
 
-        Command::new("git")
+        git_binary
+            .command()
             .arg("switch")
             .arg("-c")
             .arg("main")
             .current_dir(&repo_path)
             .status()
-            .context("git switch failed")?;
+            .with_context(|| {
+                format!("Creating main branch in {} repository", repo_path.display())
+            })?;
 
         Ok(repo_path)
     }

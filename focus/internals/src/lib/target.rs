@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -23,14 +26,14 @@ pub enum Target {
 impl Display for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Target::Bazel(c) => write!(f, "{}", c),
-            Target::Directory(c) => write!(f, "{}", c),
-            Target::Pants(c) => write!(f, "{}", c),
+            Target::Bazel(c) => write!(f, "bazel:{}", c),
+            Target::Directory(c) => write!(f, "directory:{}", c),
+            Target::Pants(c) => write!(f, "pants:{}", c),
         }
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum TargetError {
     #[error("Scheme not supported")]
     UnsupportedScheme(String),
@@ -119,7 +122,11 @@ impl Display for Label {
                 write!(f, ":{}", name)?;
             }
             TargetName::Ellipsis => {
-                write!(f, "/...")?;
+                if self.path_components.is_empty() {
+                    write!(f, "...")?;
+                } else {
+                    write!(f, "/...")?;
+                }
             }
         }
 
@@ -135,7 +142,7 @@ impl Debug for Label {
 }
 
 /// TODO: improve error messaging here
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum LabelParseError {
     #[error("No target name")]
     NoTargetName,
@@ -237,6 +244,18 @@ mod tests {
                 path_components: vec!["foo".to_string(), "bar".to_string()],
                 target_name: TargetName::Name("baz/qux.py".to_string()),
             }))
+        );
+        assert_eq!(
+            Target::try_from("bazel://..."),
+            Ok(Target::Bazel(Label {
+                external_repository: None,
+                path_components: vec![],
+                target_name: TargetName::Ellipsis
+            }))
+        );
+        assert_eq!(
+            Target::try_from("bazel://...").unwrap().to_string(),
+            "bazel://...",
         );
 
         assert_eq!(

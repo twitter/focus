@@ -1,4 +1,7 @@
 #!/bin/bash -e
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 # fetch and extract the rust toolchain
 set -eux
 
@@ -8,6 +11,7 @@ function die() {
 }
 
 role=${1-"the-focus-indexer"}
+skip_mark_live=${2-"false"}
 
 ##
 ## Preconditions
@@ -22,12 +26,8 @@ packer fetch --use-tfe --cluster=smf1 io-perf rust-dev live
 tar xzf rust-dev.tgz
 popd
 
-
 cargo_target=x86_64-unknown-linux-gnu
 export PATH="${PATH}:${PWD}/toolchain/rust-dev/bin"
-rm -rf focus
-git clone --single-branch -b main --depth 1 http://git.twitter.biz/ro/focus
-pushd focus
 # get proxy credentials from TSS
 echo "Getting proxy credentials..."
 export HTTP_PROXY="http://rust-crates:$(cat /var/lib/tss/keys/io-perf/rust-crates/proxy-pass)@httpproxy.local.twitter.com:3128"
@@ -46,7 +46,6 @@ cargo --version
 # build
 echo "Building..."
 cargo build --release --target "$cargo_target"
-popd
 
 ##
 ## Upload to Packer
@@ -56,7 +55,7 @@ test -d release && rm -r release
 mkdir release
 pushd release
 mkdir bin
-cp ../focus/target/$cargo_target/release/focus bin/focus
+cp ../target/$cargo_target/release/focus bin/focus
 tar jcf ../focus.tar.bz2 .
 clusters=("smf1" "atla" "pdxa")
 for cluster in ${clusters[@]}; do
@@ -68,10 +67,12 @@ popd
 ##
 ## Mark latest packer versions live
 ##
-package="focus.Linux.x86_64"
-clusters=("smf1" "atla" "pdxa")
-for cluster in ${clusters[@]}; do
-    version=$(packer versions "--cluster=$cluster" --use-tfe "$role" "$package" 2>&1 | grep 'Version' | awk '{print $2}' | tail -n1)
-    echo "Latest version in $cluster is $version; marking it as LIVE"
-    packer set_live "--cluster=$cluster" "$role" "$package" "$version"
-done
+if [[ "$skip_mark_live" == "false" ]]; then
+    package="focus.Linux.x86_64"
+    clusters=("smf1" "atla" "pdxa")
+    for cluster in ${clusters[@]}; do
+        version=$(packer versions "--cluster=$cluster" --use-tfe "$role" "$package" 2>&1 | grep 'Version' | awk '{print $2}' | tail -n1)
+        echo "Latest version in $cluster is $version; marking it as LIVE"
+        packer set_live "--cluster=$cluster" "$role" "$package" "$version"
+    done
+fi

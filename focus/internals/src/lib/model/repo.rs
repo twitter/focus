@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use content_addressed_cache::RocksDBCache;
 use focus_util::{
     app::App,
@@ -7,10 +10,11 @@ use focus_util::{
 };
 use std::{
     collections::HashSet,
-    fs::{self},
+    fs,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use crate::{
@@ -19,7 +23,7 @@ use crate::{
         get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
         HashContext, PathsToMaterializeResult,
     },
-    model::outlining::{LeadingPatternInserter, Pattern},
+    model::outlining::{create_hierarchical_patterns, Pattern},
     target::TargetSet,
     target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
@@ -41,11 +45,17 @@ const SPARSE_SYNC_REF_NAME: &str = "refs/focus/sync";
 const PREEMPTIVE_SYNC_REF_NAME: &str = "refs/focus/presync";
 const UUID_CONFIG_KEY: &str = "focus.uuid";
 const PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY: &str = "focus.preemptive-sync.enabled";
+const PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY: &str =
+    "focus.preemptive-sync.user-idle-threshold";
+const PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT: i32 = 15000;
 
 const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
 const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
 const VERSION_CONFIG_KEY: &str = "focus.version";
 const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
+const CI_ENABLED_CONFIG_KEY: &str = "ci.alt.enabled";
+const CI_REMOTE_CONFIG_KEY: &str = "ci.alt.remote";
+const CI_REMOTE_CONFIG_VALUE: &str = "https://git.twitter.biz/source-ci";
 const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
 const LAST: usize = usize::MAX;
 
@@ -93,17 +103,24 @@ impl WorkingTree {
     }
 
     /// The location of the current sparse checkout file within the working tree.
-    fn sparse_checkout_path(&self) -> PathBuf {
+    pub fn sparse_checkout_path(&self) -> PathBuf {
         self.info_dir().join("sparse-checkout")
     }
 
     /// Writes the given `patterns` to the working tree.
     pub fn apply_sparse_patterns(
         &self,
-        patterns: &PatternSet,
+        patterns: PatternSet,
         cone: bool,
         app: Arc<App>,
     ) -> Result<bool> {
+        // Make sure the patterns form a hierarchy
+        let patterns = if cone {
+            create_hierarchical_patterns(&patterns)
+        } else {
+            patterns
+        };
+
         // Write the patterns
         let info_dir = self.info_dir();
         std::fs::create_dir_all(&info_dir)
@@ -118,7 +135,7 @@ impl WorkingTree {
         let new_content_hash = patterns.write_to_file(&candidate_sparse_profile_path)?;
 
         if sparse_profile_path.is_file() {
-            let existing_content_hash = hashing::hash_file_lines(&sparse_profile_path)
+            let existing_content_hash = hashing::hash_file(&sparse_profile_path)
                 .context("Hashing contents of existing sparse profile failed")?;
             if !existing_content_hash.is_empty() && existing_content_hash == new_content_hash {
                 // We wrote the exact same thing. Skip everything.
@@ -126,6 +143,8 @@ impl WorkingTree {
                 std::fs::remove_file(&candidate_sparse_profile_path)
                     .context("Removing candidate sparse profile")?;
                 return Ok(false);
+            } else {
+                info!(profile = ?sparse_profile_path, "Sparse profile changed");
             }
         }
         std::fs::rename(&candidate_sparse_profile_path, &sparse_profile_path)
@@ -139,12 +158,10 @@ impl WorkingTree {
                 "init",
                 if cone { "--cone" } else { "--no-cone" },
             ];
-            let description = format!("Running git {:?} in {}", args, self.work_dir().display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app.clone())?;
+            let (mut cmd, scmd) = git_helper::git_command(app.clone())?;
             scmd.ensure_success_or_log(
                 cmd.current_dir(self.work_dir()).args(args),
                 SandboxCommandOutput::Stderr,
-                &description,
             )
             .with_context(|| format!("In working tree {}", self.work_dir().display()))
             .context("git sparse-checkout init failed")?;
@@ -154,12 +171,10 @@ impl WorkingTree {
         info!("Checking out");
         {
             let args = vec!["checkout"];
-            let description = format!("Running git {:?} in {}", args, self.work_dir().display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
+            let (mut cmd, scmd) = git_helper::git_command(app)?;
             scmd.ensure_success_or_log(
                 cmd.current_dir(self.work_dir()).args(args),
                 SandboxCommandOutput::Stderr,
-                &description,
             )
             .with_context(|| format!("In working tree {:?}", self.work_dir()))
             .context("git checkout failed")?;
@@ -190,14 +205,17 @@ impl WorkingTree {
         }
         args.push(&commit_id_str);
 
-        let description = format!("Running git {:?} in {}", args, self.work_dir().display());
-        let (mut cmd, scmd) = git_helper::git_command(description.clone(), app)?;
+        let (mut cmd, scmd) = git_helper::git_command(app)?;
         scmd.ensure_success_or_log(
             cmd.current_dir(self.work_dir()).args(args),
             SandboxCommandOutput::Stderr,
-            &description,
         )
-        .context("git switch failed")?;
+        .with_context(|| {
+            format!(
+                "Switching to commit {} failed (detach={}, discard_changes={})",
+                &commit_id_str, detach, discard_changes
+            )
+        })?;
 
         Ok(())
     }
@@ -253,11 +271,11 @@ impl WorkingTree {
 
     fn apply_working_tree_patterns(&self, app: Arc<App>) -> Result<bool> {
         let patterns = self.default_working_tree_patterns()?;
-        self.apply_sparse_patterns(&patterns, true, app)
+        self.apply_sparse_patterns(patterns, true, app)
             .context("Failed to apply root-only patterns")
     }
 
-    pub fn read_sync_point_ref_internal(&self, name: &str) -> Result<Option<Oid>> {
+    pub fn read_ref(&self, name: &str) -> Result<Option<Oid>> {
         let reference = self.repo.find_reference(name).with_context(|| {
             format!(
                 "Finding sync reference {} in repo {}",
@@ -282,12 +300,22 @@ impl WorkingTree {
 
     /// Reads the commit ID of the sparse sync ref (named SYNC_REF_NAME)
     pub fn read_sparse_sync_point_ref(&self) -> Result<Option<Oid>> {
-        self.read_sync_point_ref_internal(SPARSE_SYNC_REF_NAME)
+        self.read_ref(SPARSE_SYNC_REF_NAME)
     }
 
     /// Reads the commit ID of the preemptive sync ref (named SYNC_REF_NAME)
     pub fn read_preemptive_sync_point_ref(&self) -> Result<Option<Oid>> {
-        self.read_sync_point_ref_internal(PREEMPTIVE_SYNC_REF_NAME)
+        self.read_ref(PREEMPTIVE_SYNC_REF_NAME)
+    }
+
+    pub fn primary_branch_name(&self) -> Result<String> {
+        if self.repo.find_reference("refs/heads/master").is_ok() {
+            Ok(String::from("master"))
+        } else if self.repo.find_reference("refs/heads/main").is_ok() {
+            Ok(String::from("main"))
+        } else {
+            bail!("Could not determine primary branch name")
+        }
     }
 
     pub fn write_sync_point_ref_internal(&self, name: &str, commit_id: git2::Oid) -> Result<()> {
@@ -325,14 +353,11 @@ impl WorkingTree {
 
     /// Determine if the working tree is clean
     pub fn is_clean(&self, app: Arc<App>) -> Result<bool> {
-        Ok(git_helper::run_consuming_stdout(
-            "git status",
-            self.work_dir(),
-            vec!["status", "--porcelain"],
-            app,
-        )?
-        .trim()
-        .is_empty())
+        Ok(
+            git_helper::run_consuming_stdout(self.work_dir(), vec!["status", "--porcelain"], app)?
+                .trim()
+                .is_empty(),
+        )
     }
 
     pub fn read_uuid(&self) -> Result<Option<Uuid>> {
@@ -399,7 +424,7 @@ impl OutliningTree {
     ) -> Result<bool> {
         let patterns = self.configured_outlining_patterns(commit_id)?;
         self.underlying
-            .apply_sparse_patterns(&patterns, false, app)
+            .apply_sparse_patterns(patterns, false, app)
             .context("Failed to apply build file patterns")
     }
 
@@ -485,7 +510,7 @@ impl OutliningTree {
                 .context("locating closest build file")?
                 .unwrap_or(qualified_path);
             if let Some(path) = treat_path(&path)? {
-                patterns.insert_leading(Pattern::Directory {
+                patterns.insert(Pattern::Directory {
                     precedence: LAST,
                     path,
                     recursive: true,
@@ -737,14 +762,15 @@ impl Repo {
 
         trace!(?outline_patterns);
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
+        let pattern_count = outline_patterns.len();
         let checked_out = if skip_pattern_application {
             false
         } else {
             working_tree
-                .apply_sparse_patterns(&outline_patterns, true, app)
+                .apply_sparse_patterns(outline_patterns, true, app)
                 .context("Failed to apply outlined patterns to working tree")?
         };
-        Ok((outline_patterns.len(), checked_out))
+        Ok((pattern_count, checked_out))
     }
 
     /// Creates an outlining tree for the repository.
@@ -759,8 +785,7 @@ impl Repo {
 
         // Add the worktree
         {
-            let description = format!("Creating outlining tree worktree in {}", path.display());
-            let (mut cmd, scmd) = git_helper::git_command(description.clone(), self.app.clone())?;
+            let (mut cmd, scmd) = git_helper::git_command(self.app.clone())?;
             let cmd = cmd
                 .current_dir(&self.path)
                 .arg("worktree")
@@ -768,9 +793,8 @@ impl Repo {
                 .arg("--no-checkout")
                 .arg(&path)
                 .arg("HEAD");
-            scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr, &description)
-                .context("git worktree add failed")
-                .map(|_| ())?;
+            scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr)
+                .context("git worktree add failed")?;
         }
 
         let working_tree = WorkingTree::new(git2::Repository::open(self.working_tree_git_dir())?)?;
@@ -816,6 +840,11 @@ impl Repo {
             .set_str(VERSION_CONFIG_KEY, env!("CARGO_PKG_VERSION"))?;
 
         self.repo.config()?.set_bool(GITSTATS_CONFIG_KEY, true)?;
+
+        self.repo.config()?.set_bool(CI_ENABLED_CONFIG_KEY, true)?;
+        self.repo
+            .config()?
+            .set_str(CI_REMOTE_CONFIG_KEY, CI_REMOTE_CONFIG_VALUE)?;
         Ok(())
     }
 
@@ -855,6 +884,7 @@ impl Repo {
         Ok(head_commit)
     }
 
+    /// Read whether preemptive sync is enabled from Git config.
     pub fn get_preemptive_sync_enabled(&self) -> Result<bool> {
         let snapshot = self
             .underlying()
@@ -863,9 +893,12 @@ impl Repo {
             .snapshot()
             .context("Snapshotting config")?;
 
-        Ok(snapshot.get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)?)
+        Ok(snapshot
+            .get_bool(PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY)
+            .unwrap_or(false))
     }
 
+    /// Set whether preemptive sync is enabled in the Git config.
     pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
         let working_tree = self
             .working_tree()
@@ -875,6 +908,46 @@ impl Repo {
             working_tree.work_dir(),
             PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY,
             enabled.to_string().as_str(),
+            self.app.clone(),
+        )
+        .context("Writing preemptive sync enabled key")?;
+
+        Ok(())
+    }
+
+    /// Read the configured preemptive sync idle threshold duration. This indicates how long the computer must be inactive to allow for preemptive sync to run.
+    pub fn get_preemptive_sync_idle_threshold(&self) -> Result<Duration> {
+        let snapshot = self
+            .underlying()
+            .config()
+            .context("Reading config")?
+            .snapshot()
+            .context("Snapshotting config")?;
+
+        let mut threshold = snapshot
+            .get_i32(PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY)
+            .unwrap_or(PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT);
+        if threshold < 1 {
+            warn!(
+                "Configuration value of '{}' must be positive; using default ({})",
+                PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY,
+                PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT
+            );
+            threshold = PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT;
+        }
+        Ok(Duration::from_millis(threshold as u64))
+    }
+
+    /// Write the configured preemptive sync idle threshold duration.
+    pub fn set_preemptive_sync_idle_threshold(&self, duration: Duration) -> Result<()> {
+        let working_tree = self
+            .working_tree()
+            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+
+        git_helper::write_config(
+            working_tree.work_dir(),
+            PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY,
+            &duration.as_millis().to_string(),
             self.app.clone(),
         )
         .context("Writing preemptive sync enabled key")?;

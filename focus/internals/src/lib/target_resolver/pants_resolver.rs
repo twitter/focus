@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{
     io::BufRead,
     path::{Path, PathBuf},
@@ -66,17 +69,13 @@ impl Resolver for PantsResolver {
         // Run Pants query
         let mut args = vec![String::from("filedeps")];
         args.extend(addresses);
-        let args_description = args.join(" ");
 
-        let description = format!("pants {}", &args_description);
-        let (mut cmd, scmd) =
-            SandboxCommand::new(description.clone(), Self::locate_pants_binary(request), app)?;
+        let (mut cmd, scmd) = SandboxCommand::new(Self::locate_pants_binary(request), app)?;
         scmd.ensure_success_or_log(
             cmd.env("EE_PANTS_DAEMON_BETA", "0")
                 .args(args)
                 .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
-            &description,
         )?;
 
         let reader = scmd.read_buffered(SandboxCommandOutput::Stdout)?;

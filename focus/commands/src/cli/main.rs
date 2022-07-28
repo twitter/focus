@@ -1,4 +1,6 @@
 #![allow(clippy::too_many_arguments)]
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
 
 use std::{
     convert::TryFrom,
@@ -11,6 +13,7 @@ use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use clap::Parser;
 use focus_migrations::production::perform_pending_migrations;
+use focus_testing::GitBinary;
 use git2::Repository;
 
 use focus_util::{
@@ -22,37 +25,48 @@ use focus_util::{
 };
 
 use focus_internals::tracker::Tracker;
-use focus_operations::maintenance::{self, ScheduleOpts};
+use focus_operations::{
+    maintenance::{self, ScheduleOpts},
+    sync::SyncMode,
+};
 use strum::VariantNames;
+use termion::{color, style};
 use tracing::{debug, debug_span, info};
+
+#[derive(Parser, Debug)]
+struct NewArgs {
+    /// Path to the repository to clone.
+    #[clap(long, default_value = "~/workspace/source")]
+    dense_repo: String,
+
+    /// Path where the new sparse repository should be created.
+    #[clap(parse(from_os_str))]
+    sparse_repo: PathBuf,
+
+    /// The name of the branch to clone.
+    #[clap(long, default_value = "master")]
+    branch: String,
+
+    /// Days of history to maintain in the sparse repo.
+    #[clap(long, default_value = "90")]
+    days_of_history: u64,
+
+    /// Copy only the specified branch rather than all local branches.
+    #[clap(long, parse(try_from_str), default_value = "true")]
+    copy_branches: bool,
+
+    /// Initial projects and targets to add to the repo.
+    projects_and_targets: Vec<String>,
+}
 
 #[derive(Parser, Debug)]
 enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build targets
-    Clone {
-        /// Path to the repository to clone.
-        #[clap(long, default_value = "~/workspace/source")]
-        dense_repo: String,
+    New(NewArgs),
 
-        /// Path where the new sparse repository should be created.
-        #[clap(parse(from_os_str))]
-        sparse_repo: PathBuf,
-
-        /// The name of the branch to clone.
-        #[clap(long, default_value = "master")]
-        branch: String,
-
-        /// Days of history to maintain in the sparse repo.
-        #[clap(long, default_value = "90")]
-        days_of_history: u64,
-
-        /// Copy only the specified branch rather than all local branches.
-        #[clap(long, parse(try_from_str), default_value = "true")]
-        copy_branches: bool,
-
-        /// Initial projects and targets to add to the repo.
-        projects_and_targets: Vec<String>,
-    },
+    /// Deprecated; use `focus new` instead.
+    #[clap(hide = true)]
+    Clone(NewArgs),
 
     /// Update the sparse checkout to reflect changes to the build graph.
     Sync {
@@ -69,6 +83,10 @@ enum Subcommand {
 
     /// Add projects and targets to the selection.
     Add {
+        /// Select projects to add interactively.
+        #[clap(short = 'i', long)]
+        interactive: bool,
+
         /// Project and targets to add to the selection.
         projects_and_targets: Vec<String>,
     },
@@ -92,7 +110,11 @@ enum Subcommand {
         #[clap(long, parse(from_os_str), default_value = ".")]
         repo: PathBuf,
 
-        /// Extra arguments.
+        /// Whether to treat build graph changes as warnings rather than errors; if true (the default), we should never exit with a non-zero status code in normal operation
+        #[clap(long, default_value = "true")]
+        advisory: bool,
+
+        /// Arguments passed by the wrapper (a wrapper of `bazel` or otherwise)
         args: Vec<String>,
     },
 
@@ -104,6 +126,19 @@ enum Subcommand {
 
         #[clap(subcommand)]
         subcommand: RefsSubcommand,
+    },
+
+    /// Manage branches and branch prefixes in the repo
+    Branch {
+        /// The repo path to manage branches for
+        #[clap(long, parse(from_os_str), default_value = ".")]
+        repo: PathBuf,
+
+        #[clap(long, default_value = "origin")]
+        remote_name: String,
+
+        #[clap(subcommand)]
+        subcommand: BranchSubcommand,
     },
 
     /// Set up an initial clone of the repo from the remote
@@ -192,15 +227,22 @@ enum Subcommand {
     /// Called by a git hook to trigger certain actions after a git event such as
     /// merge completion or checkout
     Event { args: Vec<String> },
+
     /// Print the version of Focus
     Version,
+
+    /// Control automatic background synchronization
+    Background {
+        #[clap(subcommand)]
+        subcommand: BackgroundSubcommand,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
 /// feature name.
 fn feature_name_for(subcommand: &Subcommand) -> String {
     match subcommand {
-        Subcommand::Clone { .. } => "clone".to_string(),
+        Subcommand::New { .. } | Subcommand::Clone { .. } => "new".to_string(),
         Subcommand::Sync { .. } => "sync".to_string(),
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List { .. } => "repo-list".to_string(),
@@ -215,6 +257,11 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             RefsSubcommand::Delete { .. } => "refs-delete".to_string(),
             RefsSubcommand::ListExpired { .. } => "refs-list-expired".to_string(),
             RefsSubcommand::ListCurrent { .. } => "refs-list-current".to_string(),
+        },
+        Subcommand::Branch { subcommand, .. } => match subcommand {
+            BranchSubcommand::List { .. } => "branch-list".to_string(),
+            BranchSubcommand::Search { .. } => "branch-search".to_string(),
+            BranchSubcommand::Add { .. } => "branch-add".to_string(),
         },
         Subcommand::Init { .. } => "init".to_string(),
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
@@ -252,6 +299,11 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             temp_args.join("-")
         }
         Subcommand::Version => "version".to_string(),
+        Subcommand::Background { subcommand } => match subcommand {
+            BackgroundSubcommand::Enable { .. } => "background-enable".to_string(),
+            BackgroundSubcommand::Disable { .. } => "background-disable".to_string(),
+            BackgroundSubcommand::Sync { .. } => "background-sync".to_string(),
+        },
     }
 }
 
@@ -372,6 +424,30 @@ enum RepoSubcommand {
 }
 
 #[derive(Parser, Debug)]
+enum BranchSubcommand {
+    /// List branches in repo
+    List {},
+
+    /// Search for branches using a search term
+    Search {
+        /// Substring used to search refs in the remote server
+        ///
+        /// Ex:
+        ///
+        /// 'user' would match with branch 'user' and 'user/branch-1'.
+        search_term: String,
+    },
+
+    /// Add a branch or set of branches to track from the remote server.
+    ///
+    /// To track a single branch, run e.g. `focus branch add username/my-feature`.
+    /// To track a set of branches, run e.g. `focus branch add 'username/*'`.
+    ///
+    /// The passed in name should not end in `/`.
+    Add { name: String },
+}
+
+#[derive(Parser, Debug)]
 enum ProjectSubcommand {
     /// List all available layers
     Available {},
@@ -395,31 +471,6 @@ enum ProjectSubcommand {
     /// Filter out one or more project(s) from the stack of currently selected layers
     Remove {
         /// Names of the layers to be removed.
-        names: Vec<String>,
-    },
-}
-
-#[derive(Parser, Debug)]
-enum AdhocSubcommand {
-    /// List the contents of the ad-hoc target stack
-    List {},
-
-    /// Push one or more target(s) onto the top of the ad-hoc target stack
-    Push {
-        /// Names of targets to push.
-        names: Vec<String>,
-    },
-
-    /// Pop one or more targets(s) from the top of the ad-hoc target stack
-    Pop {
-        /// The number of targets to pop.
-        #[clap(long, default_value = "1")]
-        count: usize,
-    },
-
-    /// Filter out one or more target(s) from the ad-hoc target stack
-    Remove {
-        /// Names of the targets to be removed.
         names: Vec<String>,
     },
 }
@@ -479,6 +530,15 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// Force fetching an index, even if index fetching is disabled for this
+        /// repository.
+        #[clap(short = 'f', long = "force")]
+        force: bool,
+
+        /// Override the remote provided in the config.
+        #[clap(long)]
+        remote: Option<String>,
     },
 
     Get {
@@ -498,6 +558,10 @@ enum IndexSubcommand {
 
     /// Calculate and print the content hashes of the provided targets.
     Hash {
+        /// The commit at which to hash the provided targets.
+        #[clap(long, default_value = "HEAD")]
+        commit: String,
+
         /// The targets to hash.
         targets: Vec<String>,
     },
@@ -512,6 +576,11 @@ enum IndexSubcommand {
         /// The Git remote to push to.
         #[clap(long, default_value = focus_operations::index::INDEX_DEFAULT_REMOTE)]
         remote: String,
+
+        /// Do not actually push the index data to the remote. (It will still be
+        /// generated and cached locally.)
+        #[clap(short = 'N', long = "dry-run")]
+        dry_run: bool,
 
         /// If index keys are found to be missing, pause for debugging.
         #[clap(long)]
@@ -534,6 +603,34 @@ enum EventSubcommand {
     PostCheckout,
     PostCommit,
     PostMerge,
+}
+
+#[derive(Parser, Debug)]
+enum BackgroundSubcommand {
+    /// Enable preemptive background synchronization
+    Enable {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+
+        /// Idle threshold: how long must the machine be inactive before performing pre-emptive sync? (In milliseconds)
+        #[clap(default_value = "30000")]
+        idle_period_ms: u64,
+    },
+
+    /// Disable preemptive background synchronization.
+    Disable {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
+
+    /// Manually run a preemptive sync
+    Sync {
+        /// Path to the sparse repository.
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -565,8 +662,8 @@ struct FocusOpts {
     cmd: Subcommand,
 }
 
-fn ensure_directories_exist() -> Result<()> {
-    Tracker::default()
+fn ensure_directories_exist(tracker: &Tracker) -> Result<()> {
+    tracker
         .ensure_directories_exist()
         .context("creating directories for the tracker")?;
 
@@ -578,7 +675,7 @@ fn hold_lock_file(repo: &Path) -> Result<LockFile> {
     LockFile::new(&path)
 }
 
-fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
+fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
     let feature_name = feature_name_for(&options.cmd);
@@ -586,15 +683,32 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
     let span = debug_span!("Running subcommand", ?feature_name);
     let _guard = span.enter();
 
+    if let Subcommand::Clone(_) = &options.cmd {
+        eprintln!(
+            "{}{}The command `focus clone` is deprecated; use `focus new` instead!{}",
+            style::Bold,
+            color::Fg(color::Yellow),
+            style::Reset,
+        );
+    }
+
     match options.cmd {
-        Subcommand::Clone {
+        Subcommand::New(NewArgs {
             dense_repo,
             sparse_repo,
             branch,
             days_of_history,
             copy_branches,
             projects_and_targets,
-        } => {
+        })
+        | Subcommand::Clone(NewArgs {
+            dense_repo,
+            sparse_repo,
+            branch,
+            days_of_history,
+            copy_branches,
+            projects_and_targets,
+        }) => {
             let origin = focus_operations::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
                 let current_dir =
@@ -619,6 +733,8 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 projects_and_targets,
                 copy_branches,
                 days_of_history,
+                true,
+                tracker,
                 app,
             )?;
 
@@ -634,7 +750,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            focus_operations::sync::run(&sparse_repo, false, app)?;
+            focus_operations::sync::run(&sparse_repo, SyncMode::Normal, app)?;
             Ok(ExitCode(0))
         }
 
@@ -700,25 +816,48 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             }
         }
 
+        Subcommand::Branch {
+            subcommand,
+            repo,
+            remote_name,
+        } => match subcommand {
+            BranchSubcommand::List {} => {
+                focus_operations::branch::list(app, repo, &remote_name)?;
+                Ok(ExitCode(0))
+            }
+            BranchSubcommand::Search { search_term } => {
+                focus_operations::branch::search(app, repo, &remote_name, &search_term)?;
+                Ok(ExitCode(0))
+            }
+            BranchSubcommand::Add { name } => {
+                focus_operations::branch::add(app, repo, &remote_name, &name)
+            }
+        },
+
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List {} => {
-                focus_operations::repo::list()?;
+                focus_operations::repo::list(tracker)?;
                 Ok(ExitCode(0))
             }
             RepoSubcommand::Repair {} => {
-                focus_operations::repo::repair(app)?;
+                focus_operations::repo::repair(tracker, app)?;
                 Ok(ExitCode(0))
             }
         },
 
-        Subcommand::DetectBuildGraphChanges { repo, args } => {
+        Subcommand::DetectBuildGraphChanges {
+            repo,
+            advisory,
+            args,
+        } => {
             let repo = paths::expand_tilde(repo)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
-            focus_operations::detect_build_graph_changes::run(&repo, args, app)
+            focus_operations::detect_build_graph_changes::run(&repo, advisory, args, app)
         }
 
         Subcommand::Add {
+            interactive,
             projects_and_targets,
         } => {
             let sparse_repo = std::env::current_dir()?;
@@ -726,7 +865,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             let _lock_file = hold_lock_file(&sparse_repo)?;
             focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+
+            if interactive {
+                focus_operations::selection::add_interactive(&sparse_repo, app)?;
+            } else {
+                focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+            }
             Ok(ExitCode(0))
         }
 
@@ -745,8 +889,7 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
         Subcommand::Status {} => {
             let sparse_repo = std::env::current_dir()?;
             paths::assert_focused_repo(&sparse_repo)?;
-            focus_operations::selection::status(&sparse_repo, app)?;
-            Ok(ExitCode(0))
+            focus_operations::status::run(&sparse_repo, app)
         }
 
         Subcommand::Projects {} => {
@@ -815,14 +958,16 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 git_config_path,
                 time_period,
             } => {
+                let git_binary = GitBinary::from_binary_path(git_binary_path)?;
                 focus_operations::maintenance::run(
                     focus_operations::maintenance::RunOptions {
-                        git_binary_path,
+                        git_binary: Some(git_binary),
                         git_config_key,
                         git_config_path,
                         tracked,
                     },
                     time_period,
+                    tracker,
                     app,
                 )?;
 
@@ -917,8 +1062,12 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(ExitCode(0))
             }
 
-            IndexSubcommand::Fetch { sparse_repo } => {
-                let exit_code = focus_operations::index::fetch(app, sparse_repo)?;
+            IndexSubcommand::Fetch {
+                sparse_repo,
+                force,
+                remote,
+            } => {
+                let exit_code = focus_operations::index::fetch(app, sparse_repo, force, remote)?;
                 Ok(exit_code)
             }
 
@@ -936,18 +1085,25 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
                 Ok(exit_code)
             }
 
-            IndexSubcommand::Hash { targets } => {
-                let exit_code = focus_operations::index::hash(app, Path::new("."), &targets)?;
+            IndexSubcommand::Hash { commit, targets } => {
+                let exit_code =
+                    focus_operations::index::hash(app, Path::new("."), commit, &targets)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Push {
                 sparse_repo,
                 remote,
+                dry_run,
                 break_on_missing_keys,
             } => {
-                let exit_code =
-                    focus_operations::index::push(app, sparse_repo, remote, break_on_missing_keys)?;
+                let exit_code = focus_operations::index::push(
+                    app,
+                    sparse_repo,
+                    remote,
+                    dry_run,
+                    break_on_missing_keys,
+                )?;
                 Ok(exit_code)
             }
 
@@ -971,6 +1127,19 @@ fn run_subcommand(app: Arc<App>, options: FocusOpts) -> Result<ExitCode> {
             println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             Ok(ExitCode(0))
         }
+
+        Subcommand::Background { subcommand } => match subcommand {
+            BackgroundSubcommand::Enable {
+                sparse_repo,
+                idle_period_ms,
+            } => focus_operations::background::enable(app, sparse_repo, idle_period_ms),
+            BackgroundSubcommand::Disable { sparse_repo } => {
+                focus_operations::background::disable(app, sparse_repo)
+            }
+            BackgroundSubcommand::Sync { sparse_repo } => {
+                focus_operations::background::sync(app, sparse_repo)
+            }
+        },
     }
 }
 
@@ -1050,6 +1219,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     let is_tty = termion::is_tty(&std::io::stdout());
 
     let sandbox_dir = app.sandbox().path().to_owned();
+    let tracker = Tracker::from_config_dir()?;
 
     let _guard = focus_tracing::init_tracing(focus_tracing::TracingOpts {
         is_tty,
@@ -1059,10 +1229,10 @@ fn main_and_drop_locals() -> Result<ExitCode> {
 
     info!(path = ?sandbox_dir, "Created sandbox");
 
-    ensure_directories_exist().context("Failed to create necessary directories")?;
+    ensure_directories_exist(&tracker).context("Failed to create necessary directories")?;
     setup_maintenance_scheduler(&options).context("Failed to setup maintenance scheduler")?;
 
-    let exit_code = match run_subcommand(app.clone(), options) {
+    let exit_code = match run_subcommand(app.clone(), &tracker, options) {
         Ok(exit_code) => {
             ti_context
                 .get_inner()

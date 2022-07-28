@@ -1,0 +1,47 @@
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Linux
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.61.0
+          override: true
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@cb2cf0cc7c5198d3364b9630e2c3d457f160790c
+
+      - name: Compile (all features)
+        run: cargo build --all-features --all-targets --workspace
+
+      # Don't test benches.
+      - name: Run Rust tests (all features)
+        timeout-minutes: 10
+        run: cargo test --all-features --examples --tests --workspace
+
+      # Note that `--doc` can't be combined with other tests.
+      - name: Run Rust doc-tests (all features)
+        timeout-minutes: 10
+        run: cargo test --all-features --doc --workspace
+
+      - name: Compile (no features)
+        run: cargo build --no-default-features --all-targets --workspace
+
+      - name: Run Rust tests (no default features)
+        timeout-minutes: 10
+        run: cargo test --no-default-features --features ci --examples --tests --workspace

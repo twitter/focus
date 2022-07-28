@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 
 # Assumes ~/workspace/managed_development_environment exists.
 

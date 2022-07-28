@@ -1,9 +1,12 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::app::App;
 use anyhow::{bail, Context, Result};
 use std::{
     ffi::OsStr,
-    fs::File,
-    io::{BufRead, BufReader},
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
     sync::{
@@ -37,6 +40,7 @@ pub struct SandboxCommand {
     stdout_path: PathBuf,
     stderr_path: PathBuf,
     git_trace2_path: PathBuf,
+    description_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -49,18 +53,13 @@ pub enum SandboxCommandOutput {
 }
 
 impl SandboxCommand {
-    pub fn new(
-        description: impl Into<String>,
-        program: impl AsRef<OsStr>,
-        app: Arc<App>,
-    ) -> Result<(Command, Self)> {
+    pub fn new(program: impl AsRef<OsStr>, app: Arc<App>) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
-        let sandbox_command = Self::with_command(description.into(), &mut command, app)?;
+        let sandbox_command = Self::with_command(&mut command, app)?;
         Ok((command, sandbox_command))
     }
 
     pub fn new_with_handles(
-        description: impl Into<String>,
         program: impl AsRef<OsStr>,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
@@ -68,40 +67,30 @@ impl SandboxCommand {
         app: Arc<App>,
     ) -> Result<(Command, Self)> {
         let mut command = Command::new(program);
-        let sandbox_command = Self::with_command_and_handles(
-            description.into(),
-            &mut command,
-            stdin,
-            stdout,
-            stderr,
-            app,
-        )?;
+        let sandbox_command =
+            Self::with_command_and_handles(&mut command, stdin, stdout, stderr, app)?;
         Ok((command, sandbox_command))
     }
 
-    pub fn with_command(description: String, command: &mut Command, app: Arc<App>) -> Result<Self> {
-        Self::with_command_and_handles(description, command, None, None, None, app)
+    pub fn with_command(command: &mut Command, app: Arc<App>) -> Result<Self> {
+        Self::with_command_and_handles(command, None, None, None, app)
     }
 
     pub fn with_command_and_handles(
-        description: String,
         command: &mut Command,
         stdin: Option<Stdio>,
         stdout: Option<&Path>,
         stderr: Option<&Path>,
         app: Arc<App>,
     ) -> Result<Self> {
-        use std::io::Write;
         let sandbox = app.sandbox();
 
         // Write the description and get the generated serial to name all the files the same.
-        let serial = {
-            let (mut description_file, _, serial) = sandbox
+        let (description_path, serial) = {
+            let (_, description_path, serial) = sandbox
                 .create_file(Some("sandboxed_command"), Some("script"), None)
                 .context("Failed creating description file")?;
-            writeln!(description_file, "# {}", description)?;
-            writeln!(description_file, "{}", Self::pretty_print_command(command))?;
-            serial
+            (description_path, serial)
         };
 
         let output_file = |extension: &str| -> Result<(Stdio, PathBuf)> {
@@ -133,6 +122,7 @@ impl SandboxCommand {
             stdout_path,
             stderr_path,
             git_trace2_path,
+            description_path,
         })
     }
 
@@ -229,29 +219,33 @@ impl SandboxCommand {
         &self,
         cmd: &mut Command,
         output: SandboxCommandOutput,
-        description: &str,
     ) -> Result<ExitStatus> {
-        let span = debug_span!("Running command", %description);
-        let _guard = span.enter();
         let command_description = Self::pretty_print_command(cmd);
+        let span = debug_span!("Running command", description = %command_description);
+        let _guard = span.enter();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(&self.description_path)?;
+        writeln!(file, "{}", Self::pretty_print_command(cmd))?;
 
         let mut launch = cmd
             .spawn()
-            .with_context(|| format!("Failed to spawn command {}", description))?;
+            .with_context(|| format!("Failed to spawn command {}", &command_description))?;
 
-        let tailer = Self::tail(
-            &cmd.get_program().to_string_lossy().to_owned(),
-            &self.stderr_path,
-        )
-        .context("Could not create log tailer");
+        let tailer = Self::tail(&command_description, &self.stderr_path)
+            .context("Could not create log tailer");
 
         let status = launch
             .wait()
-            .with_context(|| format!("Failed to wait for command {}", description))?;
-        tailer.iter().for_each(|t| t.stop());
+            .with_context(|| format!("Failed to wait for command {}", &command_description))?;
+        if let Ok(tailer) = tailer {
+            tailer.stop();
+        }
         debug!(command = %command_description, %status, "Command exited");
         if !status.success() {
-            self.log(output, description).context("logging output")?;
+            self.log(output, &command_description)
+                .context("logging output")?;
             bail!("Command failed: {}", command_description);
         }
 
@@ -299,10 +293,24 @@ impl Tailer {
     fn work(description: String, file: File, cancel_rx: mpsc::Receiver<()>) {
         let buffered_reader = BufReader::new(file);
         let mut lines = buffered_reader.lines();
-        let span = info_span!("Output", program=?description);
+        let span = info_span!("Output", command=?description);
         let _guard = span.enter();
+
         while cancel_rx.try_recv().is_err() {
             while let Some(Ok(line)) = lines.next() {
+                // A carriage return at the end of the line is often used for
+                // interactive applications to update the line of output which
+                // is already present in the terminal. We can't do that here
+                // because we immediately overwrite the just-printed line with
+                // information about the parameters in `info!`. Instead,
+                // simulate clearing the line which removing anything that
+                // appears before a `\r` and strip the last one.
+                let line = line
+                    .trim_end_matches('\r')
+                    .split('\r')
+                    .last()
+                    .unwrap_or_default();
+
                 info!("{}", line);
             }
             std::thread::sleep(Duration::from_millis(50));
@@ -333,7 +341,7 @@ mod tests {
         let app = Arc::from(App::new_for_testing()?);
         // Make sure to keep the `App` alive until the end of this scope.
         let app = app.clone();
-        let (mut cmd, scmd) = SandboxCommand::new("echo".to_owned(), "echo", app)?;
+        let (mut cmd, scmd) = SandboxCommand::new("echo", app)?;
         cmd.arg("-n").arg("hey").arg("there").status()?;
         let mut output_string = String::new();
         scmd.read_to_string(SandboxCommandOutput::Stdout, &mut output_string)?;
@@ -354,7 +362,6 @@ mod tests {
             path
         };
         let (mut cmd, scmd) = SandboxCommand::new_with_handles(
-            "Testing with cat".to_owned(),
             "cat",
             Some(Stdio::from(File::open(&path)?)),
             None,

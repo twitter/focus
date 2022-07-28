@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{
     borrow::Borrow,
     collections::HashMap,
@@ -8,7 +11,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use focus_util::{app::App, lock_file::LockFile, paths::focus_config_dir};
@@ -95,7 +98,9 @@ impl Snapshot {
     }
 }
 
+#[derive(Debug)]
 pub struct Tracker {
+    _tempdir: Option<tempfile::TempDir>,
     directory: PathBuf,
 }
 
@@ -105,7 +110,28 @@ impl Tracker {
             .with_context(|| format!("creating directory hierarchy '{}'", directory.display()))?;
 
         Ok(Self {
+            _tempdir: None,
             directory: directory.to_owned(),
+        })
+    }
+
+    pub fn from_config_dir() -> Result<Self> {
+        if cfg!(test) {
+            panic!("Should not be trying to construct a real Tracker object during testing, as it reads/writes from the user's config directory");
+        }
+        Ok(Self {
+            _tempdir: None,
+            directory: focus_config_dir(),
+        })
+    }
+
+    pub fn for_testing() -> Result<Self> {
+        let tempdir = tempfile::tempdir()?;
+        let directory = tempdir.path().to_path_buf();
+        std::fs::create_dir_all(&directory)?;
+        Ok(Self {
+            _tempdir: Some(tempdir),
+            directory,
         })
     }
 
@@ -261,7 +287,7 @@ impl Tracker {
                                 }
 
                                 Err(e) => {
-                                    warn!(
+                                    debug!(
                                         ?entry_path,
                                         ?e,
                                         "Skipping entry: unable to canonicalize destination",
@@ -269,7 +295,7 @@ impl Tracker {
                                 }
                             }
                         } else {
-                            info!(?entry_path, "ignoring entry (not a symlink)");
+                            debug!(?entry_path, "ignoring entry (not a symlink)");
                         }
                     } else {
                         bail!("unable to determine file type for {:?}", entry.path());
@@ -291,13 +317,5 @@ impl Tracker {
 
     fn repos_by_uuid_dir(&self) -> PathBuf {
         self.repos_dir().join("by-uuid")
-    }
-}
-
-impl Default for Tracker {
-    fn default() -> Self {
-        Self {
-            directory: focus_config_dir(),
-        }
     }
 }

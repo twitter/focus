@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 mod tests;
 pub mod trace;
 
@@ -19,6 +22,7 @@ use super::git_trace2;
     Debug,
     Clone,
     PartialEq,
+    Eq,
     Serialize,
     Deserialize,
     strum_macros::Display,
@@ -448,6 +452,7 @@ impl From<GitEvent> for Complete {
     Debug,
     Clone,
     PartialEq,
+    Eq,
     Serialize,
     Deserialize,
     strum_macros::Display,

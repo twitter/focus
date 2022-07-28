@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -8,6 +11,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
+use assert_cmd::prelude::OutputAssertExt;
 use tempfile::TempDir;
 
 use tracing::{info, warn};
@@ -15,7 +19,11 @@ use tracing::{info, warn};
 use focus_testing::ScratchGitRepo;
 use focus_util::app::App;
 
-use focus_internals::model::repo::Repo;
+use focus_internals::{model::repo::Repo, tracker::Tracker};
+
+use crate::sync::SyncMode;
+
+pub use focus_testing::GitBinary;
 
 #[allow(dead_code)]
 pub enum RepoDisposition {
@@ -31,24 +39,27 @@ pub struct RepoPairFixture {
     pub dense_repo: ScratchGitRepo,
     pub branch: String,
     pub projects_and_targets: Vec<String>,
+    pub tracker: Tracker,
     pub app: Arc<App>,
     pub preserve: bool,
 }
 
 impl RepoPairFixture {
-    #[allow(dead_code)]
     pub fn new() -> Result<Self> {
+        let app = Arc::new(App::new_for_testing()?);
         let dir = TempDir::new()?;
         let dense_repo_path = dir.path().join("dense");
         let branch = String::from("main");
         let dense_repo = ScratchGitRepo::new_copied_fixture(
+            app.git_binary().clone(),
             Path::new("bazel_java_example"),
             &dense_repo_path,
             &branch,
         )?;
         let sparse_repo_path = dir.path().join("sparse");
         let projects_and_targets: Vec<String> = vec![];
-        let app = Arc::new(App::new_for_testing()?);
+        let tracker = Tracker::for_testing()?;
+        tracker.ensure_directories_exist()?;
 
         Ok(Self {
             dir,
@@ -58,6 +69,7 @@ impl RepoPairFixture {
             branch,
             projects_and_targets,
             app,
+            tracker,
             preserve: false,
         })
     }
@@ -84,13 +96,15 @@ impl RepoPairFixture {
             self.projects_and_targets.clone(),
             true,
             90,
+            false,
+            &self.tracker,
             self.app.clone(),
         )
     }
 
     #[allow(dead_code)]
     pub fn perform_sync(&self) -> Result<bool> {
-        crate::sync::run(&self.sparse_repo_path, false, self.app.clone())
+        crate::sync::run(&self.sparse_repo_path, SyncMode::Normal, self.app.clone())
             .map(|result| result.checked_out)
     }
 
@@ -124,17 +138,18 @@ impl RepoPairFixture {
             RepoDisposition::Dense => &self.dense_repo_path,
             RepoDisposition::Sparse => &self.sparse_repo_path,
         };
-        Command::new("git")
+        self.app
+            .git_binary()
+            .command()
             .arg("fetch")
             .arg(remote_name)
             .current_dir(&path)
-            .status()
-            .expect("git pull failed");
+            .assert()
+            .success();
         let fetch_head_path = path.join(".git").join("FETCH_HEAD");
         Self::parse_fetch_head(fetch_head_path)
     }
 
-    #[allow(dead_code)]
     pub fn perform_pull(
         &self,
         repo: RepoDisposition,
@@ -146,13 +161,15 @@ impl RepoPairFixture {
             RepoDisposition::Sparse => &self.sparse_repo_path,
         };
 
-        Command::new("git")
+        self.app
+            .git_binary()
+            .command()
             .arg("pull")
             .arg(remote_name)
             .arg(branch)
             .current_dir(&path)
-            .status()
-            .expect("git pull failed");
+            .assert()
+            .success();
 
         Ok(())
     }

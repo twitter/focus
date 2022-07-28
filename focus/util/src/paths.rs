@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use std::{
@@ -30,7 +33,6 @@ pub fn focus_sandbox_dir() -> PathBuf {
         .expect("failed to determine data directory")
         .join("focus")
         .join("sandboxes")
-        .to_owned()
 }
 
 #[cfg(target_os = "macos")]

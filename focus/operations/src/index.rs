@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::borrow::Borrow;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -23,6 +26,9 @@ use focus_internals::model::selection::OperationAction;
 use focus_internals::target::{Target, TargetSet};
 
 const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
+const TAG_NAMESPACE: &str = "focus";
+const COMMIT_USER_NAME: &str = "focus";
+const COMMIT_USER_EMAIL: &str = "source-eng-team@twitter.com";
 
 pub fn clear(sparse_repo_path: PathBuf) -> anyhow::Result<()> {
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
@@ -167,14 +173,18 @@ pub fn resolve(
 pub fn hash(
     _app: Arc<App>,
     sparse_repo_path: &Path,
+    commit: String,
     targets: &[String],
 ) -> anyhow::Result<ExitCode> {
     let repo = git2::Repository::open(sparse_repo_path)?;
-    let head_commit = git_helper::get_head_commit(&repo)?;
-    let head_tree = head_commit.tree()?;
+    let object = repo
+        .revparse_single(&commit)
+        .with_context(|| format!("Resolving commit {commit}"))?;
+    let commit = object.as_commit().expect("Object was not a commit");
+    let tree = commit.tree()?;
     let hash_context = HashContext {
         repo: &repo,
-        head_tree: &head_tree,
+        head_tree: &tree,
         caches: Default::default(),
     };
     info!(?hash_context, "Using this hash context");
@@ -235,26 +245,57 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
 
 pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
 
-pub fn fetch(app: Arc<App>, sparse_repo_path: PathBuf) -> anyhow::Result<ExitCode> {
+pub fn fetch(
+    app: Arc<App>,
+    sparse_repo_path: PathBuf,
+    force: bool,
+    remote: Option<String>,
+) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())
         .with_context(|| format!("Opening repository at {}", &sparse_repo_path.display()))?;
     let cache = RocksDBCache::new(repo.underlying());
-    fetch_internal(app, &cache, sparse_repo_path, &repo.config().index)
+
+    let index_config = repo.config().index.clone();
+    let index_config = if force {
+        IndexConfig {
+            enabled: true,
+            ..index_config
+        }
+    } else {
+        index_config
+    };
+    let index_config = match remote {
+        Some(remote) => IndexConfig {
+            remote,
+            ..index_config
+        },
+        None => index_config,
+    };
+
+    debug!(?index_config, "Using index config");
+    if index_config.enabled {
+        fetch_internal(app, &cache, sparse_repo_path, &index_config)
+    } else {
+        debug!("Skipping fetch: was not enabled in repository config and --force was not passed");
+        Ok(ExitCode(0))
+    }
 }
 
-pub(crate) fn fetch_internal(
+fn fetch_internal(
     app: Arc<App>,
     cache: &RocksDBCache,
     sparse_repo_path: PathBuf,
     index_config: &IndexConfig,
 ) -> anyhow::Result<ExitCode> {
-    if !index_config.enabled {
-        return Ok(ExitCode(0));
-    }
-
     let index_dir = index_repo_dir(&sparse_repo_path);
-    let synchronizer =
-        GitBackedCacheSynchronizer::create(index_dir, index_config.remote.clone(), app.clone())?;
+    let synchronizer = GitBackedCacheSynchronizer::create(
+        index_dir,
+        index_config.remote.clone(),
+        app.clone(),
+        TAG_NAMESPACE.to_string(),
+        COMMIT_USER_EMAIL.to_string(),
+        COMMIT_USER_NAME.to_string(),
+    )?;
     let repo = Repo::open(sparse_repo_path.as_path(), app).context("Failed to open repo")?;
     let mut commit = repo.get_head_commit()?;
 
@@ -289,6 +330,7 @@ pub fn push(
     app: Arc<App>,
     sparse_repo_path: PathBuf,
     remote: String,
+    dry_run: bool,
     break_on_missing_keys: bool,
 ) -> anyhow::Result<ExitCode> {
     let repo = Repo::open(&sparse_repo_path, app.clone())?;
@@ -303,7 +345,14 @@ pub fn push(
 
     let index_dir = index_repo_dir(&sparse_repo_path);
     std::fs::create_dir_all(&index_dir).context("creating index directory")?;
-    let synchronizer = GitBackedCacheSynchronizer::create(index_dir, remote, app.clone())?;
+    let synchronizer = GitBackedCacheSynchronizer::create(
+        index_dir,
+        remote,
+        app.clone(),
+        TAG_NAMESPACE.to_string(),
+        COMMIT_USER_EMAIL.to_string(),
+        COMMIT_USER_NAME.to_string(),
+    )?;
 
     let head_commit = repo.get_head_commit()?;
     let head_tree = head_commit.tree().context("finding HEAD tree")?;
@@ -320,6 +369,10 @@ pub fn push(
         Ok(result) => result,
         Err(exit_code) => return Ok(exit_code),
     };
+    info!(
+        num_keys_resolved = seen_keys.len(),
+        "Number of keys resolved"
+    );
 
     let odb = RocksDBCache::new(repo.underlying());
     let cache: &dyn ObjectDatabase = &odb;
@@ -327,17 +380,35 @@ pub fn push(
     let keyset = {
         let mut result = HashSet::new();
         for key in seen_keys {
-            let (hash, value) = cache.get(&ctx, &key)?;
-            if value.is_none() {
-                panic!("Value not found for key: {key:?}");
+            match key {
+                key @ DependencyKey::BazelPackage(_) => {
+                    let (hash, value) = cache.get(&ctx, &key)?;
+                    if value.is_none() {
+                        panic!("Failed to find value associated with this key, which we should have previously generated and cached: {key:?}");
+                    }
+                    result.insert((*FUNCTION_ID, git2::Oid::from(hash)));
+                }
+
+                DependencyKey::BazelBuildFile(_) | DependencyKey::Path(_) => {
+                    // The paths to materialize for these kinds of dependencies
+                    // are known statically, so we don't need to insert or
+                    // propagate cache entries.
+                }
+
+                key @ DependencyKey::DummyForTesting(_) => {
+                    panic!("Encountered dummy testing value; this should not appear in real-world data: {key:?}");
+                }
             }
-            result.insert((*FUNCTION_ID, git2::Oid::from(hash)));
         }
         result
     };
 
-    info!("Pushing index");
-    synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
+    if !dry_run {
+        info!("Pushing index");
+        synchronizer.share(ctx.head_tree.id(), &keyset, &odb, None)?;
+    } else {
+        info!("This is a dry run, so not pushing index");
+    }
 
     Ok(ExitCode(0))
 }
@@ -371,6 +442,7 @@ mod tests {
                 app.clone(),
                 fixture.sparse_repo_path.clone(),
                 remote.clone(),
+                false,
                 false,
             )?;
             assert_eq!(exit_code, 0);
@@ -412,7 +484,7 @@ mod tests {
                             Label("//project_a/src/main/java/com/example/cmdline:runner"),
                         ),
                         ContentHash(
-                            4c58adbd4fac890f350058535efdd99b26fb41eb,
+                            c4cd43f054fa73cde0fd6b6a0b80fc75b20aaf76,
                         ),
                     ),
                 },
@@ -420,12 +492,18 @@ mod tests {
                     BazelPackage(
                         Label("//project_a/src/main/java/com/example/cmdline:runner"),
                     ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:macros.bzl"),
+                    ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:prelude_bazel"),
+                    ),
                 },
             }
             "###);
         }
 
-        let ExitCode(exit_code) = fetch(app, fixture.sparse_repo_path.clone())?;
+        let ExitCode(exit_code) = fetch(app, fixture.sparse_repo_path.clone(), false, None)?;
         assert_eq!(exit_code, 0);
 
         // Try to materialize files again -- this should be a cache hit.
@@ -448,10 +526,17 @@ mod tests {
                     BazelPackage(
                         Label("//project_a/src/main/java/com/example/cmdline:runner"),
                     ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:macros.bzl"),
+                    ),
+                    BazelBuildFile(
+                        Label("//tools/build_rules:prelude_bazel"),
+                    ),
                 },
                 paths: {
                     "library_a",
                     "project_a/src/main/java/com/example/cmdline",
+                    "tools/build_rules",
                 },
             }
             "###);

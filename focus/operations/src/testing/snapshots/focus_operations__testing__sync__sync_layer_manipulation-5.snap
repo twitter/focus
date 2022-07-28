@@ -5,6 +5,11 @@ expression: "std::fs::read_to_string(&profile_path)?"
 /*
 !/*/
 /focus/
+/mandatory_y/
+!/mandatory_y/*/
 /mandatory_y/very_important_info/
 /mandatory_z/
+/tools/
+!/tools/*/
+/tools/build_rules/
 

@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{
     collections::HashMap,
     ffi::OsString,
@@ -186,7 +189,7 @@ mod tests {
 
     use super::FileBackedCollection;
 
-    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct Person {
         name: String,
     }

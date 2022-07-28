@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use focus_testing::{init_logging, ScratchGitRepo};
@@ -18,12 +21,16 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Result<Self> {
+        let app = Arc::new(App::new_for_testing()?);
         let dir = TempDir::new()?;
         let path = dir.path().join("dense");
         let branch = String::from("main");
-        let repo =
-            ScratchGitRepo::new_copied_fixture(Path::new("bazel_java_example"), &path, &branch)?;
-        let app = Arc::new(App::new_for_testing()?);
+        let repo = ScratchGitRepo::new_copied_fixture(
+            app.git_binary().clone(),
+            Path::new("bazel_java_example"),
+            &path,
+            &branch,
+        )?;
         Ok(Self {
             dir,
             underlying: repo,

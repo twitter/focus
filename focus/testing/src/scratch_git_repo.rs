@@ -1,4 +1,9 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::GitBinary;
 use anyhow::{bail, Context, Result};
+use assert_cmd::prelude::OutputAssertExt;
 use git2::Repository;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -8,31 +13,35 @@ use uuid::Uuid;
 use super::fixture_dir;
 
 pub struct ScratchGitRepo {
+    git_binary: GitBinary,
     path: PathBuf,
 }
 
 impl ScratchGitRepo {
     // Create a new fixture repo with a unique random name in the given directory
     pub fn new_static_fixture(containing_dir: &Path) -> Result<Self> {
-        Ok(Self {
-            path: Self::create_fixture_repo(containing_dir)?,
-        })
+        let git_binary = GitBinary::for_testing()?;
+        let path = Self::create_fixture_repo(&git_binary, containing_dir)?;
+        Ok(Self { git_binary, path })
     }
 
     // Create a new repo by cloning another repo from the local filesystem
     pub fn new_local_clone(local_origin: &Path) -> Result<Self> {
+        let git_binary = GitBinary::for_testing()?;
         let uuid = uuid::Uuid::new_v4();
         let mut target_path = local_origin.to_owned();
         target_path.set_extension(format!("clone_{}", &uuid));
-        Self::create_local_cloned_repo(local_origin, target_path.as_path())?;
+        Self::create_local_cloned_repo(&git_binary, local_origin, target_path.as_path())?;
 
         Ok(Self {
+            git_binary,
             path: target_path.to_owned(),
         })
     }
 
     // Create a new copied fixture
     pub fn new_copied_fixture(
+        git_binary: GitBinary,
         fixture_name: &Path,
         destination_path: &Path,
         branch: &str,
@@ -49,43 +58,49 @@ impl ScratchGitRepo {
             .arg("-r")
             .arg(fixture_path)
             .arg(destination_path)
-            .status()
-            .expect("copy failed");
+            .assert()
+            .success();
 
         // Initialize the destination path as a Git repo
-        Command::new("git")
+        git_binary
+            .command()
             .arg("init")
             .current_dir(destination_path)
-            .status()
-            .expect("init failed");
+            .assert()
+            .success();
 
         // Create the named branch
-        Command::new("git")
+        git_binary
+            .command()
             .arg("checkout")
             .arg("--force")
             .arg("-b")
             .arg(branch)
             .current_dir(destination_path)
-            .status()
-            .expect("checkout branch failed");
+            .assert()
+            .success();
 
         // Add everything and commit it
-        Command::new("git")
+        git_binary
+            .command()
             .arg("add")
             .arg("--")
             .arg(".")
             .current_dir(&destination_path)
-            .status()
-            .expect("add failed");
+            .assert()
+            .success();
 
-        Command::new("git")
+        git_binary
+            .command()
             .arg("commit")
             .arg("-m")
             .arg("Initial import")
             .current_dir(&destination_path)
-            .status()
-            .expect("commit failed");
+            .assert()
+            .success();
+
         Ok(Self {
+            git_binary,
             path: destination_path.to_owned(),
         })
     }
@@ -94,23 +109,71 @@ impl ScratchGitRepo {
         Self::new_local_clone(self.path())
     }
 
-    pub(crate) fn create_fixture_repo(containing_dir: &Path) -> Result<PathBuf> {
+    pub fn create_and_switch_to_branch(&self, name: &str) -> Result<()> {
+        self.git_binary
+            .command()
+            .current_dir(self.path())
+            .arg("switch")
+            .arg("-c")
+            .arg(name)
+            .status()
+            .with_context(|| {
+                format!(
+                    "ScratchGitRepo failed to switch to branch {} in repo {:?}",
+                    name,
+                    self.path()
+                )
+            })?;
+
+        Ok(())
+    }
+
+    /// Used to make an empty commit
+    ///
+    /// Commit date defaults to 'now' and passed in dates must be in RFC2822 format
+    pub fn make_empty_commit(&self, message: &str, commit_date: Option<&str>) -> Result<()> {
+        self.git_binary
+            .command()
+            .current_dir(self.path())
+            .arg("commit")
+            .arg("--allow-empty")
+            .arg("-m")
+            .arg(message)
+            .arg(format!("--date='{}'", commit_date.unwrap_or("now")))
+            .env("GIT_COMMITTER_DATE", commit_date.unwrap_or_default())
+            .status()
+            .with_context(|| {
+                format!(
+                    "Could not create empty commit in ScratchGitRepo repo at {:?}",
+                    self.path()
+                )
+            })?;
+
+        Ok(())
+    }
+
+    pub(crate) fn create_fixture_repo(
+        git_binary: &GitBinary,
+        containing_dir: &Path,
+    ) -> Result<PathBuf> {
         let name = format!("repo_{}", Uuid::new_v4());
-        Command::new("git")
+        git_binary
+            .command()
             .arg("init")
             .arg(&name)
             .current_dir(containing_dir)
-            .status()
-            .expect("git init failed");
+            .assert()
+            .success();
         let repo_path = containing_dir.join(&name);
 
-        Command::new("git")
+        git_binary
+            .command()
             .arg("switch")
             .arg("-c")
             .arg("main")
             .current_dir(&repo_path)
-            .status()
-            .expect("git switch failed");
+            .assert()
+            .success();
 
         let mut test_file = repo_path.clone();
         test_file.push("d_0_0");
@@ -130,41 +193,47 @@ impl ScratchGitRepo {
         test_file.push("f_3.txt");
         std::fs::write(test_file.as_path(), "This is test file 3").unwrap();
 
-        Command::new("git")
+        git_binary
+            .command()
             .arg("add")
             .arg("--")
             .arg(".")
             .current_dir(&repo_path)
-            .status()
-            .expect("add failed");
+            .assert()
+            .success();
 
-        Command::new("git")
+        git_binary
+            .command()
             .arg("commit")
             .arg("-a")
             .arg("-m")
             .arg("Test commit")
             .current_dir(&repo_path)
-            .status()
-            .expect("commit failed");
+            .assert()
+            .success();
 
         Ok(repo_path)
     }
 
-    pub(crate) fn create_local_cloned_repo(origin: &Path, destination: &Path) -> Result<()> {
+    pub(crate) fn create_local_cloned_repo(
+        git_binary: &GitBinary,
+        origin: &Path,
+        destination: &Path,
+    ) -> Result<()> {
         if !origin.is_absolute() {
             bail!("origin path must be absolute");
         }
         let mut qualified_origin = OsString::from("file://");
         qualified_origin.push(origin.as_os_str());
-        Command::new("git")
+        git_binary
+            .command()
             .args(&[
                 OsStr::new("clone"),
                 &qualified_origin,
                 destination.as_os_str(),
             ])
-            .spawn()?
-            .wait()
-            .expect("clone failed");
+            .assert()
+            .success();
         Ok(())
     }
 
@@ -183,7 +252,9 @@ impl ScratchGitRepo {
     }
 
     pub fn add_file(&self, relative_filename: impl AsRef<Path>) -> Result<()> {
-        if !Command::new("git")
+        if !self
+            .git_binary
+            .command()
             .arg("add")
             .arg("--")
             .arg(relative_filename.as_ref())
@@ -201,7 +272,9 @@ impl ScratchGitRepo {
 
     pub fn commit_all(&self, message: impl AsRef<str>) -> Result<git2::Oid> {
         // Run `git commit`
-        if !Command::new("git")
+        if !self
+            .git_binary
+            .command()
             .arg("commit")
             .arg("-a")
             .arg("-m")

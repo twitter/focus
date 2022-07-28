@@ -1,2 +1,1 @@
 USE_BAZEL_VERSION=5.0.0
-BAZELISK_BASE_URL=https://science-binaries.local.twitter.com/home/build/bazel

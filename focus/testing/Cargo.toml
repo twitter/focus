@@ -1,11 +1,12 @@
 [package]
 name = "focus-testing"
-version = "0.5.4"
+version = "0.5.5"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
+assert_cmd = "2.0.4"
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
   "vendored-libgit2", "vendored-openssl",
 ] }
@@ -24,6 +25,7 @@ tracing-subscriber = { version = "0.3.9", features = [
   "alloc",
 ] }
 uuid = { version = "0.8.2", features = ["v4"] }
+which = "4.2.5"
 
 [dev-dependencies]
 insta = "1.13.0"

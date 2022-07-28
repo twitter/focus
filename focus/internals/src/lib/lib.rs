@@ -1,4 +1,6 @@
 #![allow(clippy::too_many_arguments)]
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
 
 pub mod hashing;
 pub mod index;

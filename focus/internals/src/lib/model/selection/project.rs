@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{bail, Context, Result};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -69,7 +72,7 @@ impl TryFrom<&Project> for TargetSet {
 }
 
 /// ProjectSet is a file-level container for projects.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 struct ProjectSet {
     pub projects: HashSet<Project>,
 }

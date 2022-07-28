@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{
     io::{BufRead, BufReader},
     ops::{Deref, DerefMut},
@@ -350,7 +353,7 @@ pub mod event {
         };
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
     pub struct Common {
         pub sid: Sid,
         pub thread: String,
@@ -373,7 +376,7 @@ pub mod event {
         }
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct Version {
         #[serde(flatten)]
         pub common: Common,
@@ -382,7 +385,7 @@ pub mod event {
     }
     from_enum_impl!(Version);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct TooManyFiles {
         #[serde(flatten)]
         pub common: Common,
@@ -425,7 +428,7 @@ pub mod event {
     }
     from_enum_impl!(Signal);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct Error {
         #[serde(flatten)]
         pub common: Common,
@@ -434,7 +437,7 @@ pub mod event {
     }
     from_enum_impl!(Error);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct CmdPath {
         #[serde(flatten)]
         pub common: Common,
@@ -442,7 +445,7 @@ pub mod event {
     }
     from_enum_impl!(CmdPath);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct CmdAncestry {
         #[serde(flatten)]
         pub common: Common,
@@ -450,7 +453,7 @@ pub mod event {
     }
     from_enum_impl!(CmdAncestry);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct CmdName {
         #[serde(flatten)]
         pub common: Common,
@@ -459,7 +462,7 @@ pub mod event {
     }
     from_enum_impl!(CmdName);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct CmdMode {
         #[serde(flatten)]
         pub common: Common,
@@ -467,7 +470,7 @@ pub mod event {
     }
     from_enum_impl!(CmdMode);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct Alias {
         #[serde(flatten)]
         pub common: Common,
@@ -476,7 +479,7 @@ pub mod event {
     }
     from_enum_impl!(Alias);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct ChildStart {
         #[serde(flatten)]
         pub common: Common,
@@ -511,7 +514,7 @@ pub mod event {
     }
     from_enum_impl!(ChildReady);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct Exec {
         #[serde(flatten)]
         pub common: Common,
@@ -521,7 +524,7 @@ pub mod event {
     }
     from_enum_impl!(Exec);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct ExecResult {
         #[serde(flatten)]
         pub common: Common,
@@ -530,7 +533,7 @@ pub mod event {
     }
     from_enum_impl!(ExecResult);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct ThreadStart {
         #[serde(flatten)]
         pub common: Common,
@@ -547,7 +550,7 @@ pub mod event {
     }
     from_enum_impl!(ThreadExit);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct DefParam {
         #[serde(flatten)]
         pub common: Common,
@@ -556,7 +559,7 @@ pub mod event {
     }
     from_enum_impl!(DefParam);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct DefRepo {
         #[serde(flatten)]
         pub common: Common,
@@ -564,7 +567,7 @@ pub mod event {
     }
     from_enum_impl!(DefRepo);
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
     pub struct RegionEnter {
         #[serde(flatten)]
         pub common: Common,

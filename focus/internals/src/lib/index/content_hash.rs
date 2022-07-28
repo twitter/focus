@@ -1,8 +1,11 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::{BTreeSet, HashSet};
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use std::hash::Hash;
 use std::path::Path;
 use std::path::PathBuf;
@@ -24,7 +27,7 @@ use super::DependencyKey;
 
 /// This value is mixed into all content hashes. Update this value when
 /// content-hashing changes in a backward-incompatible way.
-const VERSION: usize = 4;
+const VERSION: usize = 6;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -70,6 +73,9 @@ pub struct Caches {
     /// Cache of parsed load dependencies. The OIDs here are tree OIDs which
     /// have to be traversed to find any files relevant to the build graph.
     load_dependencies_cache: HashMap<git2::Oid, BTreeSet<Label>>,
+
+    /// Cache of dependencies loaded from the `prelude_bazel` file.
+    prelude_deps_cache: Option<BTreeSet<Label>>,
 }
 
 /// Context used to compute a content hash.
@@ -127,7 +133,7 @@ These are the keys currently being hashed: {:?}",
     }
 
     let mut buf = String::new();
-    buf.push_str(&format!("DependencyKeyV{VERSION}"));
+    write!(&mut buf, "DependencyKeyV{VERSION}")?;
 
     match key {
         DependencyKey::BazelPackage(
@@ -145,10 +151,14 @@ These are the keys currently being hashed: {:?}",
             buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
 
             if external_repository.is_none() {
-                let loaded_deps = match get_tree_for_path(ctx, &path)? {
+                let mut loaded_deps = match get_tree_for_path(ctx, &path)? {
                     Some(tree) => find_load_dependencies(ctx, &tree)?,
                     None => Default::default(),
                 };
+
+                let prelude_deps = get_prelude_deps(ctx)?;
+                loaded_deps.extend(prelude_deps);
+
                 for label in loaded_deps {
                     let key = DependencyKey::BazelBuildFile(label);
                     buf.push_str(", ");
@@ -193,7 +203,11 @@ These are the keys currently being hashed: {:?}",
 
                         let loaded_deps = match ctx.head_tree.get_path(&path) {
                             Ok(tree_entry) => {
-                                extract_load_statements_from_tree_entry(ctx, &tree_entry)?
+                                if is_tree_entry_relevant_to_build_graph(&tree_entry) {
+                                    extract_load_statements_from_tree_entry(ctx, &tree_entry)?
+                                } else {
+                                    Default::default()
+                                }
                             }
                             Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
                             Err(e) => return Err(e.into()),
@@ -271,15 +285,49 @@ These are the keys currently being hashed: {:?}",
     Ok(hash)
 }
 
+/// Get the dependencies induced by the special
+/// `tools/build_rules/prelude_bazel` file (if present). See
+/// https://github.com/bazelbuild/bazel/issues/1674 for discussion on what this
+/// file is.
+pub fn get_prelude_deps(ctx: &HashContext) -> anyhow::Result<BTreeSet<Label>> {
+    if let Some(prelude_deps) = &ctx.caches.borrow().prelude_deps_cache {
+        return Ok(prelude_deps.clone());
+    }
+
+    let prelude_dir = ["tools", "build_rules"];
+    let prelude_file_name = "prelude_bazel";
+    let prelude_path: PathBuf = prelude_dir.into_iter().chain([prelude_file_name]).collect();
+
+    let result = match ctx.head_tree.get_path(&prelude_path) {
+        Ok(tree_entry) => {
+            let mut result = BTreeSet::new();
+            result.insert(Label {
+                external_repository: None,
+                path_components: prelude_dir.into_iter().map(|s| s.to_string()).collect(),
+                target_name: TargetName::Name(prelude_file_name.to_string()),
+            });
+            result.extend(extract_load_statements_from_tree_entry(ctx, &tree_entry)?);
+            result
+        }
+        Err(err) if err.code() == git2::ErrorCode::NotFound => Default::default(),
+        Err(err) => return Err(err.into()),
+    };
+
+    ctx.caches.borrow_mut().prelude_deps_cache = Some(result.clone());
+    Ok(result)
+}
+
 fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<ContentHash> {
     if let Some(hash) = ctx.caches.borrow().tree_path_cache.get(path) {
         return Ok(hash.clone());
     }
 
     let mut buf = String::new();
-    buf.push_str(&format!("PathBufV{VERSION}("));
-    buf.push_str(&get_tree_path_id(ctx.head_tree, path)?.to_string());
-    buf.push(')');
+    write!(
+        &mut buf,
+        "PathBufV{VERSION}({tree_id})",
+        tree_id = get_tree_path_id(ctx.head_tree, path)?
+    )?;
 
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
     let hash = ContentHash(hash);
@@ -341,12 +389,9 @@ fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Resul
 
     let mut result = BTreeSet::new();
     for tree_entry in tree {
-        let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
-        result.extend(deps);
-        if tree_entry.filemode() == i32::from(git2::FileMode::Tree) {
-            if let Some(tree) = tree_entry.to_object(ctx.repo)?.as_tree() {
-                result.extend(find_load_dependencies(ctx, tree)?);
-            }
+        if is_tree_entry_relevant_to_build_graph(&tree_entry) {
+            let deps = extract_load_statements_from_tree_entry(ctx, &tree_entry)?;
+            result.extend(deps);
         }
     }
     if let Some(old_value) = ctx
@@ -362,29 +407,27 @@ fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Resul
     Ok(result)
 }
 
+fn is_tree_entry_relevant_to_build_graph(tree_entry: &git2::TreeEntry) -> bool {
+    match tree_entry.name() {
+        Some(file_name) => is_relevant_to_build_graph(Path::new(file_name)),
+        None => {
+            warn!(name_bytes = ?tree_entry.name_bytes(), "Skipped tree entry with non-UTF-8 name");
+            false
+        }
+    }
+}
+
 fn extract_load_statements_from_tree_entry(
     ctx: &HashContext,
     tree_entry: &git2::TreeEntry,
 ) -> anyhow::Result<BTreeSet<Label>> {
-    let file_name = match tree_entry.name() {
-        Some(file_name) => Path::new(file_name),
-        None => {
-            warn!(name_bytes = ?tree_entry.name_bytes(), "Skipped tree entry with non-UTF-8 name");
-            return Ok(Default::default());
-        }
-    };
-
-    if !is_relevant_to_build_graph(file_name) {
-        return Ok(Default::default());
-    }
-
     let object = tree_entry
         .to_object(ctx.repo)
         .context("converting tree entry to object")?;
     let blob = match object.as_blob() {
         Some(blob) => blob,
         None => {
-            warn!(?file_name, "Tree entry was not a blob");
+            warn!(file_name = ?tree_entry.name(), "Tree entry was not a blob");
             return Ok(Default::default());
         }
     };
@@ -392,7 +435,7 @@ fn extract_load_statements_from_tree_entry(
     let content = match std::str::from_utf8(blob.content()) {
         Ok(content) => content,
         Err(e) => {
-            warn!(?file_name, ?e, "Could not decode non-UTF-8 blob content");
+            warn!(file_name = ?tree_entry.name(), ?e, "Could not decode non-UTF-8 blob content");
             return Ok(Default::default());
         }
     };

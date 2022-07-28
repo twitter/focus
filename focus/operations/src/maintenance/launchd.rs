@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use super::{scheduling::*, *};
 use anyhow::{anyhow, bail, Context, Result};
 use std::{
@@ -233,6 +236,8 @@ pub fn schedule_enable(opts: ScheduleOpts) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument]
+#[cfg(target_os = "macos")]
 fn schedule_defaults_for(tp: TimePeriod, plist_opts: ScheduledJobOpts) -> ScheduledJobOpts {
     match tp {
         // for the hourly time period we use every_n_minutes to schedule

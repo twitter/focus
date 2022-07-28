@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::{
     borrow::Borrow,
     io::Write,
@@ -102,7 +105,7 @@ impl BazelResolver {
                 // repository, because `.bzl` files, etc., in external
                 // repositories are typically not supported, so querying them
                 // fails.
-                "deps({0}) union (buildfiles(deps({0})) intersect //...)",
+                "deps({0}) union kind(rule, filter('^//', buildfiles(deps({0}))))",
                 Self::make_bazel_set(labels.iter().copied())
             );
 
@@ -191,8 +194,6 @@ impl BazelResolver {
         bazel_args: &[&str],
         query: &str,
     ) -> Result<String> {
-        let description = format!("bazel query '{}'", query);
-
         let query_file_path = {
             let (mut file, path, _serial) = app
                 .sandbox()
@@ -208,8 +209,7 @@ impl BazelResolver {
             initial_bazel_args.push(String::from("--noworkspace_rc"));
             initial_bazel_args.push(format!("--bazelrc={}", OUTLINING_BAZELRC_PATH));
         }
-        let (mut cmd, scmd) =
-            SandboxCommand::new(description.clone(), Self::locate_bazel_binary(request), app)?;
+        let (mut cmd, scmd) = SandboxCommand::new(Self::locate_bazel_binary(request), app)?;
         scmd.ensure_success_or_log(
             cmd.args(initial_bazel_args)
                 .arg("query")
@@ -218,7 +218,6 @@ impl BazelResolver {
                 .args(bazel_args)
                 .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
-            &description,
         )?;
 
         // Read to string so that we can print it if we need to debug.

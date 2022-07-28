@@ -1,9 +1,0 @@
-if [[ -d "$HOME/opt/git-2.31.1/bin" ]]; then
-  PATH_add "$HOME/opt/git-2.31.1/bin"
-fi
-
-PATH_add "$(pwd -P)/dist"
-
-use nvm v12.18.2
-
-# vim:ft=bash:ts=2:sw=2:et

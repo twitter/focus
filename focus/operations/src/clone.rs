@@ -1,9 +1,13 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::event;
+use crate::init::{run_clone, CloneBuilder};
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::model::selection::{Operation, OperationAction};
 
 use anyhow::{bail, Context, Result};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use content_addressed_cache::RocksDBCache;
 use focus_internals::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 
@@ -52,6 +56,8 @@ pub fn run(
     projects_and_targets: Vec<String>,
     copy_branches: bool,
     days_of_history: u64,
+    do_post_clone_fetch: bool,
+    tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
     match origin {
@@ -72,7 +78,18 @@ pub fn run(
         ),
     }?;
 
-    set_up_sparse_repo(&sparse_repo_path, projects_and_targets, app)?;
+    set_up_sparse_repo(
+        &sparse_repo_path,
+        projects_and_targets,
+        tracker,
+        app.clone(),
+    )?;
+
+    if do_post_clone_fetch {
+        fetch_default_remote(&sparse_repo_path, app)
+            .context("Could not complete post clone fetch")?;
+    }
+
     set_up_hooks(&sparse_repo_path)
 }
 
@@ -125,23 +142,20 @@ fn clone_local(
     let dense_repo = Repository::open(&dense_repo_path).context("Opening dense repo")?;
     let sparse_repo = Repository::open(&sparse_repo_path).context("Opening sparse repo")?;
 
-    set_up_remotes(&dense_repo, &sparse_repo, app.clone())
-        .context("Failed to set up the remotes")?;
-
-    // Set fetchspec for primary branch
-    {
-        let fetch_spec = format!("refs/heads/{}:refs/remotes/origin/{}", branch, branch);
-        sparse_repo
-            .remote_add_fetch("origin", &fetch_spec)
-            .context("Failed add fetchspec for branch")?;
-    }
-
     if copy_branches {
         let span = info_span!("Copying branches");
         let _guard = span.enter();
-        copy_local_branches(&dense_repo, &sparse_repo, branch, app)
-            .context("Failed to copy references")?;
+        copy_local_branches(
+            &dense_repo,
+            &sparse_repo,
+            branch,
+            app.clone(),
+            days_of_history,
+        )
+        .context("Failed to copy references")?;
     }
+
+    set_up_remotes(&dense_repo, &sparse_repo, app).context("Failed to set up the remotes")?;
 
     Ok(())
 }
@@ -198,6 +212,7 @@ fn clone_remote(
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
+    tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
     {
@@ -211,7 +226,7 @@ fn set_up_sparse_repo(
         repo.create_working_tree()
             .context("Failed to create the working tree")?;
 
-        Tracker::default()
+        tracker
             .ensure_registered(sparse_repo_path, app.clone())
             .context("Registering repo")?;
     }
@@ -240,7 +255,7 @@ fn set_up_sparse_repo(
 
     set_up_bazel_preflight_script(sparse_repo_path)?;
 
-    Tracker::default()
+    tracker
         .ensure_registered(sparse_repo_path, app)
         .context("adding sparse repo to the list of tracked repos")?;
 
@@ -278,43 +293,21 @@ fn clone_shallow(
     // Unfortunately time::duration is signed
     let days_of_history: i64 = days_of_history.try_into()?;
 
-    let sparse_repo_dir_parent = destination_path
-        .parent()
-        .context("Failed to determine sparse repo parent directory")?;
+    let shallow_since_datestamp =
+        focus_util::time::formatted_datestamp_at_day_in_past(days_of_history)?;
 
-    let description = format!("Cloning {} to {}", source_url, destination_path.display());
-
-    let shallow_since_datestamp = {
-        let today = Utc::now().date();
-        today
-            .checked_sub_signed(Duration::days(days_of_history))
-            .expect("Could not determine date 90 days ago")
-            .format("%Y-%m-%d")
-            .to_string()
-    };
-
-    // TODO: Reconsider single-branch
-    let (mut cmd, scmd) = git_helper::git_command(description, app)?;
-    let mut args: Vec<OsString> = vec![
-        "clone".into(),
-        "--no-checkout".into(),
-        "--no-tags".into(),
-        "-b".into(),
-        branch.into(),
-    ];
-    args.push(format!("--shallow-since={}", shallow_since_datestamp).into());
+    let mut builder = CloneBuilder::new(destination_path.into());
+    builder
+        .fetch_url(source_url.as_str().into())
+        .no_checkout(true)
+        .follow_tags(false)
+        .branch(branch.into())
+        .add_clone_arg(format!("--shallow-since={}", shallow_since_datestamp));
     if !copy_branches {
-        args.push("--single-branch".into());
+        builder.add_clone_arg("--single-branch");
     }
-    args.push(source_url.as_str().into());
-    args.push(destination_path.into());
-    scmd.ensure_success_or_log(
-        cmd.current_dir(sparse_repo_dir_parent).args(args),
-        SandboxCommandOutput::Stderr,
-        "clone",
-    )
-    .map(|_| ())
-    .context("git clone failed")
+    run_clone(builder, app)?;
+    Ok(())
 }
 
 fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<App>) -> Result<()> {
@@ -372,14 +365,13 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
 
         // Delete existing remote in the sparse repo if it exists. This is a workaround because `remote_delete` is not working correctly.
         if sparse_repo.find_remote(remote_name).is_ok() {
-            let (mut cmd, scmd) = git_helper::git_command("Removing remote", app.clone())?;
+            let (mut cmd, scmd) = git_helper::git_command(app.clone())?;
             let _ = scmd.ensure_success_or_log(
                 cmd.current_dir(sparse_workdir)
                     .arg("remote")
                     .arg("remove")
                     .arg(remote_name),
                 SandboxCommandOutput::Stderr,
-                "Removing remote",
             )?;
         }
 
@@ -429,15 +421,30 @@ fn set_up_hooks(sparse_repo: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Issues a git command to fetch from the default remote.
+///
+/// Uses a git command instead of using git2 since git2 does not seem to read from the correct config on fetch.
+fn fetch_default_remote(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
+    let (mut cmd, scmd) = git_helper::git_command(app)?;
+    let _ = scmd.ensure_success_or_log(
+        cmd.current_dir(&sparse_repo).arg("fetch").arg("origin"),
+        SandboxCommandOutput::Stderr,
+    )?;
+
+    Ok(())
+}
+
 fn copy_local_branches(
     dense_repo: &Repository,
     sparse_repo: &Repository,
     branch: &str,
-    _app: Arc<App>,
+    app: Arc<App>,
+    days_of_history: u64,
 ) -> Result<()> {
     let branches = dense_repo
         .branches(Some(git2::BranchType::Local))
         .context("Failed to enumerate local branches in the dense repo")?;
+    let mut valid_local_branches = Vec::new();
 
     for b in branches {
         let (b, _branch_type) = b?;
@@ -451,6 +458,7 @@ fn copy_local_branches(
                 continue;
             }
         };
+
         if name == branch {
             // Skip the primary branch since it should already be configured.
             continue;
@@ -462,6 +470,51 @@ fn copy_local_branches(
             .peel_to_commit()
             .context("Failed to peel branch ref to commit")?;
 
+        let dense_commit_date = DateTime::from_utc(
+            NaiveDateTime::from_timestamp(dense_commit.time().seconds(), 0),
+            Utc,
+        )
+        .date();
+
+        let days_of_history: i64 = days_of_history.try_into()?;
+        let shallow_since_datestamp = focus_util::time::date_at_day_in_past(days_of_history)?;
+
+        if dense_commit_date > shallow_since_datestamp {
+            valid_local_branches.push((name.to_owned(), dense_commit.to_owned()));
+        } else {
+            warn!(
+                "Branch {} is older than the configured limit ({}). Rebase it if you would like it to be included in the new repo.",
+                name, shallow_since_datestamp
+            );
+        }
+    }
+
+    let branch_list_output = valid_local_branches
+        .iter()
+        .map(|(name, _)| name.to_string())
+        .collect::<Vec<String>>()
+        .join(" ");
+
+    let (mut cmd, scmd) = git_helper::git_command(app)?;
+    let mut args: Vec<OsString> = vec!["fetch".into(), "--no-tags".into()];
+    args.push("origin".into());
+    valid_local_branches
+        .iter()
+        .for_each(|(name, _)| args.push(name.into()));
+    scmd.ensure_success_or_log(
+        cmd.current_dir(sparse_repo.path()).args(args),
+        SandboxCommandOutput::Stderr,
+    )
+    .map(|_| ())
+    .with_context(|| {
+        format!(
+            "Failed to fetch user branches ({}) for {}",
+            branch_list_output,
+            whoami::username()
+        )
+    })?;
+
+    valid_local_branches.iter().for_each(|(name, dense_commit)| {
         match sparse_repo.find_commit(dense_commit.id()) {
             Ok(sparse_commit) => match sparse_repo.branch(name, &sparse_commit, false) {
                 Ok(_new_branch) => {
@@ -476,7 +529,7 @@ fn copy_local_branches(
                     name, dense_commit.id());
             }
         }
-    }
+    });
 
     Ok(())
 }
@@ -522,11 +575,11 @@ mod test {
     use std::{
         collections::HashSet,
         path::{Path, PathBuf},
-        process::Command,
         sync::Arc,
     };
 
     use anyhow::{bail, Context, Result};
+    use assert_cmd::prelude::OutputAssertExt;
     use git2::Repository;
     use tracing::info;
 
@@ -576,27 +629,38 @@ mod test {
         let fixture = RepoPairFixture::new()?;
 
         // Set up a remote that mimics source so that we can check that the setting of fetch and push URLs.
-        Command::new("git")
+        fixture
+            .app
+            .git_binary()
+            .command()
             .arg("remote")
             .arg("add")
             .arg("origin")
             .arg("https://git.twitter.biz/focus-test-repo")
             .current_dir(&fixture.dense_repo_path)
-            .status()
-            .expect("git remote set-url failed");
+            .assert()
+            .success();
 
-        // Make another branch
-        Command::new("git")
-            .arg("switch")
-            .arg("-c")
-            .arg("branch_two")
-            .current_dir(&fixture.dense_repo_path)
-            .status()
-            .expect("git switch failed");
+        // Make a branch that shouldn't end up in the sparse repo
+        fixture
+            .dense_repo
+            .create_and_switch_to_branch("old_branch")?;
+        fixture.dense_repo.make_empty_commit(
+            "I'm too old to be in the sparse repo!",
+            Some("Sun, Jan 27 22:32:18 2008"),
+        )?;
+
+        // Make a branch that should end up in the sparse repo.
+        fixture
+            .dense_repo
+            .create_and_switch_to_branch("branch_two")?;
+        fixture
+            .dense_repo
+            .make_empty_commit("I'm fresh and I should be in the sparse repo!", None)?;
 
         let app = Arc::new(App::new_for_testing()?);
 
-        fixture.perform_clone()?;
+        fixture.perform_clone().context("Clone failed")?;
 
         let git_repo = Repository::open(&fixture.sparse_repo_path)?;
         assert!(!git_repo.is_bare());
@@ -612,6 +676,15 @@ mod test {
             .config()?
             .snapshot()?
             .get_bool("twitter.statsenabled")?);
+
+        // Check `ci.alt.enabled` gets set
+        assert!(git_repo.config()?.snapshot()?.get_bool("ci.alt.enabled")?);
+
+        // Check `ci.alt.remote` gets set
+        assert_eq!(
+            git_repo.config()?.snapshot()?.get_str("ci.alt.remote")?,
+            "https://git.twitter.biz/source-ci"
+        );
 
         // Check the remote URLs
         let origin_remote = git_repo.find_remote("origin")?;
@@ -641,6 +714,17 @@ mod test {
             }
         }
 
+        git_repo
+            .find_branch("branch_two", git2::BranchType::Local)
+            .context("Failed to find branch_two")?;
+
+        assert!(
+            git_repo
+                .find_branch("old_branch", git2::BranchType::Local)
+                .is_err(),
+            "old_branch was copied to sparse repo, despite being too old for the shallow window"
+        );
+
         // Check post-merge hook
         let focus_exe = &std::env::current_exe().unwrap_or_else(|_| PathBuf::from("focus"));
         let focus_exe_path = focus_exe.file_name().unwrap().to_string_lossy();
@@ -651,10 +735,6 @@ mod test {
             post_merge_hook_contents,
             format!("{} event post-merge\n", focus_exe_path)
         );
-
-        git_repo
-            .find_branch("branch_two", git2::BranchType::Local)
-            .context("Failed to find branch_two")?;
 
         // TODO: Test refspecs from remote config
         let model_repo = Repo::open(&fixture.sparse_repo_path, app)?;

@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{bail, Context, Result};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
@@ -53,7 +56,6 @@ impl LockFile {
 
     // we must own the exclusive lock before writing the file!
     fn write_process_description(file: &mut File) -> Result<()> {
-        // truncate the file
         file.seek(SeekFrom::Start(0))?;
         file.set_len(0)?;
         {
@@ -61,10 +63,8 @@ impl LockFile {
             let mut buffered_writer = BufWriter::new(fp);
             writeln!(
                 buffered_writer,
-                "PID {} started by {} on host {}",
-                std::process::id(),
-                whoami::username(),
-                whoami::hostname(),
+                "{}",
+                super::process::get_process_description()
             )?;
             buffered_writer.flush()?;
         }
@@ -157,22 +157,13 @@ mod tests {
     fn lock_should_contain_process_info() -> Result<()> {
         testing::init_logging();
         let dir = tempdir()?;
-        let path = dir.path().join("lockfile");
+        let path = dir.path().join("process_lock");
 
         let _a = LockFile::new(&path).expect("should have acquired lock");
 
         let content = std::fs::read_to_string(&path).context("Failed reading lockfile")?;
-
         let content = content.trim();
-
-        let expect = format!(
-            "PID {} started by {} on host {}",
-            std::process::id(),
-            whoami::username(),
-            whoami::hostname(),
-        );
-
-        assert_eq!(expect.as_str(), content);
+        assert_eq!(crate::process::get_process_description().as_str(), content);
 
         Ok(())
     }

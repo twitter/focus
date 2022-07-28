@@ -1,20 +1,27 @@
 [package]
 name = "focus-operations"
-version = "0.5.4"
+version = "0.5.5"
 edition = "2021"
+
+[features]
+ci = []
 
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }
+content-addressed-cache = { path = "../../content-addressed-cache" }
 chrono = { version = "0.4", features = ["serde"] }
+console = "0.15.0"
 dirs = "4.0.0"
 focus-internals = { path = "../internals" }
+focus-platform = { path = "../platform" }
 focus-util = { path = "../util" }
-content-addressed-cache = { path = "../../content-addressed-cache" }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
   "vendored-libgit2", "vendored-openssl",
 ] }
+humantime = "2.1.0"
 lazy_static = "1.4.0"
 nix = "0.23.0"
+notify-rust = "4"
 once_cell = "1.4.0"
 plist = "1.3.1"
 rand = "0.8.4"
@@ -24,6 +31,7 @@ serde_derive = "1.0.130"
 serde_json = "1.0.68"
 serde-xml-rs = "0.5.1"
 sha2 = "0.10.2"
+skim = "0.9.4"
 strum = "0.24.0"
 strum_macros = "0.24.0"
 tempfile = "3.2.0"
@@ -37,6 +45,7 @@ which = "4.2.4"
 whoami = "1.2.1"
 
 [dev-dependencies]
+assert_cmd = "2.0.4"
 criterion = "0.3.5"
 focus-testing = { path = "../testing" }
 insta = "1.13.0"

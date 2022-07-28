@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{Context, Result};
 use focus_util::app::{App, ExitCode};
 use std::io::Write;
@@ -5,6 +8,8 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::{fs::File, path::Path, sync::Arc};
 use tracing::debug;
+
+use crate::sync::SyncMode;
 
 /// Initializes hooks in passed in repo
 pub fn init(repo_path: &Path) -> Result<()> {
@@ -40,7 +45,7 @@ fn write_hooks_to_dir(hooks: &[&str], dir: &Path) -> Result<()> {
 pub fn post_merge(app: Arc<App>) -> Result<ExitCode> {
     let current_dir = std::env::current_dir().context("Failed to obtain current directory")?;
     debug!(sparse_repo = ?current_dir.display(), "Running post-merge hook");
-    crate::sync::run(&current_dir, false, app)?;
+    crate::sync::run(&current_dir, SyncMode::Normal, app)?;
     Ok(ExitCode(0))
 }
 

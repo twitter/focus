@@ -1,4 +1,7 @@
-use anyhow::Result;
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use anyhow::{Context, Result};
 use filetime::FileTime;
 use std::borrow::Borrow;
 use std::fmt;
@@ -6,7 +9,7 @@ use std::ops::{Add, Deref, Sub};
 
 use chrono::{
     offset, Date, DateTime, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone,
-    Timelike,
+    Timelike, Utc,
 };
 use git2::Time;
 
@@ -18,6 +21,19 @@ pub trait ToRFC3339 {
 
 pub fn local_timestamp_rfc3339() -> String {
     Local::now().to_rfc3339()
+}
+
+pub fn date_at_day_in_past(days_into_past: i64) -> Result<Date<Utc>> {
+    let today = Utc::now().date();
+    today
+        .checked_sub_signed(Duration::days(days_into_past))
+        .with_context(|| format!("Could not determine date {} days ago", days_into_past))
+}
+
+pub fn formatted_datestamp_at_day_in_past(days_into_past: i64) -> Result<String> {
+    let datestamp = date_at_day_in_past(days_into_past)?;
+    let formatted_datestamp = datestamp.format(DATE_FORMAT);
+    Ok(formatted_datestamp.to_string())
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]

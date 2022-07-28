@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::collections::HashSet;
 
 use super::*;
@@ -14,7 +17,7 @@ pub enum Underlying {
     Project(String),
 }
 
-#[derive(Debug, PartialEq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Operation {
     pub action: OperationAction,
     pub underlying: Underlying,

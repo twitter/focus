@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::default::Default;
 use std::string::ToString;
 use std::time::Duration;
@@ -29,7 +32,7 @@ pub struct RocksDBCache {
     ttl: Duration,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CompositeKey {
     pub kind: CacheKeyKind,
     pub key: CacheKey,
