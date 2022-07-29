@@ -11,7 +11,10 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use content_addressed_cache::RocksDBCache;
 use focus_internals::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 
-use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
+use focus_util::{
+    self, app::App, git_helper,
+    sandbox_command::SandboxCommandOutput,
+};
 use git2::Repository;
 
 use std::{
@@ -92,10 +95,20 @@ pub fn run(
         None => bail!("Clone does not have a valid origin"),
     };
 
+    if sparse_repo_path.is_dir() {
+        bail!("{} already exists", sparse_repo_path.display());
+    }
+
+    let temp_dir = tempfile::tempdir()?;
+    let tmp_sparse_repo_path = temp_dir.path().join("tmp-sparse-repo");
+
+    //create the sparse repo dir, so other clones don't use the same name
+    std::fs::create_dir_all(&sparse_repo_path)?;
+
     match origin {
         Origin::Local(dense_repo_path) => clone_local(
             &dense_repo_path,
-            &sparse_repo_path,
+            &tmp_sparse_repo_path,
             &branch,
             copy_branches,
             days_of_history,
@@ -103,26 +116,42 @@ pub fn run(
         ),
         Origin::Remote(url) => clone_remote(
             url,
-            &sparse_repo_path,
+            &tmp_sparse_repo_path,
             &branch,
             days_of_history,
             app.clone(),
         ),
     }?;
 
-    set_up_sparse_repo(
-        &sparse_repo_path,
-        projects_and_targets,
-        tracker,
-        app.clone(),
-    )?;
+    set_up_sparse_repo(&tmp_sparse_repo_path, projects_and_targets, app.clone())?;
 
     if do_post_clone_fetch {
-        fetch_default_remote(&sparse_repo_path, app)
+        fetch_default_remote(&tmp_sparse_repo_path, app.clone())
             .context("Could not complete post clone fetch")?;
     }
 
-    set_up_hooks(&sparse_repo_path)
+    set_up_hooks(&tmp_sparse_repo_path)?;
+
+    move_repo(&tmp_sparse_repo_path, &sparse_repo_path, app.clone())
+        .context("Could not move repo into place")?;
+    
+
+    tracker
+        .ensure_registered(&sparse_repo_path, app)
+        .context("Registering repo")?;
+
+    Ok(())
+}
+
+fn move_repo(from_path: &Path, to_path: &Path, app: Arc<App>) -> Result<()> {
+    std::fs::rename(from_path, to_path)?;
+
+    // The outlining tree needs to be updated
+    let repo = Repo::open(to_path, app).context("Failed to open repo")?;
+    repo.repair_outlining_tree()
+        .context("Failed to repair the outlining tree after move")?;
+
+    Ok(())
 }
 
 /// Clone from a local path on disk.
@@ -244,7 +273,6 @@ fn clone_remote(
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
-    tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
     {
@@ -257,10 +285,6 @@ fn set_up_sparse_repo(
         info!("Setting up the working tree");
         repo.create_working_tree()
             .context("Failed to create the working tree")?;
-
-        tracker
-            .ensure_registered(sparse_repo_path, app.clone())
-            .context("Registering repo")?;
     }
 
     // N.B. we must re-open the repo because otherwise it has no trees...
@@ -274,7 +298,7 @@ fn set_up_sparse_repo(
         &target_set,
         false,
         &repo.config().index,
-        app.clone(),
+        app,
         &odb,
     )
     .context("Sync failed")?;
@@ -286,10 +310,6 @@ fn set_up_sparse_repo(
         .context("Could not write git config to support instrumentation")?;
 
     set_up_bazel_preflight_script(sparse_repo_path)?;
-
-    tracker
-        .ensure_registered(sparse_repo_path, app)
-        .context("adding sparse repo to the list of tracked repos")?;
 
     Ok(())
 }

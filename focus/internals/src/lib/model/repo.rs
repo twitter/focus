@@ -800,6 +800,21 @@ impl Repo {
         Ok(())
     }
 
+    pub fn repair_outlining_tree(&self) -> Result<()> {
+        let path = Self::outlining_tree_path(&self.git_dir);
+        // repair the worktree
+        let (mut cmd, scmd) = git_helper::git_command(self.app.clone())?;
+        let cmd = cmd
+            .current_dir(&self.path)
+            .arg("worktree")
+            .arg("repair")
+            .arg(&path);
+        scmd.ensure_success_or_log(cmd, SandboxCommandOutput::Stderr)
+            .context("git worktree repair failed")?;
+
+        Ok(())
+    }
+
     fn working_tree_git_dir(&self) -> PathBuf {
         self.git_dir.join("worktrees").join(OUTLINING_TREE_NAME)
     }
