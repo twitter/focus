@@ -743,7 +743,6 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
 
             Ok(ExitCode(0))
         }
-
         Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo = paths::expand_tilde(sparse_repo)?;
