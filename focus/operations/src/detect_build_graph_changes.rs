@@ -182,12 +182,8 @@ pub fn run(repo_path: &Path, advisory: bool, args: Vec<String>, app: Arc<App>) -
         notify(&repo, repo_name, "Uncommitted changes affect the build graph, please commit changes and run `focus sync` to update the sparse checkout!", true)?;
         Ok(failing_exit_code)
     } else {
-        notify(
-            &repo,
-            repo_name,
-            "No changes to files affecting the build graph were detected",
-            false,
-        )?;
+        // Don't notify if there are no changes, it's annoying
+        info!(repo = repo_name, "No changes to files affecting the build graph were detected");
         Ok(ExitCode(0))
     }
 }
