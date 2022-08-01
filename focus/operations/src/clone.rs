@@ -384,11 +384,13 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
         })?;
 
         if let Some(host) = fetch_url.host() {
-            // Apply Twitter-specific remote treatment.
-            if host.to_string().eq_ignore_ascii_case("git.twitter.biz") {
-                // If the path for the fetch URL does not begin with '/ro', add that prefix.
-                if !fetch_url.path().starts_with("/ro") {
-                    fetch_url.set_path(&format!("/ro{}", fetch_url.path()));
+            if cfg!(twttr) {
+                // Apply Twitter-specific remote treatment.
+                if host.to_string().eq_ignore_ascii_case("git.twitter.biz") {
+                    // If the path for the fetch URL does not begin with '/ro', add that prefix.
+                    if !fetch_url.path().starts_with("/ro") {
+                        fetch_url.set_path(&format!("/ro{}", fetch_url.path()));
+                    }
                 }
             }
         } else {
@@ -604,25 +606,11 @@ fn set_up_bazel_preflight_script(sparse_repo: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use std::{
-        collections::HashSet,
-        path::{Path, PathBuf},
-        sync::Arc,
-    };
-
-    use anyhow::{bail, Context, Result};
-    use assert_cmd::prelude::OutputAssertExt;
-    use git2::Repository;
-    use tracing::info;
-
     use crate::testing::integration::RepoPairFixture;
     use focus_internals::target::Target;
     use focus_testing::init_logging;
-    use focus_util::app::App;
 
-    use focus_internals::model::repo::Repo;
-
-    static MAIN_BRANCH_NAME: &str = "main";
+    use anyhow::Result;
 
     #[test]
     fn clone_contains_an_initial_layer_set() -> Result<()> {
@@ -654,7 +642,25 @@ mod test {
 
         Ok(())
     }
+}
 
+#[cfg(twitter)]
+#[cfg(test)]
+mod twttr_test {
+    use std::{
+        collections::HashSet,
+        path::{Path, PathBuf},
+        sync::Arc,
+    };
+
+    use anyhow::{bail, Context, Result};
+    use assert_cmd::prelude::OutputAssertExt;
+    use git2::Repository;
+    use tracing::info;
+
+    const MAIN_BRANCH_NAME: &str = "main";
+
+    #[cfg(twttr)]
     #[test]
     fn local_clone_smoke_test() -> Result<()> {
         init_logging();

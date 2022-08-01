@@ -184,7 +184,7 @@ enum Subcommand {
         #[clap(long)]
         push_url: Option<String>,
 
-        #[clap(long, default_value=focus_operations::init::SOURCE_RO_URL)]
+        #[clap(long)]
         fetch_url: String,
 
         #[clap()]

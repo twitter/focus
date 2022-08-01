@@ -28,7 +28,7 @@ use focus_internals::target::{Target, TargetSet};
 const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
 const TAG_NAMESPACE: &str = "focus";
 const COMMIT_USER_NAME: &str = "focus";
-const COMMIT_USER_EMAIL: &str = "source-eng-team@twitter.com";
+const COMMIT_USER_EMAIL: &str = "focus@example.com";
 
 pub fn clear(sparse_repo_path: PathBuf) -> anyhow::Result<()> {
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;

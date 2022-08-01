@@ -12,8 +12,7 @@ use focus_util::{
 };
 use tempfile::TempDir;
 
-pub static SOURCE_RO_URL: &str = "https://rogit.twitter.biz/source";
-static DEFAULT_SINGLE_BRANCH: &str = "master";
+const DEFAULT_SINGLE_BRANCH: &str = "master";
 
 pub fn run_clone(mut clone_builder: CloneBuilder, app: Arc<App>) -> Result<()> {
     (&mut clone_builder).add_clone_args(vec!["--progress"]);
@@ -93,7 +92,10 @@ pub fn run(
         config.set_bool("manageconfig.enable", true)?;
         config.set_str("remote.origin.tagOpt", "--no-tags")?;
         config.set_bool("remote.origin.prune", true)?;
-        config.set_bool("twitter.federated", true)?;
+
+        if cfg!(twttr) {
+            config.set_bool("twitter.federated", true)?;
+        }
 
         repo.remote_add_fetch(
             "origin",
@@ -121,7 +123,7 @@ pub struct CloneBuilder {
     // when the target_path was set, and another to represent another
     // where it was unset, but that's unnecessarily complex for our needs
     target_path: PathBuf,
-    fetch_url: String,
+    fetch_url: Option<String>,
     push_url: Option<String>,
     shallow_since: Option<NaiveDate>,
     branch_name: String,
@@ -193,13 +195,16 @@ impl CloneBuilder {
             opt_args.push(kv);
         }
 
-        let (mut cmd, scmd) = git_helper::git_command(app)?;
+        let fetch_url = self
+            .fetch_url
+            .ok_or_else(|| anyhow::anyhow!("Fetch URL not provided"))?;
 
+        let (mut cmd, scmd) = git_helper::git_command(app)?;
         cmd.args(self.git_args)
             .arg("clone")
             .args(opt_args)
             .args(self.clone_args)
-            .arg(self.fetch_url)
+            .arg(fetch_url)
             .arg(self.target_path);
 
         Ok((cmd, scmd))
@@ -254,7 +259,7 @@ impl CloneBuilder {
     }
 
     pub fn fetch_url(&mut self, ourl: String) -> &mut Self {
-        self.fetch_url = ourl;
+        self.fetch_url = Some(ourl);
         self
     }
 
@@ -338,7 +343,7 @@ impl Default for CloneBuilder {
     fn default() -> Self {
         Self {
             target_path: PathBuf::new(),
-            fetch_url: String::from(SOURCE_RO_URL),
+            fetch_url: None,
             push_url: None,
             shallow_since: Some(default_shallow_since()),
             branch_name: String::from(DEFAULT_SINGLE_BRANCH),
