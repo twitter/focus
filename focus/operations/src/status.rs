@@ -10,7 +10,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 fn relative_time(current_commit_time: git2::Time, prospective_commit_time: git2::Time) -> String {
     let difference = prospective_commit_time.seconds() - current_commit_time.seconds();
-    let difference_duration = Duration::from_secs(difference.abs() as u64);
+    let difference_duration = Duration::from_secs(difference.unsigned_abs());
 
     match prospective_commit_time.cmp(&current_commit_time) {
         Ordering::Greater => format!(
