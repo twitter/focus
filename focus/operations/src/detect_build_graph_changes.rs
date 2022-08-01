@@ -183,7 +183,10 @@ pub fn run(repo_path: &Path, advisory: bool, args: Vec<String>, app: Arc<App>) -
         Ok(failing_exit_code)
     } else {
         // Don't notify if there are no changes, it's annoying
-        info!(repo = repo_name, "No changes to files affecting the build graph were detected");
+        info!(
+            repo = repo_name,
+            "No changes to files affecting the build graph were detected"
+        );
         Ok(ExitCode(0))
     }
 }

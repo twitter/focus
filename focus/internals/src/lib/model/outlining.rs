@@ -437,9 +437,9 @@ mod testing {
             path: PathBuf::from("1/2/3/4/5/6"),
             recursive: true,
         };
-        pattern_set.insert_leading(nested_pattern.clone(), &recursive_paths);
-        pattern_set.insert_leading(nested_pattern_with_ceiling.clone(), &recursive_paths);
-        pattern_set.insert_leading(nested_pattern_exceeding_ceiling.clone(), &recursive_paths);
+        pattern_set.insert_leading(nested_pattern, &recursive_paths);
+        pattern_set.insert_leading(nested_pattern_with_ceiling, &recursive_paths);
+        pattern_set.insert_leading(nested_pattern_exceeding_ceiling, &recursive_paths);
         let mut iter = pattern_set.iter();
         assert_eq!(
             iter.next().unwrap(),
