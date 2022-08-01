@@ -5,6 +5,7 @@ expression: "&profile"
 /*
 !/*/
 /focus/
+/tools/build_rules/
 *.bzl
 BUILD*
 WORKSPACE*
