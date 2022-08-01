@@ -23,7 +23,7 @@ serde_derive = "1.0.130"
 serde_json = "1.0.68"
 tempfile = "3.2.0"
 termion = "1.5.6"
-tool-insights-client = { path = "../../tool_insights_client" }
+tool-insights-client = { path = "../../tool_insights_client", optional = true }
 tracing = "0.1.31"
 url = "2.2.2"
 uuid = { version = "0.8.2", features = ["v4"] }
@@ -44,4 +44,4 @@ name = "focus_util"
 path = "src/lib.rs"
 
 [features]
-twttr = []
+twttr = ["dep:tool-insights-client"]
