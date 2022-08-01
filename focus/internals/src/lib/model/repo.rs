@@ -51,11 +51,7 @@ const PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT: i32 = 15000;
 
 const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
 const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
-const VERSION_CONFIG_KEY: &str = "focus.version";
-const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
-const CI_ENABLED_CONFIG_KEY: &str = "ci.alt.enabled";
-const CI_REMOTE_CONFIG_KEY: &str = "ci.alt.remote";
-const CI_REMOTE_CONFIG_VALUE: &str = "https://git.twitter.biz/source-ci";
+
 const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
 const LAST: usize = usize::MAX;
 
@@ -835,16 +831,24 @@ impl Repo {
     /// Write git config to support gitstats instrumentation.
     /// This sets `focus.version` and `twitter.statsenabled`
     pub fn write_git_config_to_support_instrumentation(&self) -> Result<()> {
-        self.repo
-            .config()?
-            .set_str(VERSION_CONFIG_KEY, env!("CARGO_PKG_VERSION"))?;
+        if cfg!(twttr) {
+            const VERSION_CONFIG_KEY: &str = "focus.version";
+            const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
+            const CI_ENABLED_CONFIG_KEY: &str = "ci.alt.enabled";
+            const CI_REMOTE_CONFIG_KEY: &str = "ci.alt.remote";
+            const CI_REMOTE_CONFIG_VALUE: &str = "https://git.twitter.biz/source-ci";
 
-        self.repo.config()?.set_bool(GITSTATS_CONFIG_KEY, true)?;
+            self.repo
+                .config()?
+                .set_str(VERSION_CONFIG_KEY, env!("CARGO_PKG_VERSION"))?;
 
-        self.repo.config()?.set_bool(CI_ENABLED_CONFIG_KEY, true)?;
-        self.repo
-            .config()?
-            .set_str(CI_REMOTE_CONFIG_KEY, CI_REMOTE_CONFIG_VALUE)?;
+            self.repo.config()?.set_bool(GITSTATS_CONFIG_KEY, true)?;
+
+            self.repo.config()?.set_bool(CI_ENABLED_CONFIG_KEY, true)?;
+            self.repo
+                .config()?
+                .set_str(CI_REMOTE_CONFIG_KEY, CI_REMOTE_CONFIG_VALUE)?;
+        }
         Ok(())
     }
 

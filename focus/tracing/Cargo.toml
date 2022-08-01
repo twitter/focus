@@ -11,7 +11,8 @@ dirs = "4.0.0"
 focus-testing = { path = "../testing" }
 focus-util = { path = "../util" }
 git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f", features = [
-  "vendored-libgit2", "vendored-openssl",
+  "vendored-libgit2",
+  "vendored-openssl",
 ] }
 heck = "0.4.0"
 lazy_static = "1.4.0"
@@ -55,3 +56,6 @@ normal = ["focus-testing"]
 [lib]
 name = "focus_tracing"
 path = "src/lib.rs"
+
+[features]
+twttr = []
