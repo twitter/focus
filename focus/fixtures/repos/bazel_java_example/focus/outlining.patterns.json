@@ -17,6 +17,14 @@
             }
         },
         {
+            "kind": "Directory",
+            "pattern": {
+                "precedence": 2,
+                "path": "tools/build_rules",
+                "recursive": true
+            }
+        },
+        {
             "kind": "Verbatim",
             "pattern": {
                 "fragment": "WORKSPACE*"
