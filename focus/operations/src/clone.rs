@@ -11,10 +11,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use content_addressed_cache::RocksDBCache;
 use focus_internals::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 
-use focus_util::{
-    self, app::App, git_helper,
-    sandbox_command::SandboxCommandOutput,
-};
+use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
 use git2::Repository;
 
 use std::{
@@ -134,7 +131,6 @@ pub fn run(
 
     move_repo(&tmp_sparse_repo_path, &sparse_repo_path, app.clone())
         .context("Could not move repo into place")?;
-    
 
     tracker
         .ensure_registered(&sparse_repo_path, app)

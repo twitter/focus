@@ -8,7 +8,7 @@ use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 use anyhow::Context;
 use content_addressed_cache::Cache;
-use tracing::{debug, error, info, warn, info_span};
+use tracing::{debug, error, info, info_span, warn};
 
 pub use content_addressed_cache::RocksDBCache;
 
