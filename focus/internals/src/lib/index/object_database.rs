@@ -8,7 +8,7 @@ use super::content_hash::HashContext;
 use super::{content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue};
 use anyhow::Context;
 use content_addressed_cache::Cache;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, warn, info_span};
 
 pub use content_addressed_cache::RocksDBCache;
 
@@ -103,6 +103,8 @@ pub trait RocksDBMemoizationCacheExt {
 impl RocksDBMemoizationCacheExt for RocksDBCache {
     fn new(repo: &git2::Repository) -> RocksDBCache {
         let rocksdb_path = repo.path().join("focus/focus-index-rocks-db");
+        let span = info_span!("Opening index database");
+        let _guard = span.enter();
         RocksDBCache::open_with_ttl(rocksdb_path, Duration::from_secs(3600 * 24 * 90))
     }
 }
