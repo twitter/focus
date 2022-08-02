@@ -712,8 +712,10 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }) => {
             let origin = focus_operations::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
-                let current_dir =
-                    std::env::current_dir().context("Failed to obtain current directory")?;
+                let current_dir = paths::find_repo_root_from(
+                    app.clone(),
+                    std::env::current_dir().context("Failed to obtain current directory")?,
+                )?;
                 let expanded = paths::expand_tilde(sparse_repo)
                     .context("Failed to expand sparse repo path")?;
                 current_dir.join(expanded)
@@ -745,7 +747,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }
         Subcommand::Sync { sparse_repo } => {
             // TODO: Add total number of paths in repo to TI.
-            let sparse_repo = paths::expand_tilde(sparse_repo)?;
+            let sparse_repo =
+                paths::find_repo_root_from(app.clone(), paths::expand_tilde(sparse_repo)?)?;
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
@@ -757,7 +760,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             repo: repo_path,
             subcommand,
         } => {
-            let repo = Repository::open(repo_path).context("opening the repo")?;
+            let sparse_repo = paths::find_repo_root_from(app.clone(), repo_path)?;
+            let repo = Repository::open(sparse_repo).context("opening the repo")?;
             match subcommand {
                 RefsSubcommand::Delete {
                     cutoff_date,
@@ -819,19 +823,22 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             subcommand,
             repo,
             remote_name,
-        } => match subcommand {
-            BranchSubcommand::List {} => {
-                focus_operations::branch::list(app, repo, &remote_name)?;
-                Ok(ExitCode(0))
+        } => {
+            let repo = paths::find_repo_root_from(app.clone(), repo)?;
+            match subcommand {
+                BranchSubcommand::List {} => {
+                    focus_operations::branch::list(app, repo, &remote_name)?;
+                    Ok(ExitCode(0))
+                }
+                BranchSubcommand::Search { search_term } => {
+                    focus_operations::branch::search(app, repo, &remote_name, &search_term)?;
+                    Ok(ExitCode(0))
+                }
+                BranchSubcommand::Add { name } => {
+                    focus_operations::branch::add(app, repo, &remote_name, &name)
+                }
             }
-            BranchSubcommand::Search { search_term } => {
-                focus_operations::branch::search(app, repo, &remote_name, &search_term)?;
-                Ok(ExitCode(0))
-            }
-            BranchSubcommand::Add { name } => {
-                focus_operations::branch::add(app, repo, &remote_name, &name)
-            }
-        },
+        }
 
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List {} => {
@@ -849,7 +856,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             advisory,
             args,
         } => {
-            let repo = paths::expand_tilde(repo)?;
+            let repo = paths::find_repo_root_from(app.clone(), paths::expand_tilde(repo)?)?;
             let repo = git_helper::find_top_level(app.clone(), &repo)
                 .context("Failed to canonicalize repo path")?;
             focus_operations::detect_build_graph_changes::run(&repo, advisory, args, app)
@@ -859,7 +866,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             interactive,
             projects_and_targets,
         } => {
-            let sparse_repo = std::env::current_dir()?;
+            let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
             focus_operations::ensure_clean::run(&sparse_repo, app.clone())
@@ -876,7 +883,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         Subcommand::Remove {
             projects_and_targets,
         } => {
-            let sparse_repo = std::env::current_dir()?;
+            let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
             focus_operations::ensure_clean::run(&sparse_repo, app.clone())
@@ -886,13 +893,13 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }
 
         Subcommand::Status {} => {
-            let sparse_repo = std::env::current_dir()?;
+            let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             paths::assert_focused_repo(&sparse_repo)?;
             focus_operations::status::run(&sparse_repo, app)
         }
 
         Subcommand::Projects {} => {
-            let repo = std::env::current_dir()?;
+            let repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             paths::assert_focused_repo(&repo)?;
             focus_operations::selection::list_projects(&repo, app)?;
             Ok(ExitCode(0))
@@ -912,8 +919,11 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             push_url,
             target_path,
         } => {
-            let expanded = paths::expand_tilde(target_path)
-                .context("expanding tilde on target_path argument")?;
+            let expanded = paths::find_repo_root_from(
+                app.clone(),
+                paths::expand_tilde(target_path)
+                    .context("expanding tilde on target_path argument")?,
+            )?;
 
             let target = expanded.as_path();
 
@@ -979,6 +989,11 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 repo_path,
                 git_config_path,
             } => {
+                let repo_path = match repo_path {
+                    Some(path) => Some(paths::find_repo_root_from(app, path)?),
+                    None => None,
+                };
+
                 focus_operations::maintenance::register(
                     focus_operations::maintenance::RegisterOpts {
                         repo_path,
@@ -991,7 +1006,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
 
             MaintenanceSubcommand::SetDefaultConfig { .. } => {
                 focus_operations::maintenance::set_default_git_maintenance_config(
-                    &std::env::current_dir()?,
+                    &paths::find_repo_root_from(app, std::env::current_dir()?)?,
                 )?;
                 Ok(ExitCode(0))
             }
@@ -1049,14 +1064,17 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }
 
         Subcommand::Upgrade { repo } => {
-            focus_migrations::production::perform_pending_migrations(&repo)
-                .context("Failed to upgrade repo")?;
+            focus_migrations::production::perform_pending_migrations(
+                paths::find_repo_root_from(app, repo)?.as_path(),
+            )
+            .context("Failed to upgrade repo")?;
 
             Ok(ExitCode(0))
         }
 
         Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { sparse_repo } => {
+                let sparse_repo = paths::find_repo_root_from(app, sparse_repo)?;
                 focus_operations::index::clear(sparse_repo)?;
                 Ok(ExitCode(0))
             }
@@ -1066,6 +1084,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 force,
                 remote,
             } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), sparse_repo)?;
                 let exit_code = focus_operations::index::fetch(app, sparse_repo, force, remote)?;
                 Ok(exit_code)
             }
@@ -1074,19 +1093,21 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 sparse_repo,
                 break_on_missing_keys,
             } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), sparse_repo)?;
                 let exit_code =
                     focus_operations::index::generate(app, sparse_repo, break_on_missing_keys)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Get { target } => {
-                let exit_code = focus_operations::index::get(app, Path::new("."), &target)?;
+                let sparse_repo = paths::find_repo_root_from(app.clone(), PathBuf::from("."))?;
+                let exit_code = focus_operations::index::get(app, &sparse_repo, &target)?;
                 Ok(exit_code)
             }
 
             IndexSubcommand::Hash { commit, targets } => {
-                let exit_code =
-                    focus_operations::index::hash(app, Path::new("."), commit, &targets)?;
+                let sparse_repo = paths::find_repo_root_from(app.clone(), PathBuf::from("."))?;
+                let exit_code = focus_operations::index::hash(app, &sparse_repo, commit, &targets)?;
                 Ok(exit_code)
             }
 
@@ -1096,6 +1117,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 dry_run,
                 break_on_missing_keys,
             } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), sparse_repo)?;
                 let exit_code = focus_operations::index::push(
                     app,
                     sparse_repo,
@@ -1110,9 +1132,10 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 targets,
                 break_on_missing_keys,
             } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), PathBuf::from("."))?;
                 let exit_code = focus_operations::index::resolve(
                     app,
-                    Path::new("."),
+                    &sparse_repo,
                     targets,
                     break_on_missing_keys,
                 )?;
@@ -1131,11 +1154,16 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             BackgroundSubcommand::Enable {
                 sparse_repo,
                 idle_period_ms,
-            } => focus_operations::background::enable(app, sparse_repo, idle_period_ms),
+            } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), sparse_repo)?;
+                focus_operations::background::enable(app, sparse_repo, idle_period_ms)
+            }
             BackgroundSubcommand::Disable { sparse_repo } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), sparse_repo)?;
                 focus_operations::background::disable(app, sparse_repo)
             }
             BackgroundSubcommand::Sync { sparse_repo } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), sparse_repo)?;
                 focus_operations::background::sync(app, sparse_repo)
             }
         },

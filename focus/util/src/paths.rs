@@ -6,7 +6,10 @@ use lazy_static::lazy_static;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
+    sync::Arc,
 };
+
+use crate::{app::App, git_helper};
 
 lazy_static! {
     pub static ref MAIN_SEPARATOR_PATH: PathBuf =
@@ -19,6 +22,12 @@ pub fn assert_focused_repo(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn find_repo_root_from(app: Arc<App>, path: PathBuf) -> Result<PathBuf> {
+    let path = git_helper::find_top_level(app, &path)?;
+    assert_focused_repo(&path)?;
+    Ok(path)
 }
 
 pub fn focus_config_dir() -> PathBuf {
@@ -129,6 +138,8 @@ pub fn has_ancestor<P: AsRef<Path>>(subject: P, ancestor: P) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use focus_testing::ScratchGitRepo;
+
     use super::*;
 
     #[test]
@@ -146,5 +157,33 @@ mod tests {
         assert!(is_build_definition(&Path::new("BUILD.funky")));
         assert!(is_build_definition(&Path::new("BUILD")));
         assert!(!is_build_definition(&Path::new("bar.c")));
+    }
+
+    #[test]
+    fn test_find_repo_root_from() -> Result<()> {
+        let app = Arc::new(App::new_for_testing()?);
+
+        let temp_dir = tempfile::tempdir()?.into_path();
+        let focus_repo = ScratchGitRepo::new_static_fixture(&temp_dir)?;
+        let deep_dir = focus_repo.path().join("very").join("deep").join("dir");
+        let focus_dir = focus_repo.path().join(".focus");
+        std::fs::create_dir_all(&deep_dir)?;
+        std::fs::create_dir_all(&focus_dir)?;
+
+        assert_eq!(
+            find_repo_root_from(app.clone(), deep_dir)?,
+            focus_repo.path().canonicalize()?
+        );
+
+        let non_focus_repo = ScratchGitRepo::new_static_fixture(&temp_dir)?;
+        if find_repo_root_from(app.clone(), non_focus_repo.path().to_path_buf()).is_ok() {
+            bail!("Should not have found a focus repo root in a non-git non-focus repo")
+        };
+
+        if find_repo_root_from(app, temp_dir).is_ok() {
+            bail!("Should not have found a focus repo root in a non-git non-focus repo")
+        };
+
+        Ok(())
     }
 }
