@@ -1,3 +1,6 @@
+// Copyright 2022 Twitter, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 //! Stubs for Twitter-internal infrastructure.
 
 pub mod tool_insights_client {
