@@ -13,6 +13,7 @@ use crate::message::Message;
 use crate::writer::Writer;
 
 const TOOL_INSIGHTS_DIR_DEFAULT: &str = "/opt/twitter_mde/var/log/toolinsights/";
+
 const TOOL_INSIGHTS_DIR_ENV_VAR: &str = "TOOL_INSIGHTS_DIR";
 
 pub struct JsonWriter {

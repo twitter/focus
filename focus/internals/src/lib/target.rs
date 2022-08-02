@@ -11,7 +11,7 @@ use thiserror::Error;
 
 pub type TargetSet = HashSet<Target>;
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone)]
+#[derive(Serialize, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone)]
 pub enum Target {
     /// A Bazel package like `//foo/bar:baz`.
     Bazel(Label),

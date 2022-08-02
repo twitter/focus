@@ -170,6 +170,20 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
             "user_selected_target_count",
             selection.targets.len().to_string(),
         );
+        let mut project_selection_names: Vec<String> =
+            selection.projects.iter().map(|n| n.name.clone()).collect();
+        let mut target_selection_names: Vec<String> =
+            selection.targets.iter().map(|n| n.to_string()).collect();
+        project_selection_names.sort();
+        target_selection_names.sort();
+        ti_client.get_context().add_to_custom_map(
+            "user_project_selection",
+            serde_json::to_string(&project_selection_names)?,
+        );
+        ti_client.get_context().add_to_custom_map(
+            "user_target_selection",
+            serde_json::to_string(&target_selection_names)?,
+        );
 
         Some(BackedUpFile::new(&sparse_profile_path)?)
     };
