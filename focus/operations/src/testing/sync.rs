@@ -333,6 +333,7 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
     Ok(())
 }
 
+#[cfg(twttr)]
 #[test]
 fn sync_sets_ti_client_correctly() -> Result<()> {
     init_logging();
