@@ -334,6 +334,75 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
 }
 
 #[test]
+fn sync_sets_ti_client_correctly() -> Result<()> {
+    init_logging();
+
+    let fixture = RepoPairFixture::new()?;
+    fixture.perform_clone()?;
+
+    let project_a_label = String::from("team_banzai/project_a");
+    let targets = vec![project_a_label, String::from("bazel://library_b/...")];
+
+    crate::selection::add(
+        &fixture.sparse_repo_path,
+        true,
+        targets.clone(),
+        fixture.app.clone(),
+    )?;
+
+    // Get the actual strings set in TI client by the sync above
+    let reported_projects = fixture
+        .app
+        .tool_insights_client()
+        .get_inner()
+        .get_ti_context()
+        .get_custom_map()
+        .unwrap()
+        .get("user_project_selection")
+        .unwrap()
+        .clone();
+    let reported_targets = fixture
+        .app
+        .tool_insights_client()
+        .get_inner()
+        .get_ti_context()
+        .get_custom_map()
+        .unwrap()
+        .get("user_target_selection")
+        .unwrap()
+        .clone();
+
+    // Calculate the expected strings from the selection of the repo.
+    let selections = fixture
+        .sparse_repo()
+        .unwrap()
+        .selection_manager()
+        .unwrap()
+        .computed_selection()
+        .unwrap();
+    let mut project_selection_names: Vec<String> =
+        selections.projects.iter().map(|n| n.name.clone()).collect();
+    let mut target_selection_names: Vec<String> =
+        selections.targets.iter().map(|n| n.to_string()).collect();
+    project_selection_names.sort();
+    target_selection_names.sort();
+    let expected_projects_string = serde_json::to_string(&project_selection_names).unwrap();
+    let expected_target_string = serde_json::to_string(&target_selection_names).unwrap();
+
+    // First assert that expected hasn't changed
+    assert_eq!(
+        expected_projects_string,
+        "[\"mandatory\",\"team_banzai/project_a\"]"
+    );
+    assert_eq!(expected_target_string, "[\"bazel://library_b/...\"]");
+
+    // Assert that expected strings from TI match the ones in TI client
+    assert_eq!(expected_projects_string, reported_projects);
+    assert_eq!(expected_target_string, reported_targets);
+    Ok(())
+}
+
+#[test]
 fn sync_configures_working_and_outlining_trees() -> Result<()> {
     init_logging();
 
