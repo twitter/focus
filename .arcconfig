@@ -1,5 +1,0 @@
-{
-  "arc.feature.start.default": "origin/main",
-  "arc.land.onto.default": "main",
-  "base": "git:merge-base(origin/main), arc:amended, arc:prompt"
-}
