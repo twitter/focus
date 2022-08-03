@@ -168,7 +168,8 @@ where
     Ok(stdout_contents.trim().to_owned())
 }
 
-pub fn find_top_level(app: Arc<App>, path: &Path) -> Result<PathBuf> {
+pub fn find_top_level(app: Arc<App>, path: impl AsRef<Path>) -> Result<PathBuf> {
+    let path = path.as_ref();
     if let Ok(path) = std::fs::canonicalize(path) {
         Ok(PathBuf::from(
             run_consuming_stdout(path, &["rev-parse", "--show-toplevel"], app)
