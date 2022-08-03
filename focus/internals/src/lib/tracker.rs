@@ -11,13 +11,14 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use focus_util::{app::App, lock_file::LockFile, paths::focus_config_dir};
 
 use crate::model::repo::Repo;
 
+#[derive(Debug)]
 pub struct TrackedRepo {
     identifier: Uuid,
     location: PathBuf,
@@ -65,8 +66,8 @@ impl Display for TrackedRepo {
 }
 
 pub struct Snapshot {
-    repos: Vec<TrackedRepo>,
-    index_by_identifier: HashMap<Vec<u8>, usize>,
+    pub(crate) repos: Vec<TrackedRepo>,
+    pub(crate) index_by_identifier: HashMap<Vec<u8>, usize>,
 }
 
 impl Snapshot {
@@ -148,14 +149,20 @@ impl Tracker {
                 let canonical_repo_dir = repo_directory
                     .canonicalize()
                     .context("Canonicalizing repo path")?;
-                let canonical_link_target = path
+                if let Ok(canonical_link_target) = path
                     .canonicalize()
-                    .context("Canonicalzing existing symlink path")?;
-                if canonical_repo_dir == canonical_link_target {
-                    // The symlink already exists.
-                    info!(?canonical_repo_dir, "Symlink already exists");
-                    return Ok(());
+                    .context("Canonicalzing existing symlink path")
+                {
+                    if canonical_repo_dir == canonical_link_target {
+                        // The symlink already exists.
+                        return Ok(());
+                    }
                 }
+
+                warn!(desired_target = ?canonical_repo_dir, link = ?link_path, "Symlink exists, but points to the wrong place");
+                std::fs::remove_file(&link_path).with_context(|| {
+                    format!("Removing old symlink ({}) failed", link_path.display())
+                })?;
             }
         }
 

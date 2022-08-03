@@ -248,6 +248,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Repo { subcommand } => match subcommand {
             RepoSubcommand::List { .. } => "repo-list".to_string(),
             RepoSubcommand::Repair { .. } => "repo-repair".to_string(),
+            RepoSubcommand::Register { .. } => "repo-register".to_string(),
         },
         Subcommand::Add { .. } => "add".to_string(),
         Subcommand::Remove { .. } => "remove".to_string(),
@@ -422,6 +423,12 @@ enum RepoSubcommand {
 
     /// Attempt to repair the registry of repositories
     Repair {},
+
+    /// Register (or fix the current registation of) the of the specified repository
+    Register {
+        #[clap(parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -861,6 +868,11 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             }
             RepoSubcommand::Repair {} => {
                 focus_operations::repo::repair(tracker, app)?;
+                Ok(ExitCode(0))
+            }
+
+            RepoSubcommand::Register { sparse_repo } => {
+                focus_operations::repo::register(sparse_repo, tracker, app)?;
                 Ok(ExitCode(0))
             }
         },
