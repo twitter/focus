@@ -8,4 +8,7 @@ pub mod integration;
 pub mod refs;
 
 #[cfg(test)]
+pub mod repo;
+
+#[cfg(test)]
 pub mod sync;
