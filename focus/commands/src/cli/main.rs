@@ -18,7 +18,7 @@ use git2::Repository;
 
 use focus_util::{
     app::{App, ExitCode},
-    git_helper,
+    git_helper::{self, GitVersion},
     lock_file::LockFile,
     paths, sandbox,
     time::FocusTime,
@@ -32,7 +32,7 @@ use focus_operations::{
 };
 use strum::VariantNames;
 use termion::{color, style};
-use tracing::{debug, debug_span, info};
+use tracing::{debug, debug_span, error, info};
 
 #[derive(Parser, Debug)]
 struct NewArgs {
@@ -676,6 +676,18 @@ fn hold_lock_file(repo: &Path) -> Result<LockFile> {
     LockFile::new(&path)
 }
 
+fn preflight_check(app: Arc<App>) -> Result<bool> {
+    let passed = match GitVersion::current(app.git_binary())? {
+        GitVersion { major, minor, .. } if major >= 2 && minor >= 35 => true,
+        GitVersion { major, minor, .. } => {
+            error!("Focus requires Git version 2.35 or newer. This system has version {}.{} installed. Please update Git and try again.", major, minor);
+            false
+        }
+    };
+
+    Ok(passed)
+}
+
 fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
@@ -683,6 +695,10 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
     ti_client.get_context().set_tool_feature_name(&feature_name);
     let span = debug_span!("Running subcommand", ?feature_name);
     let _guard = span.enter();
+
+    if !preflight_check(app.clone())? {
+        return Ok(ExitCode(1));
+    }
 
     if let Subcommand::Clone(_) = &options.cmd {
         eprintln!(
