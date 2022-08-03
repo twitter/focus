@@ -712,10 +712,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }) => {
             let origin = focus_operations::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
-                let current_dir = paths::find_repo_root_from(
-                    app.clone(),
-                    std::env::current_dir().context("Failed to obtain current directory")?,
-                )?;
+                let current_dir =
+                    std::env::current_dir().context("Failed to obtain current directory")?;
                 let expanded = paths::expand_tilde(sparse_repo)
                     .context("Failed to expand sparse repo path")?;
                 current_dir.join(expanded)
