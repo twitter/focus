@@ -923,8 +923,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }
 
         Subcommand::Projects {} => {
-            let repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
-            paths::assert_focused_repo(&repo)?;
+            let repo = git_helper::find_top_level(app.clone(), std::env::current_dir()?)
+                .context("Finding the top level of the repo")?;
             focus_operations::selection::list_projects(&repo, app)?;
             Ok(ExitCode(0))
         }
