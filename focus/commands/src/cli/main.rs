@@ -910,7 +910,6 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             projects_and_targets,
         } => {
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
-            paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
             focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
@@ -920,7 +919,6 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
 
         Subcommand::Status {} => {
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
-            paths::assert_focused_repo(&sparse_repo)?;
             focus_operations::status::run(&sparse_repo, app)
         }
 
