@@ -12,7 +12,8 @@ use std::{
     sync::Arc,
 };
 
-use focus_internals::{locking, tracker::Tracker};
+use content_addressed_cache::RocksDBCache;
+use focus_internals::{index::RocksDBMemoizationCacheExt, locking, tracker::Tracker};
 
 use anyhow::{bail, Context, Result};
 use focus_util::git_helper::{git_command, GitBinary};
@@ -233,6 +234,14 @@ impl Runner<'_> {
     }
 
     #[tracing::instrument]
+    // Opening a rocksDB connection should run a compaction, if it's necessary.
+    fn run_rocksdb_compaction(&self, repo_path: &Path) -> Result<()> {
+        let repo = git2::Repository::open(repo_path).context("opening repo")?;
+        RocksDBCache::new(&repo);
+        Ok(())
+    }
+
+    #[tracing::instrument]
     fn run_internal_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<()> {
         crate::sync::run(
             repo_path,
@@ -240,7 +249,11 @@ impl Runner<'_> {
             self.app.clone(),
         )
         .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))
-        .map(|_| ())
+        .map(|_| ())?;
+
+        self.run_rocksdb_compaction(repo_path)?;
+
+        Ok(())
     }
 
     #[tracing::instrument]
