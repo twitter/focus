@@ -100,12 +100,14 @@ pub trait RocksDBMemoizationCacheExt {
     fn new(repo: &git2::Repository) -> Self;
 }
 
+const ROCKSDB_CACHE_TTL: Duration = Duration::from_secs(3600 * 24 * 14);
+
 impl RocksDBMemoizationCacheExt for RocksDBCache {
     fn new(repo: &git2::Repository) -> RocksDBCache {
         let rocksdb_path = repo.path().join("focus/focus-index-rocks-db");
         let span = info_span!("Opening index database");
         let _guard = span.enter();
-        RocksDBCache::open_with_ttl(rocksdb_path, Duration::from_secs(3600 * 24 * 90))
+        RocksDBCache::open_with_ttl(rocksdb_path, ROCKSDB_CACHE_TTL)
     }
 }
 
