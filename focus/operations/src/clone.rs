@@ -96,56 +96,69 @@ pub fn run(
         bail!("{} already exists", sparse_repo_path.display());
     }
 
-    let temp_dir = tempfile::tempdir()?;
-    let tmp_sparse_repo_path = temp_dir.path().join("tmp-sparse-repo");
+    let mut tmp_sparse_repo_path = PathBuf::from(app.sandbox().path());
+    tmp_sparse_repo_path.push("tmp_sparse_repo");
 
-    //create the sparse repo dir, so other clones don't use the same name
-    std::fs::create_dir_all(&sparse_repo_path)?;
+    let configure_repo_then_move_in_place = || -> Result<()> {
+        match origin {
+            Origin::Local(dense_repo_path) => clone_local(
+                &dense_repo_path,
+                &tmp_sparse_repo_path,
+                &branch,
+                copy_branches,
+                days_of_history,
+                app.clone(),
+            ),
+            Origin::Remote(url) => clone_remote(
+                url,
+                &tmp_sparse_repo_path,
+                &branch,
+                days_of_history,
+                app.clone(),
+            ),
+        }?;
 
-    match origin {
-        Origin::Local(dense_repo_path) => clone_local(
-            &dense_repo_path,
+        set_up_sparse_repo(&tmp_sparse_repo_path, projects_and_targets, app.clone())?;
+
+        if do_post_clone_fetch {
+            fetch_default_remote(&tmp_sparse_repo_path, app.clone())
+                .context("Could not complete post clone fetch")?;
+        }
+
+        set_up_hooks(&tmp_sparse_repo_path)?;
+
+        move_repo(
             &tmp_sparse_repo_path,
-            &branch,
-            copy_branches,
-            days_of_history,
+            &sparse_repo_path,
+            tracker,
             app.clone(),
-        ),
-        Origin::Remote(url) => clone_remote(
-            url,
-            &tmp_sparse_repo_path,
-            &branch,
-            days_of_history,
-            app.clone(),
-        ),
-    }?;
-
-    set_up_sparse_repo(&tmp_sparse_repo_path, projects_and_targets, app.clone())?;
-
-    if do_post_clone_fetch {
-        fetch_default_remote(&tmp_sparse_repo_path, app.clone())
-            .context("Could not complete post clone fetch")?;
-    }
-
-    set_up_hooks(&tmp_sparse_repo_path)?;
-
-    move_repo(&tmp_sparse_repo_path, &sparse_repo_path, app.clone())
+        )
         .context("Could not move repo into place")?;
 
-    tracker
-        .ensure_registered(&sparse_repo_path, app)
-        .context("Registering repo")?;
+        Ok(())
+    };
+
+    if let Err(e) = configure_repo_then_move_in_place() {
+        //cleanup, will rely on maintanence sandbox cleanup for tmp_sparse_repo
+        std::fs::remove_dir_all(sparse_repo_path).context("Failed to cleanup repo")?;
+        bail!("Failed to setup repo. {}", e);
+    }
 
     Ok(())
 }
 
-fn move_repo(from_path: &Path, to_path: &Path, app: Arc<App>) -> Result<()> {
+fn move_repo(from_path: &Path, to_path: &Path, tracker: &Tracker, app: Arc<App>) -> Result<()> {
     std::fs::rename(from_path, to_path)?;
 
     // The outlining tree needs to be updated
-    let repo = Repo::open(to_path, app).context("Failed to open repo")?;
+    let repo = Repo::open(to_path, app.clone()).context("Failed to open repo")?;
     repo.repair_outlining_tree()
         .context("Failed to repair the outlining tree after move")?;
+
+    //register the repo
+    tracker
+        .ensure_registered(to_path, app)
+        .context("Registering repo")?;
 
     Ok(())
 }
