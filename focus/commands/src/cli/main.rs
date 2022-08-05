@@ -184,6 +184,13 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: IndexSubcommand,
     },
+
+    /// Interact with the project pattern cache.
+    ProjectCache {
+        #[clap(subcommand)]
+        subcommand: ProjectCacheSubcommand,
+    },
+
     /// Called by a git hook to trigger certain actions after a git event such as
     /// merge completion or checkout
     Event { args: Vec<String> },
@@ -256,6 +263,9 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             IndexSubcommand::Hash { .. } => "index-hash".to_string(),
             IndexSubcommand::Push { .. } => "index-push".to_string(),
             IndexSubcommand::Resolve { .. } => "index-resolve".to_string(),
+        },
+        Subcommand::ProjectCache { subcommand } => match subcommand {
+            ProjectCacheSubcommand::Push { .. } => "project-cache-push".to_string(),
         },
         Subcommand::Event { args } => {
             let mut temp_args = args.to_owned();
@@ -577,6 +587,28 @@ enum IndexSubcommand {
         /// If index keys are found to be missing, pause for debugging.
         #[clap(long)]
         break_on_missing_keys: bool,
+    },
+}
+
+#[derive(Parser, Clone, Debug)]
+enum ProjectCacheSubcommand {
+    /// Generate project cache data for the given commit and push it to the configured remote.
+    Push {
+        /// Path to the sparse repository.
+        #[clap(long, parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+
+        /// The commit to generate cache content for.
+        #[clap(long, default_value = "HEAD")]
+        commit: String,
+
+        /// Which shard to calculate; note: zero-based.
+        #[clap(long)]
+        shard_index: usize,
+
+        /// How many shards there are in total.
+        #[clap(long)]
+        shard_count: usize,
     },
 }
 
@@ -1118,6 +1150,25 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                     &sparse_repo,
                     targets,
                     break_on_missing_keys,
+                )?;
+                Ok(exit_code)
+            }
+        },
+
+        Subcommand::ProjectCache { subcommand } => match subcommand {
+            ProjectCacheSubcommand::Push {
+                sparse_repo,
+                commit,
+                shard_index,
+                shard_count,
+            } => {
+                let sparse_repo = paths::find_repo_root_from(app.clone(), sparse_repo)?;
+                let exit_code = focus_operations::project_cache::push(
+                    app,
+                    sparse_repo,
+                    commit,
+                    shard_index,
+                    shard_count,
                 )?;
                 Ok(exit_code)
             }

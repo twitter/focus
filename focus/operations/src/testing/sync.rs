@@ -13,7 +13,7 @@ use focus_testing::init_logging;
 use focus_util::app;
 
 use crate::{
-    sync::{SyncMode, SyncStatus},
+    sync::{SyncMechanism, SyncMode, SyncStatus},
     testing::integration::{RepoDisposition, RepoPairFixture},
 };
 
@@ -68,11 +68,12 @@ fn sync_upstream_changes() -> Result<()> {
     );
 
     // Sync in the sparse repo
-    crate::sync::run(
+    let sync_result = crate::sync::run(
         &fixture.sparse_repo_path,
         SyncMode::Normal,
         fixture.app.clone(),
     )?;
+    assert_eq!(sync_result.mechanism, SyncMechanism::Outline);
 
     let x_dir = fixture.sparse_repo_path.join("x");
     assert!(!x_dir.is_dir());
@@ -329,6 +330,7 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
     assert_snapshot!(original_profile_contents);
     assert_eq!(&original_profile_contents, &updated_profile_contents);
     assert!(!sync_result.checked_out);
+    assert_eq!(sync_result.mechanism, SyncMechanism::Outline);
 
     Ok(())
 }

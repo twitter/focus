@@ -122,7 +122,7 @@ struct ProjectSet {
     pub projects: HashSet<Project>,
 }
 
-/// ProjectSetManager loads project sets from files defined in the repository.
+/// ProjectSetStore loads project sets from files defined in the repository.
 struct ProjectSetStore(FileBackedCollection<ProjectSet>);
 
 impl ProjectSetStore {
