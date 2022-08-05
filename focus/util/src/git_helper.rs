@@ -598,7 +598,7 @@ fn get_changed_paths_between_trees_internal(
             match repo.find_tree(oid) {
                 Ok(tree) => Ok(tree),
                 Err(err) => {
-                    return Err(anyhow!(
+                    Err(anyhow!(
                         "Tree entry {oid:?} was said to be an object of kind tree, but it could not be looked up: {err}",
                     ))
                 }

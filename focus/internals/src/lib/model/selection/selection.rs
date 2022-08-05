@@ -253,6 +253,14 @@ impl SelectionManager {
     pub fn computed_selection(&self) -> Result<Selection> {
         let mut selection = self.selection.clone();
         debug!(selected = ?selection, "User-selected projects");
+        let mandatory_projects = self.mandatory_projects();
+        debug!(mandatory = ?mandatory_projects, "Mandatory projects");
+        selection.projects.extend(mandatory_projects);
+        Ok(selection)
+    }
+
+    /// Returns mandatory projects.
+    pub fn mandatory_projects(&self) -> Vec<Project> {
         let mandatory_projects = self
             .project_catalog
             .mandatory_projects
@@ -260,9 +268,7 @@ impl SelectionManager {
             .values()
             .cloned()
             .collect::<Vec<Project>>();
-        debug!(mandatory = ?mandatory_projects, "Mandatory projects");
-        selection.projects.extend(mandatory_projects);
-        Ok(selection)
+        mandatory_projects
     }
 
     pub fn compute_complete_target_set(&self) -> Result<HashSet<Target>> {

@@ -11,8 +11,7 @@ mod selection;
 pub use selection::Selection;
 pub(crate) use selection::SelectionManager;
 
-mod data_paths;
-use data_paths::DataPaths;
+use super::data_paths::DataPaths;
 
 mod operations;
 pub use operations::Operation;

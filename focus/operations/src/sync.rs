@@ -1,6 +1,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use core::fmt;
 use core::sync::atomic::AtomicBool;
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::{locking, model::repo::Repo};
@@ -22,6 +23,8 @@ use lazy_static::lazy_static;
 const PREEMPTIVE_SYNC_MAX_WAIT_MILLIS: u64 = 30000;
 const TEST_ONLY_PREEMPTIVE_SYNC_MAX_WAIT_MILLIS_UNDER_TEST: u64 = 300;
 const PREEMPTIVE_SYNC_POLL_INTERVAL_MILLIS: u64 = 100;
+pub(crate) const SYNC_FROM_PROJECT_CACHE_REQUIRED_ERROR_MESSAGE: &str =
+    "Sync from project cache was required but not possible";
 
 lazy_static! {
     static ref TEST_ONLY_PREEMPTIVE_SYNC_MACHINE_IS_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -49,6 +52,9 @@ pub enum SyncMode {
         /// Whether to skip enablement and machine idleness checks
         force: bool,
     },
+
+    /// Perform a sync using only data from the project cache
+    RequireProjectCache,
 }
 
 /// An enumeration capturing that the sync was peformed or a reason it was skipped.
@@ -70,6 +76,25 @@ pub enum SyncStatus {
     SkippedPreemptiveSyncCancelledByActivity,
 }
 
+/// An enumeration capturing which mechanism was used to perform the sync.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SyncMechanism {
+    /// The sync was performed via outlining, incorporating data from the content addressed cache where possible.
+    Outline,
+
+    /// The sync was peformed by consulting the project cache.
+    ProjectCache,
+}
+
+impl fmt::Display for SyncMechanism {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SyncMechanism::Outline => write!(f, "outline"),
+            SyncMechanism::ProjectCache => write!(f, "project-cache"),
+        }
+    }
+}
+
 /// State describing the outcome of a sync.
 pub struct SyncResult {
     /// Whether the working tree was checked out during the sync
@@ -80,6 +105,9 @@ pub struct SyncResult {
 
     /// The action taken
     pub status: SyncStatus,
+
+    /// The mechanism used to perform the sync
+    pub mechanism: SyncMechanism,
 }
 
 /// Synchronize the sparse repo's contents with the build graph. Returns a SyncResult indicating what happened.
@@ -87,8 +115,8 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
 
     let (preemptive, force) = match mode {
-        SyncMode::Normal => (false, false),
         SyncMode::Preemptive { force: forced } => (true, forced),
+        _ => (false, false),
     };
 
     if preemptive && !force {
@@ -97,6 +125,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 checked_out: false,
                 commit_id: None,
                 status: SyncStatus::SkippedPreemptiveSyncDisabled,
+                mechanism: SyncMechanism::Outline,
             });
         }
 
@@ -123,6 +152,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 checked_out: false,
                 commit_id: None,
                 status: SyncStatus::SkippedPreemptiveSyncCancelledByActivity,
+                mechanism: SyncMechanism::Outline,
             });
         }
     }
@@ -138,6 +168,8 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
     let selections = repo.selection_manager()?;
     let selection = selections.computed_selection()?;
     let targets = selections.compute_complete_target_set()?;
+
+    let mut mechanism = SyncMechanism::Outline;
 
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
@@ -216,6 +248,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                         checked_out: false,
                         commit_id: Some(commit.id()),
                         status: SyncStatus::SkippedSyncPointUnchanged,
+                        mechanism,
                     });
                 }
             } else if let Ok(Some(sync_point)) = working_tree.read_preemptive_sync_point_ref() {
@@ -226,6 +259,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                         checked_out: false,
                         commit_id: Some(commit.id()),
                         status: SyncStatus::SkippedSyncPointUnchanged,
+                        mechanism,
                     });
                 }
             }
@@ -233,17 +267,42 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
         // TODO: Skip outlining if there are no changes to the build graph between the last and new prospective sync point
     }
 
+    // If only projects are selected (no ad-hoc targets) we try to use the project cache to sync. Otherwise we fall back to regular syncing.
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
-        let odb = RocksDBCache::new(repo.underlying());
-        repo.sync(
-            commit.id(),
-            &targets,
-            preemptive,
-            &repo.config().index,
-            app.clone(),
-            &odb,
-        )
-        .context("Sync failed")
+        // Try to use the project cache
+        let project_cache_result = repo
+            .sync_using_project_cache(commit.id(), &selection)
+            .context("Syncing from project cache failed");
+
+        match project_cache_result {
+            // Answered from project cache optionally
+            Ok(Some(inner)) => {
+                mechanism = SyncMechanism::ProjectCache;
+                Ok(inner)
+            }
+            // No answer from project cache when one was required
+            _ if mode == SyncMode::RequireProjectCache => Err(anyhow::anyhow!(
+                SYNC_FROM_PROJECT_CACHE_REQUIRED_ERROR_MESSAGE,
+            )),
+            _ => {
+                // Report a project cache error if one was encountered
+                if project_cache_result.is_err() {
+                    warn!(error = ?project_cache_result.unwrap_err(), "Project cache encounted an error");
+                }
+
+                // Fall back to normal syncing
+                let odb = RocksDBCache::new(repo.underlying());
+                repo.sync(
+                    commit.id(),
+                    &targets,
+                    preemptive,
+                    &repo.config().index,
+                    app.clone(),
+                    &odb,
+                )
+                .context("Sync failed")
+            }
+        }
     })?;
 
     if preemptive {
@@ -256,6 +315,9 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
         ti_client
             .get_context()
             .add_to_custom_map("pattern_count", pattern_count.to_string());
+        ti_client
+            .get_context()
+            .add_to_custom_map("sync_mechanism", mechanism.to_string());
         perform("Updating the sync point", || {
             repo.working_tree().unwrap().write_sync_point_ref()
         })?;
@@ -268,6 +330,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
         checked_out,
         commit_id: Some(commit.id()),
         status: SyncStatus::Success,
+        mechanism,
     })
 }
 

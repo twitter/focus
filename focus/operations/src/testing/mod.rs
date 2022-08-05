@@ -12,3 +12,6 @@ pub mod repo;
 
 #[cfg(test)]
 pub mod sync;
+
+#[cfg(test)]
+pub mod sync_with_project_cache;

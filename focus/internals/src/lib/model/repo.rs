@@ -8,6 +8,7 @@ use focus_util::{
     paths::{self, is_build_definition},
     sandbox_command::SandboxCommandOutput,
 };
+
 use std::{
     collections::HashSet,
     fs,
@@ -16,6 +17,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use url::Url;
 
 use crate::{
     hashing,
@@ -24,6 +26,7 @@ use crate::{
         HashContext, PathsToMaterializeResult,
     },
     model::outlining::{create_hierarchical_patterns, Pattern},
+    project_cache::{ProjectCache, Value},
     target::TargetSet,
     target_resolver::{
         CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
@@ -58,6 +61,9 @@ const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
 const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
 const LAST: usize = usize::MAX;
 
+pub const PROJECT_CACHE_ENDPOINT_CONFIG_KEY: &str = "focus.project-cache-endpoint";
+pub const PROJECT_CACHE_IGNORED_PATH_FRAGMENT_REGEX_KEY: &str =
+    "focus.project-cache-ignored-path-fragment-regex";
 /// Models a Git working tree.
 pub struct WorkingTree {
     repo: git2::Repository,
@@ -787,6 +793,102 @@ impl Repo {
         Ok((pattern_count, checked_out))
     }
 
+    /// Sync using the project cache returning an optional value of the number of patterns and whether a checkout occured. None is returned if the project cache could not be used.
+    pub fn sync_using_project_cache(
+        &self,
+        commit_id: git2::Oid,
+        selection: &Selection,
+    ) -> Result<Option<(usize, bool)>> {
+        if !selection.targets.is_empty() {
+            tracing::warn!("Skipping project cache because the selection contains ad-hoc targets");
+            return Ok(None);
+        }
+
+        let project_names: Vec<&String> = selection
+            .projects
+            .iter()
+            .filter(|project| project.is_selectable())
+            .map(|project| &project.name)
+            .collect();
+        debug!(?selection, ?project_names, "Selection");
+
+        if project_names.is_empty() {
+            warn!("Falling back to regular sync because no projects are selected");
+            return Ok(None);
+            // TODO: Remove this after baseline mandatory sets are available in project cache. Things may not work in the repo correctly without a regular sync in this case.
+        }
+
+        let endpoint = self.get_project_cache_remote_endpoint()?;
+        if endpoint.is_none() {
+            tracing::warn!(
+                "Skipping project cache because no remote is configured (set {} to configure one)",
+                PROJECT_CACHE_ENDPOINT_CONFIG_KEY
+            );
+            return Ok(None);
+        }
+        let endpoint = endpoint.unwrap();
+        let endpoint_str = endpoint.as_str().to_owned();
+        let cache = ProjectCache::new(self, endpoint, self.app.clone())?;
+
+        // TODO: Prefetch build graph hash data
+        let (_, build_graph_hash) = cache.get_build_graph_hash(commit_id, true)?;
+
+        // Check whether we have a build graph hash locally to determine whether we've already fetched
+        let need_fetch = !cache.is_imported(&build_graph_hash).context(
+            "Failed to determine whether the necessary project cache data has been imported",
+        )?;
+
+        // Actually calculate the graph hash if we dont' have it so that we can actually pull
+        let build_graph_hash_str = hex::encode(&build_graph_hash);
+
+        if need_fetch {
+            tracing::info!(build_graph_hash = ?build_graph_hash_str, endpoint = &endpoint_str, "Fetching content from remote project cache");
+            cache
+                .fetch(&build_graph_hash)
+                .context("Fetching content failed")?;
+        }
+
+        let working_tree = self.working_tree().ok_or_else(|| anyhow::anyhow!("Synchronization from the project cache is only possible in a repo with a working tree"))?;
+        let mut outline_patterns = working_tree.default_working_tree_patterns()?;
+        let mut missing_projects = Vec::<&String>::new();
+
+        for project_name in project_names {
+            match cache.get_project(commit_id, &build_graph_hash, project_name, false)? {
+                (_key, Some(Value::OptionalProjectPatternSet(patterns))) => {
+                    outline_patterns.extend(patterns);
+                }
+                (key, Some(val)) => {
+                    bail!("Unexpected value ({:?}) for key {:?}, expected an ProjectCacheValue::OptionalProjectPatternSet", val, key);
+                }
+                (_key, None) => {
+                    missing_projects.push(project_name);
+                }
+            }
+        }
+
+        if !missing_projects.is_empty() {
+            tracing::warn!(
+                ?missing_projects,
+                "Project cache cannot be used since it is missing content"
+            );
+            return Ok(None);
+        }
+
+        // Ensure that the working tree is properly configured
+        working_tree
+            .configure(self.app.clone())
+            .context("Configuring the working tree")?;
+        trace!(?outline_patterns);
+
+        // TODO: Implement skipping application if the profile has not changed
+        let pattern_count = outline_patterns.len();
+        let checked_out = working_tree
+            .apply_sparse_patterns(outline_patterns, true, self.app.clone())
+            .context("Failed to apply outlined patterns to working tree")?;
+        info!("Synced from project cache");
+        Ok(Some((pattern_count, checked_out)))
+    }
+
     /// Creates an outlining tree for the repository.
     pub fn create_outlining_tree(&self) -> Result<()> {
         let path = Self::outlining_tree_path(&self.git_dir);
@@ -1000,6 +1102,21 @@ impl Repo {
             Ok(String::from("main"))
         } else {
             bail!("Could not determine primary branch name");
+        }
+    }
+
+    pub fn get_project_cache_remote_endpoint(&self) -> Result<Option<Url>> {
+        let config_snapshot = self.repo.config()?.snapshot()?;
+        match config_snapshot.get_str(PROJECT_CACHE_ENDPOINT_CONFIG_KEY) {
+            Ok(endpoint) => Url::parse(endpoint)
+                .with_context(|| {
+                    format!(
+                        "Failed parsing {} '{}'",
+                        PROJECT_CACHE_ENDPOINT_CONFIG_KEY, endpoint
+                    )
+                })
+                .map(Some),
+            Err(_) => Ok(None),
         }
     }
 }
