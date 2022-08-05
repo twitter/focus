@@ -138,10 +138,13 @@ pub fn run(
         Ok(())
     };
 
-    if let Err(e) = configure_repo_then_move_in_place() {
+    if let err @ Err(_) = configure_repo_then_move_in_place() {
         //cleanup, will rely on maintanence sandbox cleanup for tmp_sparse_repo
-        std::fs::remove_dir_all(sparse_repo_path).context("Failed to cleanup repo")?;
-        bail!("Failed to setup repo. {}", e);
+        if std::fs::remove_dir_all(sparse_repo_path).is_err() {
+            return err.context("Failed to cleanup repo");
+        };
+
+        return err;
     }
 
     Ok(())
