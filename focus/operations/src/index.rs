@@ -148,12 +148,11 @@ pub fn resolve(
 ) -> anyhow::Result<ExitCode> {
     assert_focused_repo(sparse_repo_path)?;
     let repo = Repo::open(sparse_repo_path, app.clone())?;
-    let selection = {
+    let targets = {
         let mut selections = repo.selection_manager()?;
         selections.mutate(OperationAction::Add, &projects_and_targets)?;
-        selections.computed_selection()
+        selections.compute_complete_target_set()
     }?;
-    let targets = TargetSet::try_from(&selection)?;
 
     let paths = match resolve_targets(app, sparse_repo_path, targets, break_on_missing_keys)? {
         Ok(ResolveTargetResult {

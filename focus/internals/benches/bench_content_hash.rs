@@ -35,8 +35,9 @@ pub fn bench_content_hash(c: &mut Criterion) {
     let git_repo = repo.underlying();
     let head_commit = repo.get_head_commit().unwrap();
     let head_tree = head_commit.tree().unwrap();
-    let selection = repo.computed_selection().unwrap();
-    let dep_keys = TargetSet::try_from(&selection)
+    let selections = repo.selection_manager().unwrap();
+    let dep_keys = selections
+        .compute_complete_target_set()
         .unwrap()
         .into_iter()
         .map(DependencyKey::from)

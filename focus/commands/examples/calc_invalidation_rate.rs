@@ -116,7 +116,13 @@ fn main() -> anyhow::Result<()> {
     let all_targets: TargetSet = all_projects
         .iter()
         .map(|(_name, project)| project)
-        .flat_map(|project| TargetSet::try_from(project).unwrap())
+        .flat_map(|project| {
+            project
+                .get_all_targets_for_project(
+                    &selections.project_catalog().optional_projects.underlying,
+                )
+                .unwrap()
+        })
         .collect();
 
     let repo = git2::Repository::open(sparse_repo_path.clone())?;
@@ -232,7 +238,10 @@ fn main() -> anyhow::Result<()> {
 
         for commit_oid in &commits {
             for (project, hash_change_infos) in project_stats.iter_mut() {
-                let target_hashes: HashMap<Target, ContentHash> = TargetSet::try_from(*project)?
+                let target_hashes: HashMap<Target, ContentHash> = project
+                    .get_all_targets_for_project(
+                        &selections.project_catalog().optional_projects.underlying,
+                    )?
                     .into_iter()
                     .map(|target| {
                         let target_hash = hashes[&(*commit_oid, &target)].clone();
@@ -268,7 +277,10 @@ fn main() -> anyhow::Result<()> {
         println!("Most churning projects:");
         for (project, value) in &averages[..10] {
             let most_churning_targets = {
-                let mut result: Vec<(Target, f64)> = TargetSet::try_from(**project)?
+                let mut result: Vec<(Target, f64)> = project
+                    .get_all_targets_for_project(
+                        &selections.project_catalog().optional_projects.underlying,
+                    )?
                     .iter()
                     .map(|target| (target.clone(), target_average_churns[target]))
                     .collect();

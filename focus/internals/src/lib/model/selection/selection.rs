@@ -265,6 +265,20 @@ impl SelectionManager {
         Ok(selection)
     }
 
+    pub fn compute_complete_target_set(&self) -> Result<HashSet<Target>> {
+        let selection = self.computed_selection()?;
+        debug!(selected = ?selection, "Computed selection");
+
+        let optional_projects = &self.project_catalog().optional_projects.underlying;
+        let mut target_set = selection.targets.clone();
+        let projects = selection.projects;
+        for project in projects {
+            target_set.extend(project.get_all_targets_for_project(optional_projects)?);
+        }
+
+        Ok(target_set)
+    }
+
     /// Returns user-selected projects and targets.
     pub fn selection(&self) -> Result<Selection> {
         Ok(self.selection.clone())
@@ -369,6 +383,7 @@ mod testing {
     use maplit::{btreeset, hashset};
 
     const PROJECT_NAME_STR: &str = "a_project";
+    const PROJECT_NAME_STR_2: &str = "b_project";
     const TARGET_STR: &str = "bazel://c:d";
 
     fn project() -> Project {
@@ -376,7 +391,10 @@ mod testing {
             name: PROJECT_NAME_STR.to_owned(),
             description: String::from("This is a description"),
             mandatory: false,
-            targets: btreeset![String::from("bazel://a:b")],
+            targets: btreeset![
+                String::from("bazel://a:b"),
+                String::from(PROJECT_NAME_STR_2)
+            ],
         }
     }
 

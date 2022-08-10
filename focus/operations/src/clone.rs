@@ -306,6 +306,7 @@ fn set_up_sparse_repo(
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
+    debug!(target_set = ?target_set, "Complete target set");
 
     let odb = RocksDBCache::new(repo.underlying());
     repo.sync(
@@ -344,7 +345,9 @@ fn compute_and_store_initial_selection(
     }
     selections.save()?;
     let selection = selections.computed_selection()?;
-    let target_set = TargetSet::try_from(&selection)?;
+
+    let target_set = selections.compute_complete_target_set()?;
+    debug!(target_set = ?target_set, project_and_targets = ?projects_and_targets, selection_projects = ?selection.projects, selection_targets = ?selection.targets, "computing the target set");
 
     Ok(target_set)
 }

@@ -10,7 +10,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use tracing::{debug, error};
 
 use super::*;
 
@@ -40,6 +40,44 @@ impl Project {
     /// Returns whether this project should be available to select by users.
     pub fn is_selectable(&self) -> bool {
         !self.is_mandatory()
+    }
+
+    /// Resolves all targets for a project.
+    ///
+    /// If the project includes another project, the available projects are checked to find the include list for the sub-project.
+    pub fn get_all_targets_for_project(
+        &self,
+        available_subprojects: &HashMap<String, Project>,
+    ) -> Result<TargetSet> {
+        let mut target_set = TargetSet::new();
+
+        let mut resolvable_projects = Vec::from([self]);
+        let seen_projects: HashSet<String> = HashSet::new();
+
+        loop {
+            if let Some(project) = resolvable_projects.pop() {
+                if seen_projects.contains(&project.name) {
+                    continue;
+                }
+
+                for target in &project.targets {
+                    match available_subprojects.get(target) {
+                        Some(subproject) => {
+                            resolvable_projects.push(subproject);
+                        }
+                        None => {
+                            target_set.insert(Target::try_from(target.as_str())?);
+                        }
+                    };
+                }
+            } else {
+                break;
+            }
+        }
+
+        debug!(seen_projects = ?seen_projects, "Saw these projects while resolving top-level project");
+
+        Ok(target_set)
     }
 }
 
@@ -204,5 +242,52 @@ impl ProjectCatalog {
             optional_projects,
             mandatory_projects,
         })
+    }
+}
+
+#[cfg(test)]
+mod testing {
+    use super::*;
+    use anyhow::Result;
+    use maplit::{btreeset, hashset};
+
+    const PROJECT_NAME_STR: &str = "a_project";
+    const PROJECT_NAME_STR_2: &str = "b_project";
+    const TARGET_STR: &str = "bazel://a:b";
+    const TARGET_STR_2: &str = "bazel://c:d";
+
+    fn project() -> Project {
+        Project {
+            name: PROJECT_NAME_STR.to_owned(),
+            description: String::from("This is a description"),
+            mandatory: false,
+            targets: btreeset![String::from(TARGET_STR), String::from(PROJECT_NAME_STR_2)],
+        }
+    }
+
+    fn project2() -> Project {
+        Project {
+            name: PROJECT_NAME_STR_2.to_owned(),
+            description: String::from("This is a description"),
+            mandatory: false,
+            targets: btreeset![String::from(TARGET_STR_2)],
+        }
+    }
+
+    fn target() -> Target {
+        Target::try_from(TARGET_STR).unwrap()
+    }
+
+    fn target2() -> Target {
+        Target::try_from(TARGET_STR_2).unwrap()
+    }
+
+    #[test]
+    fn test_get_all_targets_for_project() -> Result<()> {
+        let available_projects = HashMap::from([(project2().name, project2())]);
+        let target_set = project().get_all_targets_for_project(&available_projects)?;
+        assert_eq!(hashset![target(), target2()], target_set);
+
+        Ok(())
     }
 }

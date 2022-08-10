@@ -139,7 +139,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
 
     let selections = repo.selection_manager()?;
     let selection = selections.computed_selection()?;
-    let targets = TargetSet::try_from(&selection).context("constructing target set")?;
+    let targets = selections.compute_complete_target_set()?;
 
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
