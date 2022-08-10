@@ -118,7 +118,7 @@ fn main() -> anyhow::Result<()> {
         .map(|(_name, project)| project)
         .flat_map(|project| {
             project
-                .get_all_targets_for_project(
+                .resolve_targets_for_project(
                     &selections.project_catalog().optional_projects.underlying,
                 )
                 .unwrap()
@@ -239,7 +239,7 @@ fn main() -> anyhow::Result<()> {
         for commit_oid in &commits {
             for (project, hash_change_infos) in project_stats.iter_mut() {
                 let target_hashes: HashMap<Target, ContentHash> = project
-                    .get_all_targets_for_project(
+                    .resolve_targets_for_project(
                         &selections.project_catalog().optional_projects.underlying,
                     )?
                     .into_iter()
@@ -278,7 +278,7 @@ fn main() -> anyhow::Result<()> {
         for (project, value) in &averages[..10] {
             let most_churning_targets = {
                 let mut result: Vec<(Target, f64)> = project
-                    .get_all_targets_for_project(
+                    .resolve_targets_for_project(
                         &selections.project_catalog().optional_projects.underlying,
                     )?
                     .iter()

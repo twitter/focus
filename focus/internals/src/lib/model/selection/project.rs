@@ -42,36 +42,43 @@ impl Project {
         !self.is_mandatory()
     }
 
-    /// Resolves all targets for a project.
+    /// Resolves all targets for a project, including sub-project definitions.
     ///
     /// If the project includes another project, the available projects are checked to find the include list for the sub-project.
-    pub fn get_all_targets_for_project(
+    pub fn resolve_targets_for_project(
         &self,
         available_subprojects: &HashMap<String, Project>,
     ) -> Result<TargetSet> {
         let mut target_set = TargetSet::new();
 
-        let mut resolvable_projects = Vec::from([self]);
-        let seen_projects: HashSet<String> = HashSet::new();
+        let mut resolvable_projects = vec![self];
+        let mut seen_projects: HashSet<String> = HashSet::new();
 
-        loop {
-            if let Some(project) = resolvable_projects.pop() {
-                if seen_projects.contains(&project.name) {
-                    continue;
-                }
+        while let Some(project) = resolvable_projects.pop() {
+            if !seen_projects.insert(project.name.clone()) {
+                continue;
+            }
 
-                for target in &project.targets {
-                    match available_subprojects.get(target) {
+            for target in &project.targets {
+                let (prefix, rest) = match target.split_once(':') {
+                    Some((prefix, rest)) => (prefix, rest),
+                    None => {
+                        bail!(TargetError::NoSchemeProvidedError);
+                    }
+                };
+                let rest = rest.to_owned();
+                if prefix.eq_ignore_ascii_case("project") {
+                    match available_subprojects.get(&rest) {
                         Some(subproject) => {
                             resolvable_projects.push(subproject);
                         }
                         None => {
-                            target_set.insert(Target::try_from(target.as_str())?);
+                            bail!("Invalid project target: {}", target.as_str())
                         }
                     };
+                } else {
+                    target_set.insert(Target::try_from(target.as_str())?);
                 }
-            } else {
-                break;
             }
         }
 
@@ -249,7 +256,7 @@ impl ProjectCatalog {
 mod testing {
     use super::*;
     use anyhow::Result;
-    use maplit::{btreeset, hashset};
+    use maplit::{btreeset, hashmap, hashset};
 
     const PROJECT_NAME_STR: &str = "a_project";
     const PROJECT_NAME_STR_2: &str = "b_project";
@@ -261,7 +268,10 @@ mod testing {
             name: PROJECT_NAME_STR.to_owned(),
             description: String::from("This is a description"),
             mandatory: false,
-            targets: btreeset![String::from(TARGET_STR), String::from(PROJECT_NAME_STR_2)],
+            targets: btreeset![
+                String::from(TARGET_STR),
+                format!("project:{}", PROJECT_NAME_STR_2)
+            ],
         }
     }
 
@@ -270,7 +280,11 @@ mod testing {
             name: PROJECT_NAME_STR_2.to_owned(),
             description: String::from("This is a description"),
             mandatory: false,
-            targets: btreeset![String::from(TARGET_STR_2)],
+            targets: btreeset![
+                String::from(TARGET_STR_2),
+                format!("project:{}", PROJECT_NAME_STR_2),
+                format!("project:{}", PROJECT_NAME_STR)
+            ],
         }
     }
 
@@ -284,8 +298,9 @@ mod testing {
 
     #[test]
     fn test_get_all_targets_for_project() -> Result<()> {
-        let available_projects = HashMap::from([(project2().name, project2())]);
-        let target_set = project().get_all_targets_for_project(&available_projects)?;
+        let available_projects =
+            hashmap! { project2().name => project2(), project().name => project() };
+        let target_set = project().resolve_targets_for_project(&available_projects)?;
         assert_eq!(hashset![target(), target2()], target_set);
 
         Ok(())

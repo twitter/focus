@@ -3,15 +3,13 @@
 
 use core::sync::atomic::AtomicBool;
 use focus_internals::index::RocksDBMemoizationCacheExt;
-use focus_internals::{locking, model::repo::Repo, target::TargetSet};
+use focus_internals::{locking, model::repo::Repo};
 
 use crate::util::perform;
 use content_addressed_cache::RocksDBCache;
 use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;
 use tracing::{debug, info, warn};
-
-use std::convert::TryFrom;
 
 use std::path::Path;
 
