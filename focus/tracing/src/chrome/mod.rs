@@ -7,7 +7,6 @@ pub mod trace;
 use std::{io::BufWriter, path::Path};
 
 use anyhow::Result;
-use focus_util::time::DateTimeExt;
 use git_trace2::{event as gevent, Event as GitEvent};
 use heck;
 use serde_derive::{Deserialize, Serialize};
