@@ -4,6 +4,7 @@
 use std::{
     borrow::Cow,
     collections::HashSet,
+    fmt::Display,
     path::{Path, PathBuf},
     sync::Arc,
     thread,
@@ -87,19 +88,53 @@ pub fn list_projects(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()>
     Ok(())
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+enum SkimSource {
+    Project,
+    Phabricator,
+    Repository,
+}
+
+impl Display for SkimSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SkimSource::Project => {
+                write!(f, "project")
+            }
+            SkimSource::Phabricator => {
+                write!(f, "Phabricator")
+            }
+            SkimSource::Repository => {
+                write!(f, "repository")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 enum SkimProjectOrTarget {
-    Project { name: String, project: Project },
-    BazelPackage { name: String, build_file: PathBuf },
+    Project {
+        source: SkimSource,
+        name: String,
+        project: Project,
+    },
+    BazelPackage {
+        source: SkimSource,
+        name: String,
+        build_file: PathBuf,
+    },
 }
 
 impl SkimItem for SkimProjectOrTarget {
     fn text(&self) -> std::borrow::Cow<str> {
         match self {
-            SkimProjectOrTarget::Project { name, project } => {
-                Cow::Owned(format!("{} - {}", name, project.description))
-            }
+            SkimProjectOrTarget::Project {
+                source: _,
+                name,
+                project,
+            } => Cow::Owned(format!("{} - {}", name, project.description)),
             SkimProjectOrTarget::BazelPackage {
+                source: _,
                 name,
                 build_file: _,
             } => Cow::Owned(format!("bazel://{name}")),
@@ -107,24 +142,42 @@ impl SkimItem for SkimProjectOrTarget {
     }
 
     fn display<'a>(&'a self, _context: skim::DisplayContext<'a>) -> skim::AnsiString<'a> {
-        match self {
-            SkimProjectOrTarget::Project { name, project } => {
-                let display = format!("{} - {}", style(name).bold(), project.description);
-                AnsiString::parse(&display)
+        let display_text = match self {
+            SkimProjectOrTarget::Project {
+                source,
+                name,
+                project,
+            } => {
+                format!(
+                    "(from {source}) {name} - {description}",
+                    source = style(source).yellow(),
+                    name = style(name).bold(),
+                    description = project.description
+                )
             }
+
             SkimProjectOrTarget::BazelPackage {
+                source,
                 name,
                 build_file: _,
             } => {
-                let display = style(format!("bazel://{name}")).bold().to_string();
-                AnsiString::parse(&display)
+                format!(
+                    "(from {source}) {name}",
+                    source = style(source).yellow(),
+                    name = style(format!("bazel://{name}")).bold()
+                )
             }
-        }
+        };
+        AnsiString::parse(&display_text)
     }
 
     fn preview(&self, _context: skim::PreviewContext) -> skim::ItemPreview {
         match self {
-            SkimProjectOrTarget::Project { name: _, project } => {
+            SkimProjectOrTarget::Project {
+                source,
+                name: _,
+                project,
+            } => {
                 let targets: Vec<String> = project
                     .targets
                     .iter()
@@ -137,6 +190,7 @@ impl SkimItem for SkimProjectOrTarget {
 Press <space> to select/unselect this project.
 Press <enter> to apply changes.
 
+Source: {source}
 Includes {num_targets} target(s):
 {targets}
 ",
@@ -147,6 +201,7 @@ Includes {num_targets} target(s):
                 skim::ItemPreview::Text(preview)
             }
             SkimProjectOrTarget::BazelPackage {
+                source,
                 name: _,
                 build_file,
             } => {
@@ -157,6 +212,7 @@ Includes {num_targets} target(s):
 Press <space> to select/unselect this package.
 Press <enter> to apply changes.
 
+Source: {source}
 BUILD file: {build_file}
 ",
                     title = self.text(),
@@ -189,7 +245,11 @@ fn spawn_target_search_thread(tx: SkimItemSender, sparse_repo_path: PathBuf) {
             {
                 let name = root.trim_matches('/').to_string();
                 let build_file = PathBuf::from(root).join(entry_name);
-                let item = SkimProjectOrTarget::BazelPackage { name, build_file };
+                let item = SkimProjectOrTarget::BazelPackage {
+                    source: SkimSource::Repository,
+                    name,
+                    build_file,
+                };
                 if tx.send(Arc::new(item)).is_err() {
                     return TreeWalkResult::Abort;
                 }
@@ -207,7 +267,11 @@ fn spawn_target_search_thread(tx: SkimItemSender, sparse_repo_path: PathBuf) {
     });
 }
 
-fn suggest_skim_item_from_path(head_tree: &git2::Tree, path: &Path) -> Option<SkimProjectOrTarget> {
+fn suggest_skim_item_from_path(
+    source: SkimSource,
+    head_tree: &git2::Tree,
+    path: &Path,
+) -> Option<SkimProjectOrTarget> {
     let build_file_patterns = &["BUILD", "BUILD.bazel"];
     let mut base_path: &Path = path;
     loop {
@@ -236,6 +300,7 @@ fn suggest_skim_item_from_path(head_tree: &git2::Tree, path: &Path) -> Option<Sk
         // suggest that, as it would negate the advantages of a sparse checkout.
         if !package_name.is_empty() {
             return Some(SkimProjectOrTarget::BazelPackage {
+                source,
                 name: package_name.to_owned(),
                 build_file,
             });
@@ -277,7 +342,9 @@ fn spawn_phabricator_query_thread(tx: SkimItemSender, sparse_repo_path: PathBuf)
         let mut seen_items = HashSet::new();
         for item in paths.data {
             let path = PathBuf::from(item.fields.path.displayPath);
-            if let Some(item) = suggest_skim_item_from_path(&head_tree, &path) {
+            if let Some(item) =
+                suggest_skim_item_from_path(SkimSource::Phabricator, &head_tree, &path)
+            {
                 if seen_items.insert(item.clone()) {
                     tx.send(Arc::new(item))?;
                 }
@@ -314,6 +381,7 @@ pub fn add_interactive(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<(
             .iter()
         {
             let item = SkimProjectOrTarget::Project {
+                source: SkimSource::Project,
                 name: name.clone(),
                 project: project.clone(),
             };
@@ -337,8 +405,13 @@ pub fn add_interactive(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<(
             .iter()
             .map(|item| item.as_any().downcast_ref::<SkimProjectOrTarget>().unwrap())
             .map(|item| match item {
-                SkimProjectOrTarget::Project { name, project: _ } => name.clone(),
+                SkimProjectOrTarget::Project {
+                    source: _,
+                    name,
+                    project: _,
+                } => name.clone(),
                 SkimProjectOrTarget::BazelPackage {
+                    source: _,
                     name,
                     build_file: _,
                 } => format!("bazel://{name}/..."),
