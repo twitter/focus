@@ -1225,7 +1225,8 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
     }
 
     match opts.cmd {
-        Subcommand::Clone { .. }
+        Subcommand::New { .. }
+        | Subcommand::Clone { .. }
         | Subcommand::Sync { .. }
         | Subcommand::Add { .. }
         | Subcommand::Remove { .. }
