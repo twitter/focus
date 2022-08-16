@@ -12,7 +12,11 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use console::style;
-use focus_util::{app::App, git_helper::get_head_commit, paths::is_relevant_to_build_graph};
+use focus_util::{
+    app::App,
+    git_helper::{get_changed_paths_between_trees, get_head_commit},
+    paths::is_relevant_to_build_graph,
+};
 use git2::{FileMode, TreeWalkMode, TreeWalkResult};
 use skim::{
     prelude::SkimOptionsBuilder, AnsiString, Skim, SkimItem, SkimItemReceiver, SkimItemSender,
@@ -390,20 +394,11 @@ fn spawn_commit_history_search_thread(tx: SkimItemSender, sparse_repo_path: Path
             };
 
             if current_commit.author().email_bytes() == user_email.as_bytes() {
-                let changed_paths: HashSet<PathBuf> = repo
-                    .diff_tree_to_tree(parent_tree.as_ref(), Some(&current_commit.tree()?), None)?
-                    .deltas()
-                    .flat_map(|delta| {
-                        let mut result = Vec::new();
-                        if let Some(file) = delta.old_file().path() {
-                            result.push(file.to_path_buf())
-                        }
-                        if let Some(file) = delta.new_file().path() {
-                            result.push(file.to_path_buf())
-                        }
-                        result
-                    })
-                    .collect();
+                let changed_paths = get_changed_paths_between_trees(
+                    &repo,
+                    parent_tree.as_ref(),
+                    Some(&current_commit.tree()?),
+                )?;
 
                 let mut items = changed_paths
                     .into_iter()

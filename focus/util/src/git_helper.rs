@@ -1,7 +1,14 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{ffi::OsStr, path::PathBuf, process::Stdio, str::FromStr, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::OsStr,
+    path::PathBuf,
+    process::Stdio,
+    str::FromStr,
+    sync::Arc,
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 use git2;
@@ -475,6 +482,207 @@ impl ConfigExt for git2::Config {
             }
         }
     }
+}
+
+/// This function is a hot code path. Do not annotate with `#[instrument]`, and
+/// be mindful of performance/memory allocations.
+fn get_changed_paths_between_trees_internal(
+    repo: &git2::Repository,
+    acc: &mut Vec<Vec<PathBuf>>,
+    current_path: &[PathBuf],
+    lhs: Option<&git2::Tree>,
+    rhs: Option<&git2::Tree>,
+) -> Result<()> {
+    let lhs_entries: Vec<_> = lhs.map(|tree| tree.iter().collect()).unwrap_or_default();
+    let lhs_entries: HashMap<&[u8], &git2::TreeEntry> = lhs_entries
+        .iter()
+        .map(|entry| (entry.name_bytes(), entry))
+        .collect();
+
+    let rhs_entries: Vec<_> = rhs.map(|tree| tree.iter().collect()).unwrap_or_default();
+    let rhs_entries: HashMap<&[u8], &git2::TreeEntry> = rhs_entries
+        .iter()
+        .map(|entry| (entry.name_bytes(), entry))
+        .collect();
+
+    let all_entry_names: HashSet<&[u8]> = lhs_entries
+        .keys()
+        .chain(rhs_entries.keys())
+        .cloned()
+        .collect();
+    let entries: HashMap<&[u8], (Option<&git2::TreeEntry>, Option<&git2::TreeEntry>)> =
+        all_entry_names
+            .into_iter()
+            .map(|entry_name| {
+                (
+                    entry_name,
+                    (
+                        lhs_entries.get(entry_name).copied(),
+                        rhs_entries.get(entry_name).copied(),
+                    ),
+                )
+            })
+            .collect();
+
+    for (entry_name, (lhs_entry, rhs_entry)) in entries {
+        enum ClassifiedEntry {
+            Absent,
+            NotATree(git2::Oid, i32),
+            Tree(git2::Oid, i32),
+        }
+
+        fn classify_entry(entry: Option<&git2::TreeEntry>) -> Result<ClassifiedEntry> {
+            let entry = match entry {
+                Some(entry) => entry,
+                None => return Ok(ClassifiedEntry::Absent),
+            };
+
+            let file_mode = entry.filemode_raw();
+            match entry.kind() {
+                Some(git2::ObjectType::Tree) => Ok(ClassifiedEntry::Tree(entry.id(), file_mode)),
+                _ => Ok(ClassifiedEntry::NotATree(entry.id(), file_mode)),
+            }
+        }
+
+        let get_tree = |oid| {
+            match repo.find_tree(oid) {
+                Ok(tree) => Ok(tree),
+                Err(err) => {
+                    return Err(anyhow!(
+                        "Tree entry {oid:?} was said to be an object of kind tree, but it could not be looked up: {err}",
+                    ))
+                }
+            }
+        };
+
+        let full_entry_path = {
+            let entry_name = match std::str::from_utf8(entry_name) {
+                Ok(entry_name) => entry_name,
+                Err(_) => continue,
+            };
+            let mut full_entry_path = current_path.to_vec();
+            full_entry_path.push(PathBuf::from(entry_name));
+            full_entry_path
+        };
+        match (classify_entry(lhs_entry)?, classify_entry(rhs_entry)?) {
+            (ClassifiedEntry::Absent, ClassifiedEntry::Absent) => {
+                // Shouldn't happen, but there's no issue here.
+            }
+
+            (
+                ClassifiedEntry::NotATree(lhs_oid, lhs_file_mode),
+                ClassifiedEntry::NotATree(rhs_oid, rhs_file_mode),
+            ) => {
+                if lhs_oid == rhs_oid && lhs_file_mode == rhs_file_mode {
+                    // Unchanged file, do nothing.
+                } else {
+                    // Changed file.
+                    acc.push(full_entry_path);
+                }
+            }
+
+            (ClassifiedEntry::Absent, ClassifiedEntry::NotATree(_, _))
+            | (ClassifiedEntry::NotATree(_, _), ClassifiedEntry::Absent) => {
+                // Added, removed, or changed file.
+                acc.push(full_entry_path);
+            }
+
+            (ClassifiedEntry::Absent, ClassifiedEntry::Tree(tree_oid, _))
+            | (ClassifiedEntry::Tree(tree_oid, _), ClassifiedEntry::Absent) => {
+                // A directory was added or removed. Add all entries from that
+                // directory.
+                let tree = get_tree(tree_oid)?;
+                get_changed_paths_between_trees_internal(
+                    repo,
+                    acc,
+                    &full_entry_path,
+                    Some(&tree),
+                    None,
+                )?;
+            }
+
+            (ClassifiedEntry::NotATree(_, _), ClassifiedEntry::Tree(tree_oid, _))
+            | (ClassifiedEntry::Tree(tree_oid, _), ClassifiedEntry::NotATree(_, _)) => {
+                // A file was changed into a directory. Add both the file and
+                // all subdirectory entries as changed entries.
+                let tree = get_tree(tree_oid)?;
+                get_changed_paths_between_trees_internal(
+                    repo,
+                    acc,
+                    &full_entry_path,
+                    Some(&tree),
+                    None,
+                )?;
+                acc.push(full_entry_path);
+            }
+
+            (
+                ClassifiedEntry::Tree(lhs_tree_oid, lhs_file_mode),
+                ClassifiedEntry::Tree(rhs_tree_oid, rhs_file_mode),
+            ) => {
+                match (
+                    (lhs_tree_oid == rhs_tree_oid),
+                    // Note that there should only be one possible file mode for
+                    // an entry which points to a tree, but it's possible that
+                    // some extra non-meaningful bits are set. Should we report
+                    // a change in that case? This code takes the conservative
+                    // approach and reports a change.
+                    (lhs_file_mode == rhs_file_mode),
+                ) {
+                    (true, true) => {
+                        // Unchanged entry, do nothing.
+                    }
+
+                    (true, false) => {
+                        // Only the directory changed, but none of its contents.
+                        acc.push(full_entry_path);
+                    }
+
+                    (false, true) => {
+                        let lhs_tree = get_tree(lhs_tree_oid)?;
+                        let rhs_tree = get_tree(rhs_tree_oid)?;
+
+                        // Only include the files changed in the subtrees, and
+                        // not the directory itself.
+                        get_changed_paths_between_trees_internal(
+                            repo,
+                            acc,
+                            &full_entry_path,
+                            Some(&lhs_tree),
+                            Some(&rhs_tree),
+                        )?;
+                    }
+
+                    (false, false) => {
+                        let lhs_tree = get_tree(lhs_tree_oid)?;
+                        let rhs_tree = get_tree(rhs_tree_oid)?;
+
+                        get_changed_paths_between_trees_internal(
+                            repo,
+                            acc,
+                            &full_entry_path,
+                            Some(&lhs_tree),
+                            Some(&rhs_tree),
+                        )?;
+                        acc.push(full_entry_path);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn get_changed_paths_between_trees(
+    repo: &git2::Repository,
+    lhs: Option<&git2::Tree>,
+    rhs: Option<&git2::Tree>,
+) -> Result<HashSet<PathBuf>> {
+    let mut acc = Vec::new();
+    get_changed_paths_between_trees_internal(repo, &mut acc, &Vec::new(), lhs, rhs)?;
+    let changed_paths: HashSet<PathBuf> = acc.into_iter().map(PathBuf::from_iter).collect();
+    Ok(changed_paths)
 }
 
 #[cfg(test)]
