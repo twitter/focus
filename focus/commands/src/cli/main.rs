@@ -84,12 +84,17 @@ enum Subcommand {
 
     /// Add projects and targets to the selection.
     Add {
-        /// Select projects to add interactively.
-        #[clap(short = 'i', long)]
-        interactive: bool,
-
         /// Project and targets to add to the selection.
         projects_and_targets: Vec<String>,
+
+        /// Select projects to add interactively.
+        #[clap(short = 'i', long = "interactive")]
+        interactive: bool,
+
+        /// In interactive mode, include all targets in the repository in the
+        /// search results.
+        #[clap(short = 'a', long = "all", requires("interactive"))]
+        search_all_targets: bool,
     },
 
     /// Remove projects and targets from the selection.
@@ -889,8 +894,9 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         }
 
         Subcommand::Add {
-            interactive,
             projects_and_targets,
+            interactive,
+            search_all_targets,
         } => {
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             paths::assert_focused_repo(&sparse_repo)?;
@@ -899,7 +905,11 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 .context("Ensuring working trees are clean failed")?;
 
             if interactive {
-                focus_operations::selection::add_interactive(&sparse_repo, app)?;
+                focus_operations::selection::add_interactive(
+                    &sparse_repo,
+                    app,
+                    search_all_targets,
+                )?;
             } else {
                 focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
             }

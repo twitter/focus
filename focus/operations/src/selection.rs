@@ -361,7 +361,11 @@ fn spawn_phabricator_query_thread(tx: SkimItemSender, sparse_repo_path: PathBuf)
     });
 }
 
-pub fn add_interactive(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
+pub fn add_interactive(
+    sparse_repo: impl AsRef<Path>,
+    app: Arc<App>,
+    search_all: bool,
+) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
     let selections = repo.selection_manager()?;
 
@@ -390,7 +394,9 @@ pub fn add_interactive(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<(
                 .context("Sending item to skim")?;
         }
 
-        spawn_target_search_thread(skim_tx.clone(), sparse_repo.as_ref().to_path_buf());
+        if search_all {
+            spawn_target_search_thread(skim_tx.clone(), sparse_repo.as_ref().to_path_buf());
+        }
         spawn_phabricator_query_thread(skim_tx, sparse_repo.as_ref().to_path_buf());
         skim_rx
     };
@@ -399,6 +405,9 @@ pub fn add_interactive(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<(
         .ok_or_else(|| anyhow::anyhow!("Failed to select items"))?;
     if skim_output.is_abort {
         info!("Aborted by user.");
+        if !search_all {
+            println!("Didn't find what you were looking for? You can search all projects by passing the --all flag.");
+        }
     } else {
         let selected_projects: Vec<String> = skim_output
             .selected_items
