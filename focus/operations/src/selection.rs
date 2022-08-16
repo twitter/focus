@@ -3,6 +3,7 @@
 
 use std::{
     borrow::Cow,
+    collections::HashSet,
     path::{Path, PathBuf},
     sync::Arc,
     thread,
@@ -86,6 +87,7 @@ pub fn list_projects(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()>
     Ok(())
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 enum SkimProjectOrTarget {
     Project { name: String, project: Project },
     BazelPackage { name: String, build_file: PathBuf },
@@ -205,6 +207,93 @@ fn spawn_target_search_thread(tx: SkimItemSender, sparse_repo_path: PathBuf) {
     });
 }
 
+fn suggest_skim_item_from_path(head_tree: &git2::Tree, path: &Path) -> Option<SkimProjectOrTarget> {
+    let build_file_patterns = &["BUILD", "BUILD.bazel"];
+    let mut base_path: &Path = path;
+    loop {
+        base_path = match base_path.parent() {
+            Some(parent) => parent,
+            None => return None,
+        };
+
+        let build_file = match build_file_patterns.iter().find_map(|file_name| {
+            let path = base_path.join(file_name);
+            match head_tree.get_path(&path) {
+                Ok(_) => Some(path),
+                Err(_) => None,
+            }
+        }) {
+            Some(build_file) => build_file,
+            None => continue,
+        };
+
+        let package_name = match build_file.parent().and_then(|path| path.to_str()) {
+            Some(package_name) => package_name,
+            None => continue,
+        };
+
+        // The root package probably has a `BUILD` file, but we shouldn't
+        // suggest that, as it would negate the advantages of a sparse checkout.
+        if !package_name.is_empty() {
+            return Some(SkimProjectOrTarget::BazelPackage {
+                name: package_name.to_owned(),
+                build_file,
+            });
+        }
+    }
+}
+
+fn spawn_phabricator_query_thread(tx: SkimItemSender, sparse_repo_path: PathBuf) {
+    fn inner(tx: SkimItemSender, sparse_repo_path: PathBuf) -> Result<()> {
+        use focus_platform::phabricator::*;
+
+        let repo = git2::Repository::open(sparse_repo_path)?;
+        let head_ref = repo.head()?;
+        let head_tree = head_ref.peel_to_tree()?;
+
+        let response = query::<user_whoami::Endpoint>(user_whoami::Request {})
+            .context("Querying Phabricator whoami")?;
+
+        let response = query::<differential_query::Endpoint>(differential_query::Request {
+            authors: Some(vec![response.phid]),
+            limit: Some(100),
+            ..Default::default()
+        })
+        .context("Querying recent revisions")?;
+
+        let paths = query::<differential_changeset_search::Endpoint>(
+            differential_changeset_search::Request {
+                constraints: differential_changeset_search::Constraints {
+                    diffPHIDs: Some(
+                        response
+                            .0
+                            .iter()
+                            .filter_map(|x| x.activeDiffPHID.clone())
+                            .collect(),
+                    ),
+                },
+            },
+        )?;
+        let mut seen_items = HashSet::new();
+        for item in paths.data {
+            let path = PathBuf::from(item.fields.path.displayPath);
+            if let Some(item) = suggest_skim_item_from_path(&head_tree, &path) {
+                if seen_items.insert(item.clone()) {
+                    tx.send(Arc::new(item))?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    thread::spawn(move || {
+        if let Err(err) = inner(tx, sparse_repo_path) {
+            info!(?err, "Error while querying Phabricator");
+        }
+    });
+}
+
 pub fn add_interactive(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
     let selections = repo.selection_manager()?;
@@ -233,7 +322,8 @@ pub fn add_interactive(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<(
                 .context("Sending item to skim")?;
         }
 
-        spawn_target_search_thread(skim_tx, sparse_repo.as_ref().to_path_buf());
+        spawn_target_search_thread(skim_tx.clone(), sparse_repo.as_ref().to_path_buf());
+        spawn_phabricator_query_thread(skim_tx, sparse_repo.as_ref().to_path_buf());
         skim_rx
     };
 
