@@ -15,7 +15,7 @@ use tracing::error;
 use super::*;
 
 /// A project is a collection of targets.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Project {
     /// The name of the project.
     pub name: String,

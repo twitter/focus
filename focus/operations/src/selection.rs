@@ -10,9 +10,9 @@ use std::{
     thread,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use console::style;
-use focus_util::{app::App, paths::is_relevant_to_build_graph};
+use focus_util::{app::App, git_helper::get_head_commit, paths::is_relevant_to_build_graph};
 use git2::{FileMode, TreeWalkMode, TreeWalkResult};
 use skim::{
     prelude::SkimOptionsBuilder, AnsiString, Skim, SkimItem, SkimItemReceiver, SkimItemSender,
@@ -88,11 +88,12 @@ pub fn list_projects(sparse_repo: impl AsRef<Path>, app: Arc<App>) -> Result<()>
     Ok(())
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum SkimSource {
     Project,
     Phabricator,
     Repository,
+    CommitHistory,
 }
 
 impl Display for SkimSource {
@@ -107,11 +108,14 @@ impl Display for SkimSource {
             SkimSource::Repository => {
                 write!(f, "repository")
             }
+            SkimSource::CommitHistory => {
+                write!(f, "your commits")
+            }
         }
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum SkimProjectOrTarget {
     Project {
         source: SkimSource,
@@ -361,12 +365,81 @@ fn spawn_phabricator_query_thread(tx: SkimItemSender, sparse_repo_path: PathBuf)
     });
 }
 
+fn spawn_commit_history_search_thread(tx: SkimItemSender, sparse_repo_path: PathBuf) {
+    fn inner(tx: SkimItemSender, sparse_repo_path: PathBuf) -> Result<()> {
+        let repo = git2::Repository::open(sparse_repo_path)?;
+        let head_commit = get_head_commit(&repo)?;
+        let head_tree = head_commit.tree().context("Getting HEAD tree")?;
+        let user_email = repo
+            .config()
+            .context("Getting config")?
+            .get_string("user.email")
+            .context("Reading user.email")?;
+
+        let mut seen_items = HashSet::new();
+        let mut commit = Some(head_commit);
+        while let Some(current_commit) = commit {
+            let parent_commit = match current_commit.parent(0) {
+                Ok(commit) => Some(commit),
+                Err(err) if err.code() == git2::ErrorCode::NotFound => None,
+                Err(err) => bail!("Failed to get parent commit: {err}"),
+            };
+            let parent_tree = match &parent_commit {
+                Some(parent_commit) => Some(parent_commit.tree()?),
+                None => None,
+            };
+
+            if current_commit.author().email_bytes() == user_email.as_bytes() {
+                let changed_paths: HashSet<PathBuf> = repo
+                    .diff_tree_to_tree(parent_tree.as_ref(), Some(&current_commit.tree()?), None)?
+                    .deltas()
+                    .flat_map(|delta| {
+                        let mut result = Vec::new();
+                        if let Some(file) = delta.old_file().path() {
+                            result.push(file.to_path_buf())
+                        }
+                        if let Some(file) = delta.new_file().path() {
+                            result.push(file.to_path_buf())
+                        }
+                        result
+                    })
+                    .collect();
+
+                let mut items = changed_paths
+                    .into_iter()
+                    .filter_map(|path| {
+                        let path = path.parent()?;
+                        suggest_skim_item_from_path(SkimSource::CommitHistory, &head_tree, path)
+                    })
+                    .collect::<Vec<_>>();
+                items.sort();
+                for item in items {
+                    if seen_items.insert(item.clone()) {
+                        tx.send(Arc::new(item))?;
+                    }
+                }
+            }
+
+            commit = parent_commit;
+        }
+
+        Ok(())
+    }
+
+    thread::spawn(move || {
+        if let Err(err) = inner(tx, sparse_repo_path) {
+            info!(?err, "Error while querying Phabricator");
+        }
+    });
+}
+
 pub fn add_interactive(
     sparse_repo: impl AsRef<Path>,
     app: Arc<App>,
-    search_all: bool,
+    search_all_targets: bool,
 ) -> Result<()> {
-    let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
+    let sparse_repo_path = sparse_repo.as_ref();
+    let repo = Repo::open(sparse_repo_path, app.clone())?;
     let selections = repo.selection_manager()?;
 
     let options = SkimOptionsBuilder::default()
@@ -394,10 +467,11 @@ pub fn add_interactive(
                 .context("Sending item to skim")?;
         }
 
-        if search_all {
-            spawn_target_search_thread(skim_tx.clone(), sparse_repo.as_ref().to_path_buf());
+        if search_all_targets {
+            spawn_target_search_thread(skim_tx.clone(), sparse_repo_path.to_path_buf());
         }
-        spawn_phabricator_query_thread(skim_tx, sparse_repo.as_ref().to_path_buf());
+        spawn_phabricator_query_thread(skim_tx.clone(), sparse_repo_path.to_path_buf());
+        spawn_commit_history_search_thread(skim_tx, sparse_repo_path.to_path_buf());
         skim_rx
     };
 
@@ -405,7 +479,7 @@ pub fn add_interactive(
         .ok_or_else(|| anyhow::anyhow!("Failed to select items"))?;
     if skim_output.is_abort {
         info!("Aborted by user.");
-        if !search_all {
+        if !search_all_targets {
             println!("Didn't find what you were looking for? You can search all projects by passing the --all flag.");
         }
     } else {
