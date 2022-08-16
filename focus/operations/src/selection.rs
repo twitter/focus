@@ -441,6 +441,7 @@ pub fn add_interactive(
         .multi(true)
         .bind(vec!["Space:toggle"])
         .preview(Some("Project description"))
+        .reverse(true)
         .build()
         .map_err(|err| anyhow::anyhow!("{}", err))?;
 
