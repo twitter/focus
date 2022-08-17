@@ -1,8 +1,6 @@
 ---
-source: focus/internals/src/lib/tracing/chrome/tests.rs
-assertion_line: 12
+source: focus/tracing/src/chrome/tests.rs
 expression: trace
-
 ---
 traceEvents:
   - ts: 0
@@ -1278,7 +1276,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37166701
     pid: 3
     tid: 1
@@ -1551,7 +1549,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37174298
     pid: 3
     tid: 2
@@ -1627,7 +1625,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37176505
     pid: 3
     tid: 1
@@ -1900,7 +1898,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37183827
     pid: 3
     tid: 2
@@ -1976,7 +1974,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37185721
     pid: 3
     tid: 1
@@ -2249,7 +2247,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37192839
     pid: 3
     tid: 2
@@ -2325,7 +2323,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37194695
     pid: 3
     tid: 1
@@ -2598,7 +2596,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37202446
     pid: 3
     tid: 2
@@ -2674,7 +2672,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37205110
     pid: 3
     tid: 1
@@ -2947,7 +2945,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37212347
     pid: 3
     tid: 2
@@ -3023,7 +3021,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37214223
     pid: 3
     tid: 1
@@ -3296,7 +3294,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37220906
     pid: 3
     tid: 2
@@ -3372,7 +3370,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37224023
     pid: 3
     tid: 1
@@ -3645,7 +3643,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37231324
     pid: 3
     tid: 2
@@ -3721,7 +3719,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37232501
     pid: 3
     tid: 1
@@ -3994,7 +3992,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37238660
     pid: 3
     tid: 2
@@ -4070,7 +4068,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37240406
     pid: 3
     tid: 1
@@ -4343,7 +4341,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37246718
     pid: 3
     tid: 2
@@ -4419,7 +4417,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37249260
     pid: 3
     tid: 1
@@ -4654,7 +4652,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37256773
     pid: 3
     tid: 2
@@ -4692,7 +4690,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37257174
     pid: 3
     tid: 2
@@ -5041,7 +5039,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37269485
     pid: 3
     tid: 2
@@ -5117,7 +5115,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37272360
     pid: 3
     tid: 1
@@ -5390,7 +5388,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37279036
     pid: 3
     tid: 2
@@ -5466,7 +5464,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37281253
     pid: 3
     tid: 1
@@ -5739,7 +5737,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37288143
     pid: 3
     tid: 2
@@ -5815,7 +5813,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37289897
     pid: 3
     tid: 1
@@ -6050,7 +6048,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37301668
     pid: 3
     tid: 2
@@ -6088,7 +6086,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37302078
     pid: 3
     tid: 2
@@ -6164,7 +6162,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37307027
     pid: 3
     tid: 1
@@ -6399,7 +6397,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37315546
     pid: 3
     tid: 2
@@ -6437,7 +6435,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37315655
     pid: 3
     tid: 2
@@ -6513,7 +6511,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37319510
     pid: 3
     tid: 1
@@ -6748,7 +6746,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37326300
     pid: 3
     tid: 2
@@ -6786,7 +6784,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37326420
     pid: 3
     tid: 2
@@ -6862,7 +6860,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37328698
     pid: 3
     tid: 1
@@ -7135,7 +7133,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37335142
     pid: 3
     tid: 2
@@ -7211,7 +7209,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37339466
     pid: 3
     tid: 1
@@ -7484,7 +7482,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37346469
     pid: 3
     tid: 2
@@ -7560,7 +7558,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37350401
     pid: 3
     tid: 1
@@ -7795,7 +7793,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37357072
     pid: 3
     tid: 2
@@ -7833,7 +7831,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37357190
     pid: 3
     tid: 2
@@ -7909,7 +7907,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37359675
     pid: 3
     tid: 1
@@ -8144,7 +8142,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37366530
     pid: 3
     tid: 2
@@ -8182,7 +8180,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37366634
     pid: 3
     tid: 2
@@ -8258,7 +8256,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37368494
     pid: 3
     tid: 1
@@ -8531,7 +8529,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37376069
     pid: 3
     tid: 2
@@ -8607,7 +8605,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37381519
     pid: 3
     tid: 1
@@ -8842,7 +8840,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37388432
     pid: 3
     tid: 2
@@ -8880,7 +8878,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37388823
     pid: 3
     tid: 2
@@ -8956,7 +8954,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37391477
     pid: 3
     tid: 1
@@ -9305,7 +9303,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37404846
     pid: 3
     tid: 1
@@ -9578,7 +9576,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37412078
     pid: 3
     tid: 2
@@ -9654,7 +9652,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 8e-6
+        t_rel: 0.000008
   - ts: 37416411
     pid: 3
     tid: 1
@@ -9927,7 +9925,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37423479
     pid: 3
     tid: 2
@@ -10003,7 +10001,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 6e-6
+        t_rel: 0.000006
   - ts: 37427367
     pid: 3
     tid: 1
@@ -10238,7 +10236,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4672:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37433794
     pid: 3
     tid: 2
@@ -10276,7 +10274,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4546:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37433830
     pid: 3
     tid: 2
@@ -10352,7 +10350,7 @@ traceEvents:
       end:
         file_line_thread: "merge-ort.c:4241:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37436993
     pid: 3
     tid: 1
@@ -10781,7 +10779,7 @@ traceEvents:
       end:
         file_line_thread: "diffcore-rename.c:1710:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 37450087
     pid: 5
     tid: 1
@@ -10838,7 +10836,7 @@ traceEvents:
       end:
         file_line_thread: "diffcore-rename.c:1454:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37450649
     pid: 5
     tid: 2
@@ -10857,7 +10855,7 @@ traceEvents:
       end:
         file_line_thread: "diffcore-rename.c:1710:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 37450682
     pid: 5
     tid: 1

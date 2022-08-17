@@ -1,8 +1,6 @@
 ---
-source: focus/internals/src/lib/tracing/chrome/tests.rs
-assertion_line: 12
+source: focus/tracing/src/chrome/tests.rs
 expression: trace
-
 ---
 traceEvents:
   - ts: 0
@@ -367,7 +365,7 @@ traceEvents:
       end:
         file_line_thread: "diffcore-rename.c:1454:main"
         git_event_name: region_leave
-        t_rel: 9e-6
+        t_rel: 0.000009
   - ts: 6203
     pid: 1
     tid: 2
@@ -386,7 +384,7 @@ traceEvents:
       end:
         file_line_thread: "diffcore-rename.c:1710:main"
         git_event_name: region_leave
-        t_rel: 7e-6
+        t_rel: 0.000007
   - ts: 6228
     pid: 1
     tid: 1

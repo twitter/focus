@@ -47,7 +47,7 @@ which = "4.2.4"
 whoami = "1.2.1"
 
 [dev-dependencies]
-insta = "1.13.0"
+insta = { version = "1.13.0", features = ["yaml"] }
 tracing = "0.1.31"
 
 [package.metadata.cargo-udeps.ignore]
