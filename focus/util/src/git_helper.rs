@@ -25,11 +25,17 @@ pub fn git_dir(path: &Path) -> Result<PathBuf> {
     Ok(git2::Repository::open(path)?.path().to_path_buf())
 }
 
-pub fn git_command(app: Arc<App>) -> Result<(Command, SandboxCommand)> {
-    let git_binary = app.git_binary();
+pub fn git_command_with_git_binary(
+    app: Arc<App>,
+    git_binary: &GitBinary,
+) -> Result<(Command, SandboxCommand)> {
     let mut cmd = git_binary.command();
     let scmd = SandboxCommand::with_command(&mut cmd, app)?;
     Ok((cmd, scmd))
+}
+
+pub fn git_command(app: Arc<App>) -> Result<(Command, SandboxCommand)> {
+    git_command_with_git_binary(app.clone(), app.git_binary())
 }
 
 pub fn remote_add<P: AsRef<Path>>(

@@ -16,7 +16,7 @@ use content_addressed_cache::RocksDBCache;
 use focus_internals::{index::RocksDBMemoizationCacheExt, locking, tracker::Tracker};
 
 use anyhow::{bail, Context, Result};
-use focus_util::git_helper::{git_command, GitBinary};
+use focus_util::git_helper::{git_command_with_git_binary, GitBinary};
 use focus_util::{app::App, git_helper::ConfigExt, sandbox_command::SandboxCommandOutput};
 use strum_macros;
 use tracing::{debug, error, info, warn};
@@ -219,7 +219,7 @@ impl Runner<'_> {
 
     #[tracing::instrument]
     fn run_git_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
-        let (mut cmd, scmd) = git_command(self.app.clone())?;
+        let (mut cmd, scmd) = git_command_with_git_binary(self.app.clone(), &self.git_binary)?;
 
         // TODO: this needs to log and capture output for debugging if necessary
         Ok(MaintResult::Success(
