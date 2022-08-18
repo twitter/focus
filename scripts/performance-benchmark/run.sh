@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 set -euxo pipefail
 
 #Allow script to be run from anywhere
