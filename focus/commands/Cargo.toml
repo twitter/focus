@@ -45,7 +45,6 @@ name = "focus"
 path = "src/cli/main.rs"
 
 [features]
-default = ["twttr"]
 twttr = [
   "focus-internals/twttr",
   "focus-migrations/twttr",
