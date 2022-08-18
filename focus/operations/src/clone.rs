@@ -696,7 +696,6 @@ mod twttr_test {
 
     const MAIN_BRANCH_NAME: &str = "main";
 
-    #[cfg(feature = "twttr")]
     #[test]
     fn local_clone_smoke_test() -> Result<()> {
         init_logging();
