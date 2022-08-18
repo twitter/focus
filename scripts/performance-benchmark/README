@@ -1,0 +1,4 @@
+# To Use
+1. source your environment with variables needed at the top of run.sh and setup.sh
+2. run setup.sh to get a local copy of the repo to test against
+3. execute run.sh to run the benchmark
