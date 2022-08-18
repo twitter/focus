@@ -685,21 +685,20 @@ mod twttr_test {
         sync::Arc,
     };
 
+    use crate::testing::integration::RepoPairFixture;
     use anyhow::{bail, Context, Result};
     use assert_cmd::prelude::OutputAssertExt;
-    use git2::Repository;
     use focus_internals::model::repo::Repo;
     use focus_testing::init_logging;
     use focus_util::app::App;
-    use crate::testing::integration::RepoPairFixture;
+    use git2::Repository;
     use tracing::info;
-    
+
     const MAIN_BRANCH_NAME: &str = "main";
 
     #[cfg(feature = "twttr")]
     #[test]
     fn local_clone_smoke_test() -> Result<()> {
-
         init_logging();
         let fixture = RepoPairFixture::new()?;
 
