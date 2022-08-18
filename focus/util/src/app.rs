@@ -9,9 +9,9 @@ use anyhow::{Context, Result};
 use focus_testing::GitBinary;
 use std::time::SystemTime;
 
-#[cfg(not(twttr))]
+#[cfg(not(feature = "twttr"))]
 use crate::stubs::tool_insights_client::Client;
-#[cfg(twttr)]
+#[cfg(feature = "twttr")]
 use tool_insights_client::Client;
 
 #[must_use = "The exit code for the application should be returned and bubbled up to `main` so that it can be passed to `std::process::exit`."]

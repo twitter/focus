@@ -846,7 +846,7 @@ impl Repo {
     /// Write git config to support gitstats instrumentation.
     /// This sets `focus.version` and `twitter.statsenabled`
     pub fn write_git_config_to_support_instrumentation(&self) -> Result<()> {
-        if cfg!(twttr) {
+        if cfg!(feature = "twttr") {
             const VERSION_CONFIG_KEY: &str = "focus.version";
             const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
             const CI_ENABLED_CONFIG_KEY: &str = "ci.alt.enabled";

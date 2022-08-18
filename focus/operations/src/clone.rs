@@ -416,7 +416,7 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
         })?;
 
         if let Some(host) = fetch_url.host() {
-            if cfg!(twttr) {
+            if cfg!(feature = "twttr") {
                 // Apply Twitter-specific remote treatment.
                 if host.to_string().eq_ignore_ascii_case("git.twitter.biz") {
                     // If the path for the fetch URL does not begin with '/ro', add that prefix.
@@ -676,7 +676,7 @@ mod test {
     }
 }
 
-#[cfg(twitter)]
+#[cfg(feature = "twttr")]
 #[cfg(test)]
 mod twttr_test {
     use std::{
@@ -688,13 +688,18 @@ mod twttr_test {
     use anyhow::{bail, Context, Result};
     use assert_cmd::prelude::OutputAssertExt;
     use git2::Repository;
+    use focus_internals::model::repo::Repo;
+    use focus_testing::init_logging;
+    use focus_util::app::App;
+    use crate::testing::integration::RepoPairFixture;
     use tracing::info;
-
+    
     const MAIN_BRANCH_NAME: &str = "main";
 
-    #[cfg(twttr)]
+    #[cfg(feature = "twttr")]
     #[test]
     fn local_clone_smoke_test() -> Result<()> {
+
         init_logging();
         let fixture = RepoPairFixture::new()?;
 

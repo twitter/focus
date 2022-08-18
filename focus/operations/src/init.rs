@@ -93,7 +93,7 @@ pub fn run(
         config.set_str("remote.origin.tagOpt", "--no-tags")?;
         config.set_bool("remote.origin.prune", true)?;
 
-        if cfg!(twttr) {
+        if cfg!(feature = "twttr") {
             config.set_bool("twitter.federated", true)?;
         }
 
