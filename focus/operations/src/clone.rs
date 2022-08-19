@@ -393,43 +393,52 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
         };
 
         let dense_remote = dense_repo.find_remote(remote_name)?;
-        let url = if let Some(url) = dense_remote.url() {
-            url
+        let maybe_url = if let Some(maybe_url) = dense_remote.url() {
+            maybe_url
         } else {
             bail!("Dense remote '{}' has no URL", remote_name);
         };
 
-        let push_url = dense_remote.pushurl().unwrap_or(url);
+        let maybe_push_url = dense_remote.pushurl().unwrap_or(maybe_url);
         debug!(
             "Setting up remote {} (fetch={}, push={})",
-            remote_name, url, push_url
+            remote_name, maybe_url, maybe_push_url
         );
 
-        let mut fetch_url = Url::parse(url).with_context(|| {
-            format!(
-                "Failed to parse the URL ('{}') for remote {}",
-                url, remote_name
-            )
-        })?;
-        let push_url = Url::parse(push_url).with_context(|| {
-            format!(
-                "Failed to parse the push URL ('{}') for remote {}",
-                fetch_url, remote_name
-            )
-        })?;
-
-        if let Some(host) = fetch_url.host() {
-            if cfg!(feature = "twttr") {
-                // Apply Twitter-specific remote treatment.
-                if host.to_string().eq_ignore_ascii_case("git.twitter.biz") {
-                    // If the path for the fetch URL does not begin with '/ro', add that prefix.
-                    if !fetch_url.path().starts_with("/ro") {
-                        fetch_url.set_path(&format!("/ro{}", fetch_url.path()));
+        let fetch_urlish = match Url::parse(maybe_url) {
+            Ok(mut url) => {
+                match url.host() {
+                    Some(host) => {
+                        if cfg!(feature = "twttr") {
+                            // Apply Twitter-specific remote treatment.
+                            if host.to_string().eq_ignore_ascii_case("git.twitter.biz") {
+                                // If the path for the fetch URL does not begin with '/ro', add that prefix.
+                                if !url.path().starts_with("/ro") {
+                                    url.set_path(&format!("/ro{}", url.path()));
+                                }
+                            }
+                        }
                     }
+                    None => {}
                 }
+                url.as_str().to_owned()
             }
-        } else {
-            bail!("Fetch URL for remote '{}' has no host", remote_name);
+            Err(_) => {
+                info!(
+                    "Fetch URL ('{}') for remote {} is not a URL",
+                    maybe_url, remote_name
+                );
+                maybe_url.to_owned()
+            }
+        };
+        match Url::parse(maybe_push_url) {
+            Ok(_) => {}
+            Err(_) => {
+                info!(
+                    "Push URL ('{}') for remote {} is not a URL",
+                    maybe_push_url, remote_name
+                )
+            }
         }
 
         // Delete existing remote in the sparse repo if it exists. This is a workaround because `remote_delete` is not working correctly.
@@ -447,14 +456,12 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
         // Add the remote to the sparse repo
         info!(
             "Setting up remote {} fetch:{} push:{}",
-            remote_name,
-            fetch_url.as_str(),
-            push_url.as_str()
+            remote_name, fetch_urlish, maybe_push_url
         );
         sparse_repo
             .remote_with_fetch(
                 remote_name,
-                fetch_url.as_str(),
+                fetch_urlish.as_str(),
                 format!("refs/heads/master:refs/remotes/{}/master", remote_name).as_str(),
             )
             .with_context(|| {
@@ -473,7 +480,7 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
             .with_context(|| format!("setting remote.{}.tagOpt = --no-tags", &remote_name))?;
 
         sparse_repo
-            .remote_set_pushurl(remote_name, Some(push_url.as_str()))
+            .remote_set_pushurl(remote_name, Some(maybe_push_url))
             .with_context(|| {
                 format!(
                     "Configuring push URL for remote {} in the sparse repo failed",
