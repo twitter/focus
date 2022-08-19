@@ -38,6 +38,10 @@ target_tarball=$(mktemp -t "focus.$focus_rev.$os.$arch.tgz")
 
 scripts/mac-build.sh || die "Build failed"
 test -f target/release/$focus_binary || die "The build succeeded, but produced no binary"
+if ! target/release/$focus_binary version | grep 'twttr-enabled: true'; then
+  die "The build succeeded, but did not report being built with the twttr feature"
+fi
+
 rm -rf target/package
 mkdir -p target/package/focus
 echo $focus_rev > target/package/focus/FOCUS_VERSION
