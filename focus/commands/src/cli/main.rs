@@ -44,7 +44,7 @@ struct NewArgs {
     sparse_repo: PathBuf,
 
     /// The name of the branch to clone.
-    #[clap(long, default_value = "master")]
+    #[clap(short, long, default_value = "master")]
     branch: String,
 
     /// Days of history to maintain in the sparse repo.
