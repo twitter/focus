@@ -53,3 +53,6 @@ twttr = [
   "focus-tracing/twttr",
   "focus-util/twttr",
 ]
+
+[build-dependencies]
+vergen = "7.3.0"

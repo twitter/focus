@@ -1180,7 +1180,17 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         Subcommand::Event { args: _ } => Ok(ExitCode(0)),
 
         Subcommand::Version => {
-            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            println!("package-name: {}", env!("CARGO_PKG_NAME"));
+            println!("build-version: {}", env!("VERGEN_BUILD_SEMVER"));
+            println!("commit-timestamp: {}", env!("VERGEN_GIT_COMMIT_TIMESTAMP"));
+            println!("commit-sha: {}", env!("VERGEN_GIT_SHA"));
+            println!("cargo-features: {}", env!("VERGEN_CARGO_FEATURES"));
+            println!(
+                "twttr-enabled: {}",
+                env!("VERGEN_CARGO_FEATURES")
+                    .split(',')
+                    .any(|feature| feature == "twttr")
+            );
             Ok(ExitCode(0))
         }
 
