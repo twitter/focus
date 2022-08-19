@@ -688,8 +688,8 @@ fn hold_lock_file(repo: &Path) -> Result<LockFile> {
     LockFile::new(&path)
 }
 
-fn preflight_check(app: Arc<App>) -> Result<bool> {
-    let passed = match GitVersion::current(app.git_binary())? {
+fn check_compatible_git_version(git_binary: &GitBinary) -> Result<bool> {
+    let passed = match GitVersion::current(git_binary)? {
         GitVersion { major, minor, .. } if major >= 2 && minor >= 35 => true,
         GitVersion { major, minor, .. } => {
             error!("Focus requires Git version 2.35 or newer. This system has version {}.{} installed. Please update Git and try again.", major, minor);
@@ -700,6 +700,10 @@ fn preflight_check(app: Arc<App>) -> Result<bool> {
     Ok(passed)
 }
 
+fn preflight_check(app: Arc<App>) -> Result<bool> {
+    check_compatible_git_version(app.git_binary())
+}
+
 fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Result<ExitCode> {
     let cloned_app = app.clone();
     let ti_client = cloned_app.tool_insights_client();
@@ -708,9 +712,18 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
     let span = debug_span!("Running subcommand", ?feature_name);
     let _guard = span.enter();
 
-    if !preflight_check(app.clone())? {
+    // This is to accomadate the special case for some maintenance run scheduled with launchd,
+    // We will want to validate the passed in git binary, not the one in app.
+    let run_preflight_check = match options.cmd {
+        Subcommand::Maintenance { ref subcommand, .. } => {
+            !matches!(subcommand, MaintenanceSubcommand::Run { .. })
+        }
+        _ => true,
+    };
+
+    if run_preflight_check && !preflight_check(app.clone())? {
         return Ok(ExitCode(1));
-    }
+    };
 
     if let Subcommand::Clone(_) = &options.cmd {
         eprintln!(
@@ -1002,6 +1015,10 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 time_period,
             } => {
                 let git_binary = GitBinary::from_binary_path(git_binary_path)?;
+                if !check_compatible_git_version(&git_binary)? {
+                    return Ok(ExitCode(1));
+                }
+
                 focus_operations::maintenance::run(
                     focus_operations::maintenance::RunOptions {
                         git_binary: Some(git_binary),
