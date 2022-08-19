@@ -45,6 +45,9 @@ name = "focus"
 path = "src/cli/main.rs"
 
 [features]
+# Not necessary if we're installing from source with `--features twttr` (since
+# that will enable the `twttr` feature for all workspace packges), but might be
+# necessary in the future if we publish to a package repository.
 twttr = [
   "focus-internals/twttr",
   "focus-migrations/twttr",

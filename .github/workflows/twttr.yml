@@ -1,7 +1,7 @@
 # Copyright 2022 Twitter, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-name: Linux
+name: Twitter-internal build
 
 on:
   push:
@@ -26,15 +26,5 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@cb2cf0cc7c5198d3364b9630e2c3d457f160790c
 
-      - name: Compile
-        run: cargo build --features ci --all-targets --workspace
-
-      # Don't test benches.
-      - name: Run Rust tests
-        timeout-minutes: 10
-        run: cargo test --features ci --examples --tests --workspace
-
-      # Note that `--doc` can't be combined with other tests.
-      - name: Run Rust doc-tests
-        timeout-minutes: 10
-        run: cargo test --features ci --doc --workspace
+      - name: Compile (but don't test) `twttr` feature
+        run: cargo build --features ci,twttr --all-targets --workspace
