@@ -45,7 +45,7 @@ rustc --version
 cargo --version
 # build
 echo "Building..."
-cargo build --release --target "$cargo_target"
+cargo build --features twttr --release --target "$cargo_target"
 
 ##
 ## Upload to Packer
