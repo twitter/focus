@@ -316,40 +316,68 @@ fn suggest_skim_item_from_path(
     }
 }
 
+fn query_phabricator_for_recently_touched_paths() -> Result<Vec<PathBuf>> {
+    use focus_platform::phabricator::*;
+    let response = query::<user_whoami::Endpoint>(user_whoami::Request {})
+        .context("Querying Phabricator whoami")?;
+
+    let response = query::<differential_query::Endpoint>(differential_query::Request {
+        authors: Some(vec![response.phid]),
+        limit: Some(100),
+        ..Default::default()
+    })
+    .context("Querying recent revisions")?;
+
+    let paths =
+        query::<differential_changeset_search::Endpoint>(differential_changeset_search::Request {
+            constraints: differential_changeset_search::Constraints {
+                diffPHIDs: Some(
+                    response
+                        .0
+                        .iter()
+                        .filter_map(|x| x.activeDiffPHID.clone())
+                        .collect(),
+                ),
+            },
+        })?;
+    Ok(paths
+        .data
+        .into_iter()
+        .map(|item| PathBuf::from(item.fields.path.displayPath))
+        .collect())
+}
+
+#[cfg(feature = "twttr")]
+#[test]
+fn test_query_phabricator() -> Result<()> {
+    let paths = query_phabricator_for_recently_touched_paths()?;
+    assert_ne!(
+        paths,
+        Vec::<PathBuf>::new(),
+        "\
+Could not query Phabricator for recently-touched paths on behalf of the user \
+running this test. There might be a legitimate bug in the code, but it's also \
+possible that there is no authenticated user (is on a CI machine, or `arc` \
+isn't configured) or because the authenticated user really has no \
+recently-touched paths.
+"
+    );
+    Ok(())
+}
+
 fn spawn_phabricator_query_thread(tx: SkimItemSender, sparse_repo_path: PathBuf) {
     fn inner(tx: SkimItemSender, sparse_repo_path: PathBuf) -> Result<()> {
-        use focus_platform::phabricator::*;
-
         let repo = git2::Repository::open(sparse_repo_path)?;
         let head_ref = repo.head()?;
         let head_tree = head_ref.peel_to_tree()?;
 
-        let response = query::<user_whoami::Endpoint>(user_whoami::Request {})
-            .context("Querying Phabricator whoami")?;
+        let paths = query_phabricator_for_recently_touched_paths()?;
 
-        let response = query::<differential_query::Endpoint>(differential_query::Request {
-            authors: Some(vec![response.phid]),
-            limit: Some(100),
-            ..Default::default()
-        })
-        .context("Querying recent revisions")?;
-
-        let paths = query::<differential_changeset_search::Endpoint>(
-            differential_changeset_search::Request {
-                constraints: differential_changeset_search::Constraints {
-                    diffPHIDs: Some(
-                        response
-                            .0
-                            .iter()
-                            .filter_map(|x| x.activeDiffPHID.clone())
-                            .collect(),
-                    ),
-                },
-            },
-        )?;
+        // The order might be meaningful (e.g. most recent paths listed first),
+        // so traverse paths in order rather than collecting into a `HashSet`
+        // immediately.
         let mut seen_items = HashSet::new();
-        for item in paths.data {
-            let path = PathBuf::from(item.fields.path.displayPath);
+        for path in paths {
             if let Some(item) =
                 suggest_skim_item_from_path(SkimSource::Phabricator, &head_tree, &path)
             {
