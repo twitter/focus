@@ -10,7 +10,6 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use chrono::NaiveDate;
 use clap::Parser;
 use focus_migrations::production::perform_pending_migrations;
 use focus_testing::GitBinary;
@@ -147,55 +146,6 @@ enum Subcommand {
         subcommand: BranchSubcommand,
     },
 
-    /// Set up an initial clone of the repo from the remote
-    Init {
-        /// By default we take 90 days of history, pass a date with this option
-        /// if you want a different amount of history
-        #[clap(long, parse(try_from_str = focus_operations::init::parse_shallow_since_date))]
-        shallow_since: Option<NaiveDate>,
-
-        /// This command will only ever clone a single ref, by default this is
-        /// "master". If you wish to clone a different branch, then use this option
-        #[clap(long, default_value = "master")]
-        branch_name: String,
-
-        #[clap(long)]
-        no_checkout: bool,
-
-        /// The default is to pass --no-tags to clone, this option, if given,
-        /// will cause git to do its normal default tag following behavior
-        #[clap(long)]
-        follow_tags: bool,
-
-        /// If not given, we use --filter=blob:none. To use a different filter
-        /// argument, use this option. To disable filtering, use --no-filter.
-        #[clap(long, default_value = "blob:none")]
-        filter: String,
-
-        /// Do not pass a filter flag to git-clone. If both --no-filter and --filter
-        /// options are given, --no-filter wins
-        #[clap(long)]
-        no_filter: bool,
-
-        #[clap(long)]
-        bare: bool,
-
-        #[clap(long)]
-        sparse: bool,
-
-        #[clap(long)]
-        progress: bool,
-
-        #[clap(long)]
-        push_url: Option<String>,
-
-        #[clap(long)]
-        fetch_url: String,
-
-        #[clap()]
-        target_path: String,
-    },
-
     #[clap(hide = true)]
     Maintenance {
         /// The git config key to look for paths of repos to run maintenance in. Defaults to
@@ -270,7 +220,6 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             BranchSubcommand::Search { .. } => "branch-search".to_string(),
             BranchSubcommand::Add { .. } => "branch-add".to_string(),
         },
-        Subcommand::Init { .. } => "init".to_string(),
         Subcommand::Maintenance { subcommand, .. } => match subcommand {
             MaintenanceSubcommand::Run { .. } => "maintenance-run".to_string(),
             MaintenanceSubcommand::Register { .. } => "maintenance-register".to_string(),
@@ -952,58 +901,6 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             Ok(ExitCode(0))
         }
 
-        Subcommand::Init {
-            shallow_since,
-            branch_name,
-            no_checkout,
-            follow_tags,
-            filter,
-            no_filter,
-            bare,
-            sparse,
-            progress,
-            fetch_url,
-            push_url,
-            target_path,
-        } => {
-            let expanded = paths::find_repo_root_from(
-                app.clone(),
-                paths::expand_tilde(target_path)
-                    .context("expanding tilde on target_path argument")?,
-            )?;
-
-            let target = expanded.as_path();
-
-            let mut init_opts: Vec<focus_operations::init::InitOpt> = Vec::new();
-
-            let mut add_if_true = |n: bool, opt: focus_operations::init::InitOpt| {
-                if n {
-                    init_opts.push(opt)
-                };
-            };
-
-            add_if_true(no_checkout, focus_operations::init::InitOpt::NoCheckout);
-            add_if_true(bare, focus_operations::init::InitOpt::Bare);
-            add_if_true(sparse, focus_operations::init::InitOpt::Sparse);
-            add_if_true(follow_tags, focus_operations::init::InitOpt::FollowTags);
-            add_if_true(progress, focus_operations::init::InitOpt::Progress);
-
-            info!("Setting up a copy of the repo in {:?}", target);
-
-            focus_operations::init::run(
-                shallow_since,
-                Some(branch_name),
-                if no_filter { None } else { Some(filter) },
-                fetch_url,
-                push_url,
-                target.to_owned(),
-                init_opts,
-                app,
-            )?;
-
-            Ok(ExitCode(0))
-        }
-
         Subcommand::Maintenance {
             subcommand,
             git_config_key,
@@ -1266,8 +1163,7 @@ fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
         | Subcommand::Clone { .. }
         | Subcommand::Sync { .. }
         | Subcommand::Add { .. }
-        | Subcommand::Remove { .. }
-        | Subcommand::Init { .. } => {
+        | Subcommand::Remove { .. } => {
             focus_operations::maintenance::schedule_enable(ScheduleOpts::default())
         }
         _ => Ok(()),

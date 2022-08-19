@@ -10,7 +10,6 @@ pub mod detect_build_graph_changes;
 pub mod ensure_clean;
 pub mod event;
 pub mod index;
-pub mod init;
 pub mod maintenance;
 pub mod refs;
 pub mod repo;

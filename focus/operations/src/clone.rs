@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::event;
-use crate::init::{run_clone, CloneBuilder};
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::model::selection::{Operation, OperationAction};
 
 use anyhow::{bail, Context, Result};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, Utc};
 use content_addressed_cache::RocksDBCache;
 use focus_internals::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 
+use focus_util::sandbox_command::SandboxCommand;
 use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutput};
 use git2::Repository;
 
+use std::collections::HashSet;
+use std::process::Command;
 use std::{
     ffi::OsString,
     fs::File,
@@ -23,6 +25,263 @@ use std::{
 };
 use tracing::{debug, error, info, info_span, warn};
 use url::Url;
+
+pub fn run_clone(mut clone_builder: CloneBuilder, app: Arc<App>) -> Result<()> {
+    (&mut clone_builder).add_clone_args(vec!["--progress"]);
+    let (mut cmd, scmd) = clone_builder.build(app)?;
+
+    scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr)
+        .map(|_| ())
+}
+
+#[derive(Debug, Eq, Hash, PartialEq)]
+pub enum InitOpt {
+    NoCheckout,
+    FollowTags,
+    Bare,
+    Sparse,
+    Progress,
+}
+
+#[derive(Debug)]
+pub struct CloneBuilder {
+    // note, to be totally typesafe we'd have a type that represented
+    // when the target_path was set, and another to represent another
+    // where it was unset, but that's unnecessarily complex for our needs
+    target_path: PathBuf,
+    fetch_url: Option<String>,
+    push_url: Option<String>,
+    shallow_since: Option<NaiveDate>,
+    branch_name: String,
+    filter: Option<String>,
+    // additional repo config keys that will be passed to clone using
+    // the -c flag. should be strings of "key=value"
+    repo_config: Vec<String>,
+    // set of options controlling various flags to pass to clone
+    init_opts: HashSet<InitOpt>,
+    // additional args to git, before the subcommand
+    git_args: Vec<String>,
+    // additional args to the clone subcommand
+    clone_args: Vec<String>,
+}
+
+const DEFAULT_SINGLE_BRANCH: &str = "master";
+const MASTER_HISTORY_WINDOW_DAYS: i64 = 90;
+
+fn default_master_history_window() -> Duration {
+    Duration::days(MASTER_HISTORY_WINDOW_DAYS)
+}
+
+fn default_shallow_since() -> NaiveDate {
+    let t = Local::now();
+    let nd = NaiveDate::from_ymd(t.year(), t.month(), t.day());
+
+    nd - default_master_history_window()
+}
+
+pub fn parse_shallow_since_date(s: &str) -> Result<NaiveDate> {
+    Ok(NaiveDate::parse_from_str(s, "%Y-%m-%d")?)
+}
+
+impl Default for CloneBuilder {
+    fn default() -> Self {
+        Self {
+            target_path: PathBuf::new(),
+            fetch_url: None,
+            push_url: None,
+            shallow_since: Some(default_shallow_since()),
+            branch_name: String::from(DEFAULT_SINGLE_BRANCH),
+            filter: None,
+            repo_config: Vec::new(),
+            init_opts: HashSet::new(),
+            git_args: Vec::new(),
+            clone_args: Vec::new(),
+        }
+    }
+}
+
+impl CloneBuilder {
+    pub fn new(target_path: PathBuf) -> Self {
+        Self {
+            target_path,
+            ..Default::default()
+        }
+    }
+
+    pub fn build(self, app: Arc<App>) -> Result<(Command, SandboxCommand)> {
+        let mut opt_args: Vec<String> = Vec::new();
+
+        if let Some(ss) = self.shallow_since {
+            opt_args.push(format!["--shallow-since={}", ss.format("%Y-%m-%d")]);
+        }
+
+        opt_args.push("-b".to_string());
+        opt_args.push(self.branch_name.to_owned());
+
+        if self.opt_set(InitOpt::Bare) {
+            opt_args.push(String::from("--bare"));
+        }
+
+        if let Some(f) = self.filter.to_owned() {
+            opt_args.push(format!["--filter={}", f]);
+        }
+
+        if !self.opt_set(InitOpt::FollowTags) {
+            opt_args.push(String::from("--no-tags"));
+        }
+
+        if self.opt_set(InitOpt::NoCheckout) {
+            opt_args.push(String::from("--no-checkout"));
+        }
+
+        if self.opt_set(InitOpt::Sparse) {
+            opt_args.push(String::from("--sparse"));
+        }
+
+        if self.opt_set(InitOpt::Progress) {
+            opt_args.push(String::from("--progress"));
+        }
+
+        if let Some(push_url) = self.push_url.to_owned() {
+            opt_args.push(String::from("-c"));
+            opt_args.push(format!["remote.origin.pushUrl={}", push_url]);
+        }
+
+        for kv in self.repo_config {
+            opt_args.push(String::from("-c"));
+            opt_args.push(kv);
+        }
+
+        let fetch_url = self
+            .fetch_url
+            .ok_or_else(|| anyhow::anyhow!("Fetch URL not provided"))?;
+
+        let (mut cmd, scmd) = git_helper::git_command(app)?;
+        cmd.args(self.git_args)
+            .arg("clone")
+            .args(opt_args)
+            .args(self.clone_args)
+            .arg(fetch_url)
+            .arg(self.target_path);
+
+        Ok((cmd, scmd))
+    }
+
+    fn opt_set(&self, opt: InitOpt) -> bool {
+        self.init_opts.contains(&opt)
+    }
+
+    pub fn shallow_since(&mut self, d: NaiveDate) -> &mut Self {
+        self.shallow_since = Some(d);
+        self
+    }
+
+    pub fn branch(&mut self, name: String) -> &mut Self {
+        self.branch_name = name;
+        self
+    }
+
+    pub fn push_url(&mut self, url: String) -> &mut Self {
+        self.push_url = Some(url);
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn sparse(&mut self, b: bool) -> &mut Self {
+        self.add_or_remove_init_opt(InitOpt::Sparse, b);
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn bare(&mut self, b: bool) -> &mut Self {
+        self.add_or_remove_init_opt(InitOpt::Bare, b);
+        self
+    }
+
+    pub fn filter(&mut self, spec: String) -> &mut Self {
+        self.filter = Some(spec);
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn follow_tags(&mut self, b: bool) -> &mut Self {
+        self.add_or_remove_init_opt(InitOpt::FollowTags, b);
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn no_checkout(&mut self, b: bool) -> &mut Self {
+        self.add_or_remove_init_opt(InitOpt::NoCheckout, b);
+        self
+    }
+
+    pub fn fetch_url(&mut self, ourl: String) -> &mut Self {
+        self.fetch_url = Some(ourl);
+        self
+    }
+
+    // small helper to avoid repetition, if add is true, then add the
+    // opt to the set, otherwise remove it
+    fn add_or_remove_init_opt(&mut self, opt: InitOpt, add: bool) -> &mut Self {
+        if add {
+            self.init_opts.insert(opt);
+        } else {
+            self.init_opts.remove(&opt);
+        }
+        self
+    }
+
+    pub fn init_opts<I>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = InitOpt>,
+    {
+        for i in args.into_iter() {
+            self.init_opts.insert(i);
+        }
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn add_git_args<I, S>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<String>,
+    {
+        for arg in args {
+            self.git_args.push(arg.as_ref().to_owned());
+        }
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn add_repo_config<K, V>(&mut self, k: K, v: V) -> &mut Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.repo_config.push(format!["{}={}", k.into(), v.into()]);
+        self
+    }
+
+    pub fn add_clone_arg<I>(&mut self, arg: I) -> &mut Self
+    where
+        I: Into<String>,
+    {
+        self.clone_args.push(arg.into());
+        self
+    }
+
+    pub fn add_clone_args<I, S>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        for arg in args {
+            self.add_clone_arg(arg);
+        }
+        self
+    }
+}
 
 #[derive(Debug)]
 pub enum Origin {
