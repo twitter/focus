@@ -96,6 +96,9 @@ pub fn run(
         bail!("{} already exists", sparse_repo_path.display());
     }
 
+    //create the sparse repo dir, so other clones don't use the same name
+    std::fs::create_dir_all(&sparse_repo_path).context("Failed to create repo directory")?;
+
     let mut tmp_sparse_repo_path = PathBuf::from(app.sandbox().path());
     tmp_sparse_repo_path.push("tmp_sparse_repo");
 
