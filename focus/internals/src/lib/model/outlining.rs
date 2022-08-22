@@ -313,15 +313,9 @@ pub fn create_hierarchical_patterns(patterns: &PatternSet) -> PatternSet {
 lazy_static! {
     pub static ref DEFAULT_OUTLINING_PATTERNS: PatternSet = {
         let mut patterns = PatternSet::new();
-        patterns.insert(Pattern::Directory {
-            precedence: patterns.len(),
-            path: PathBuf::default(),
-            recursive: true,
-        });
-        patterns.insert(Pattern::Directory {
+        patterns.insert(Pattern::Verbatim {
             precedence: pattern_default_precedence(),
-            path: PathBuf::from("focus"),
-            recursive: true,
+            fragment: "/*".to_string(),
         });
         patterns
     };
