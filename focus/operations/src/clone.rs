@@ -478,7 +478,8 @@ fn clone_local(
         .context("Failed to copy references")?;
     }
 
-    set_up_remotes(&dense_repo, &sparse_repo, app).context("Failed to set up the remotes")?;
+    set_up_remotes(&dense_repo, &sparse_repo, branch, app)
+        .context("Failed to set up the remotes")?;
 
     Ok(())
 }
@@ -627,7 +628,12 @@ fn clone_shallow(
     Ok(())
 }
 
-fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<App>) -> Result<()> {
+fn set_up_remotes(
+    dense_repo: &Repository,
+    sparse_repo: &Repository,
+    main_branch_name: &str,
+    app: Arc<App>,
+) -> Result<()> {
     let remotes = dense_repo
         .remotes()
         .context("Failed to read remotes from dense repo")?;
@@ -703,7 +709,9 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
             .remote_with_fetch(
                 remote_name,
                 maybe_fetch_url.as_str(),
-                format!("refs/heads/master:refs/remotes/{}/master", remote_name).as_str(),
+                &format!(
+                    "refs/heads/{main_branch_name}:refs/remotes/{remote_name}/{main_branch_name}"
+                ),
             )
             .with_context(|| {
                 format!(
