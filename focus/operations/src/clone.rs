@@ -407,19 +407,16 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
 
         let fetch_urlish = match Url::parse(maybe_url) {
             Ok(mut url) => {
-                match url.host() {
-                    Some(host) => {
-                        if cfg!(feature = "twttr") {
-                            // Apply Twitter-specific remote treatment.
-                            if host.to_string().eq_ignore_ascii_case("git.twitter.biz") {
-                                // If the path for the fetch URL does not begin with '/ro', add that prefix.
-                                if !url.path().starts_with("/ro") {
-                                    url.set_path(&format!("/ro{}", url.path()));
-                                }
+                if let Some(host) = url.host() {
+                    if cfg!(feature = "twttr") {
+                        // Apply Twitter-specific remote treatment.
+                        if host.to_string().eq_ignore_ascii_case("git.twitter.biz") {
+                            // If the path for the fetch URL does not begin with '/ro', add that prefix.
+                            if !url.path().starts_with("/ro") {
+                                url.set_path(&format!("/ro{}", url.path()));
                             }
                         }
                     }
-                    None => {}
                 }
                 url.as_str().to_owned()
             }
