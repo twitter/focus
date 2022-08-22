@@ -431,13 +431,12 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
                 maybe_url.to_owned()
             }
         };
-        match Url::parse(maybe_push_url) {
-            Ok(_) => {}
-            Err(_) => {
-                info!(
-                    "Push URL ('{}') for remote {} is not a URL",
-                    maybe_push_url, remote_name
-                )
+        if Url::parse(maybe_push_url).is_err() {
+            info!(
+                "Push URL ('{}') for remote {} is not a URL",
+                maybe_push_url, remote_name
+            )
+         }
             }
         }
 
