@@ -15,11 +15,12 @@ use focus_util::{self, app::App, git_helper, sandbox_command::SandboxCommandOutp
 use git2::Repository;
 
 use std::collections::HashSet;
+use std::fs::OpenOptions;
 use std::process::Command;
 use std::{
     ffi::OsString,
     fs::File,
-    io::BufWriter,
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -596,6 +597,19 @@ fn compute_and_store_initial_selection(
 
     let target_set = selections.compute_complete_target_set()?;
     debug!(target_set = ?target_set, project_and_targets = ?projects_and_targets, selection_projects = ?selection.projects, selection_targets = ?selection.targets, "computing the target set");
+
+    // For open-source projects, it's likely that `.focus` will be created in
+    // their working tree and not ignored by default, which means that the next
+    // `focus add`/`focus sync` attempt will fail because the working tree is
+    // not clean. Improve the experience by ignoring `.focus` by default.
+    let info_dir = repo.git_dir().join("info");
+    std::fs::create_dir_all(&info_dir).context("Creating .git/info")?;
+    let exclude_path = info_dir.join("exclude");
+    let mut exclude_file = OpenOptions::new()
+        .append(true)
+        .open(exclude_path)
+        .context("Opening .git/info/exclude")?;
+    writeln!(exclude_file, "/.focus/").context("Writing initial .git/info/exclude")?;
 
     Ok(target_set)
 }
