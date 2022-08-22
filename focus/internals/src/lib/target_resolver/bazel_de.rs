@@ -96,6 +96,9 @@ pub enum RuleElement {
     VisibilityLabel {
         name: String,
     },
+    RuleDefaultSetting {
+        name: String,
+    },
     RuleInput {
         name: String,
     },

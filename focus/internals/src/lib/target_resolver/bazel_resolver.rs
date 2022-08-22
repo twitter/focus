@@ -303,6 +303,7 @@ impl BazelResolver {
                             | RuleElement::Dict { .. }
                             | RuleElement::Label(_)
                             | RuleElement::VisibilityLabel { .. }
+                            | RuleElement::RuleDefaultSetting { .. }
                             | RuleElement::RuleOutput { .. }
                             | RuleElement::Output { .. }
                             | RuleElement::Tristate { .. } => {
