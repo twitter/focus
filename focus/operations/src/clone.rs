@@ -393,19 +393,16 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
         };
 
         let dense_remote = dense_repo.find_remote(remote_name)?;
-        let maybe_url = if let Some(maybe_url) = dense_remote.url() {
+        let maybe_fetch_url = if let Some(maybe_url) = dense_remote.url() {
             maybe_url
         } else {
             bail!("Dense remote '{}' has no URL", remote_name);
         };
 
-        let maybe_push_url = dense_remote.pushurl().unwrap_or(maybe_url);
-        debug!(
-            "Setting up remote {} (fetch={}, push={})",
-            remote_name, maybe_url, maybe_push_url
-        );
+        let maybe_push_url = dense_remote.pushurl().unwrap_or(maybe_fetch_url);
+        debug!(?remote_name, fetch_url = ?maybe_fetch_url, push_url = ?maybe_push_url, "Setting up remote");
 
-        let fetch_urlish = match Url::parse(maybe_url) {
+        let maybe_fetch_url = match Url::parse(maybe_fetch_url) {
             Ok(mut url) => {
                 if let Some(host) = url.host() {
                     if cfg!(feature = "twttr") {
@@ -423,9 +420,9 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
             Err(_) => {
                 info!(
                     "Fetch URL ('{}') for remote {} is not a URL",
-                    maybe_url, remote_name
+                    maybe_fetch_url, remote_name
                 );
-                maybe_url.to_owned()
+                maybe_fetch_url.to_owned()
             }
         };
         if Url::parse(maybe_push_url).is_err() {
@@ -433,8 +430,6 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
                 "Push URL ('{}') for remote {} is not a URL",
                 maybe_push_url, remote_name
             )
-         }
-            }
         }
 
         // Delete existing remote in the sparse repo if it exists. This is a workaround because `remote_delete` is not working correctly.
@@ -452,12 +447,12 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
         // Add the remote to the sparse repo
         info!(
             "Setting up remote {} fetch:{} push:{}",
-            remote_name, fetch_urlish, maybe_push_url
+            remote_name, maybe_fetch_url, maybe_push_url
         );
         sparse_repo
             .remote_with_fetch(
                 remote_name,
-                fetch_urlish.as_str(),
+                maybe_fetch_url.as_str(),
                 format!("refs/heads/master:refs/remotes/{}/master", remote_name).as_str(),
             )
             .with_context(|| {
@@ -484,7 +479,6 @@ fn set_up_remotes(dense_repo: &Repository, sparse_repo: &Repository, app: Arc<Ap
                 )
             })?;
     }
-
     Ok(())
 }
 
