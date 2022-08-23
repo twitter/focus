@@ -1,15 +1,14 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use content_addressed_cache::RocksDBCache;
 use criterion::{criterion_group, criterion_main, Criterion};
 use focus_internals::index::{
-    content_hash_dependency_key, ContentHash, DependencyKey, DependencyValue, HashContext,
-    ObjectDatabase, RocksDBMemoizationCacheExt, SimpleGitOdb,
+    content_hash, ContentHash, DependencyKey, DependencyValue, HashContext, ObjectDatabase,
+    RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use focus_internals::model::repo::Repo;
 use focus_util::app::App;
@@ -19,7 +18,7 @@ fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -
         .iter()
         .map(|dep_key| {
             let dep_key = DependencyKey::DummyForTesting(Box::new(dep_key.clone()));
-            content_hash_dependency_key(ctx, &dep_key, &mut HashSet::new()).unwrap()
+            content_hash(ctx, &dep_key).unwrap()
         })
         .collect::<Vec<_>>()
 }

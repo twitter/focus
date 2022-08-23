@@ -8,7 +8,7 @@
 //! ```
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ops::Deref,
     path::PathBuf,
     sync::{
@@ -19,7 +19,7 @@ use std::{
 
 use clap::Parser;
 use focus_internals::{
-    index::{content_hash_dependency_key, ContentHash, DependencyKey, HashContext},
+    index::{content_hash, ContentHash, DependencyKey, HashContext},
     model::{repo::Repo, selection::Project},
     target::{Target, TargetSet},
 };
@@ -165,9 +165,7 @@ fn main() -> anyhow::Result<()> {
                 .iter()
                 .map(|target| {
                     let dep_key = DependencyKey::from(target.clone());
-                    let hash =
-                        content_hash_dependency_key(&hash_context, &dep_key, &mut HashSet::new())
-                            .unwrap();
+                    let hash = content_hash(&hash_context, &dep_key).unwrap();
                     ((*commit_oid, target), hash)
                 })
                 .collect::<Vec<_>>()
