@@ -16,7 +16,7 @@ use focus_util::paths::assert_focused_repo;
 use tracing::{debug, debug_span, info};
 
 use focus_internals::index::{
-    content_hash_dependency_key, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
+    content_hash, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
     ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
     FUNCTION_ID,
 };
@@ -191,7 +191,7 @@ pub fn hash(
     for target in targets {
         let target = Target::try_from(target.as_str())?;
         let dep_key = DependencyKey::from(target);
-        let hash = content_hash_dependency_key(&hash_context, &dep_key, &mut HashSet::new())?;
+        let hash = content_hash(&hash_context, &dep_key)?;
         println!("{hash} {dep_key:?}");
     }
 

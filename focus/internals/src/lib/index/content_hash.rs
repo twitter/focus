@@ -107,7 +107,11 @@ impl std::fmt::Debug for HashContext<'_> {
 
 /// Compute a content-addressable hash for the provided [`DependencyKey`] using
 /// the context in `ctx`.
-pub fn content_hash_dependency_key(
+pub fn content_hash(ctx: &HashContext, key: &DependencyKey) -> anyhow::Result<ContentHash> {
+    content_hash_dependency_key(ctx, key, &mut HashSet::new())
+}
+
+fn content_hash_dependency_key(
     ctx: &HashContext,
     key: &DependencyKey,
     keys_being_calculated: &mut HashSet<DependencyKey>,

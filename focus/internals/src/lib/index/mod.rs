@@ -11,7 +11,7 @@ mod content_hash;
 mod dependency_graph;
 mod object_database;
 
-pub use content_hash::{content_hash_dependency_key, ContentHash, HashContext};
+pub use content_hash::{content_hash, ContentHash, HashContext};
 pub use dependency_graph::{
     get_files_to_materialize, update_object_database_from_resolution, DependencyKey,
     DependencyValue, PathsToMaterializeResult,
