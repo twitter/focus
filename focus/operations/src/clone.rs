@@ -6,7 +6,7 @@ use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::model::selection::{Operation, OperationAction};
 
 use anyhow::{bail, Context, Result};
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use content_addressed_cache::RocksDBCache;
 use focus_internals::{model::repo::Repo, target::TargetSet, tracker::Tracker};
 
@@ -66,18 +66,6 @@ pub struct CloneBuilder {
 }
 
 const DEFAULT_SINGLE_BRANCH: &str = "master";
-const MASTER_HISTORY_WINDOW_DAYS: i64 = 90;
-
-fn default_master_history_window() -> Duration {
-    Duration::days(MASTER_HISTORY_WINDOW_DAYS)
-}
-
-fn default_shallow_since() -> NaiveDate {
-    let t = Local::now();
-    let nd = NaiveDate::from_ymd(t.year(), t.month(), t.day());
-
-    nd - default_master_history_window()
-}
 
 pub fn parse_shallow_since_date(s: &str) -> Result<NaiveDate> {
     Ok(NaiveDate::parse_from_str(s, "%Y-%m-%d")?)
@@ -89,7 +77,7 @@ impl Default for CloneBuilder {
             target_path: PathBuf::new(),
             fetch_url: None,
             push_url: None,
-            shallow_since: Some(default_shallow_since()),
+            shallow_since: None,
             branch_name: String::from(DEFAULT_SINGLE_BRANCH),
             filter: None,
             repo_config: Vec::new(),
