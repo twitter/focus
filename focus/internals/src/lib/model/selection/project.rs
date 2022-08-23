@@ -305,4 +305,13 @@ mod testing {
 
         Ok(())
     }
+
+    #[test]
+    fn test_get_all_targets_for_project_fails_with_invalid_subproject_name() -> Result<()> {
+        let available_projects = hashmap! { project().name => project() };
+        let target_set = project().resolve_targets_for_project(&available_projects);
+        assert!(target_set.is_err());
+
+        Ok(())
+    }
 }
