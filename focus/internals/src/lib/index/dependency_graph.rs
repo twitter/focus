@@ -432,7 +432,7 @@ sh_binary(
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        621a6472a51730cc1ec501a5069d714fc93ca744,
+                        88ac08d5fc3ad9e7c278929a6c649f113e15686c,
                     ),
                 ),
             },
@@ -668,7 +668,7 @@ def my_macro_inner(name):
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        383e25a427ae3fb408c05a181093bf9c3394e49e,
+                        8d824d3f5ea161a4532e45a8a2686a8b196ac461,
                     ),
                 ),
             },
@@ -819,7 +819,7 @@ def some_macro():
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        7dc77d66041bd414db8f012e4ad1b170cdb07a43,
+                        d340b3bb64561cebebe211ff4870602a6e385393,
                     ),
                 ),
             },
@@ -967,7 +967,7 @@ def macro2(name):
                         Label("//package1:foo"),
                     ),
                     ContentHash(
-                        b9fa2e91fe368f51890be7fe9934d6cd218dcf23,
+                        92e8d6005643b9d223d1196651c00da334edcb2a,
                     ),
                 ),
             },
@@ -1241,7 +1241,7 @@ def foo(name, srcs):
                         Label("//package1/some/sub/package:foo"),
                     ),
                     ContentHash(
-                        655e2897252ab8640a8f020ff3ce7f676b448c21,
+                        b326065aa1cb441a90f10d302dfa3af954c3a45f,
                     ),
                 ),
                 (
@@ -1249,7 +1249,7 @@ def foo(name, srcs):
                         Label("//package1/some/sub/package:foo.sh"),
                     ),
                     ContentHash(
-                        aa178735684b802cca86ff8c7b3599055f89e901,
+                        ec800f4eb7f1921099c813d7fd10820322366e43,
                     ),
                 ),
             },

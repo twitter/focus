@@ -1,7 +1,6 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::{BTreeSet, HashSet};
@@ -27,7 +26,7 @@ use super::DependencyKey;
 
 /// This value is mixed into all content hashes. Update this value when
 /// content-hashing changes in a backward-incompatible way.
-const VERSION: usize = 6;
+const VERSION: usize = 7;
 
 /// The hash of a [`DependencyKey`]'s syntactic content.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -136,10 +135,11 @@ These are the keys currently being hashed: {:?}",
         }
     }
 
-    let mut buf = String::new();
-    write!(&mut buf, "DependencyKeyV{VERSION}")?;
-
-    match key {
+    enum KeyOrPath<'a> {
+        Key(DependencyKey),
+        Path(&'a Path),
+    }
+    let (kind, maybe_label, values_to_hash) = match key {
         DependencyKey::BazelPackage(
             label @ Label {
                 external_repository,
@@ -147,41 +147,38 @@ These are the keys currently being hashed: {:?}",
                 target_name: _,
             },
         ) => {
-            buf.push_str("::BazelPackage(");
-            buf.push_str(&label.to_string());
-
-            buf.push(',');
             let path: PathBuf = path_components.iter().collect();
-            buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
+            let mut dep_keys = vec![DependencyKey::Path(path.clone())];
 
-            if external_repository.is_none() {
-                let mut loaded_deps = match get_tree_for_path(ctx, &path)? {
-                    Some(tree) => find_load_dependencies(ctx, &tree)?,
-                    None => Default::default(),
-                };
+            dep_keys.extend(match external_repository {
+                Some(_) => vec![],
+                None => {
+                    let mut loaded_deps = match get_tree_for_path(ctx, &path)? {
+                        Some(tree) => find_load_dependencies(ctx, &tree)?,
+                        None => Default::default(),
+                    };
 
-                let prelude_deps = get_prelude_deps(ctx)?;
-                loaded_deps.extend(prelude_deps);
-
-                for label in loaded_deps {
-                    let key = DependencyKey::BazelBuildFile(label);
-                    buf.push_str(", ");
-                    buf.push_str(
-                        &content_hash_dependency_key(ctx, &key, keys_being_calculated)?.to_string(),
-                    );
+                    let prelude_deps = get_prelude_deps(ctx)?;
+                    loaded_deps.extend(prelude_deps);
+                    loaded_deps
+                        .into_iter()
+                        .map(DependencyKey::BazelBuildFile)
+                        .collect()
                 }
-            }
+            });
 
             // Every package has an implicit dependency on the `WORKSPACE` file.
-            let key = DependencyKey::BazelBuildFile(Label {
+            dep_keys.push(DependencyKey::BazelBuildFile(Label {
                 external_repository: None,
                 path_components: Vec::new(),
                 target_name: TargetName::Name("WORKSPACE".to_string()),
-            });
-            buf.push_str(", ");
-            buf.push_str(
-                &content_hash_dependency_key(ctx, &key, keys_being_calculated)?.to_string(),
-            );
+            }));
+
+            (
+                "BazelPackage",
+                Some(label),
+                dep_keys.into_iter().map(KeyOrPath::Key).collect(),
+            )
         }
 
         DependencyKey::BazelBuildFile(
@@ -191,91 +188,90 @@ These are the keys currently being hashed: {:?}",
                 target_name,
             },
         ) => {
-            buf.push_str("::BazelBuildFile(");
-            buf.push_str(&label.to_string());
-
-            if external_repository.is_none() {
-                match target_name {
-                    TargetName::Name(target_name) => {
-                        let path: PathBuf = {
-                            let mut path: PathBuf = path_components.iter().collect();
-                            path.push(target_name);
-                            path
-                        };
-                        buf.push_str(", ");
-                        buf.push_str(&content_hash_tree_path(ctx, &path)?.to_string());
-
-                        let loaded_deps = match ctx.head_tree.get_path(&path) {
-                            Ok(tree_entry) => {
-                                if is_tree_entry_relevant_to_build_graph(&tree_entry) {
-                                    extract_load_statements_from_tree_entry(ctx, &tree_entry)?
-                                } else {
-                                    Default::default()
-                                }
-                            }
-                            Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
-                            Err(e) => return Err(e.into()),
-                        };
-                        for label in loaded_deps {
-                            let dep_key = DependencyKey::BazelBuildFile(label);
-
-                            // HACK: one of our `.bzl` files includes a
-                            // reference to its own label in a doc-comment,
-                            // which causes it to be picked up by our naive
-                            // build file parser. Until the build file parser is
-                            // hardened, this suffices to parse the rest of the
-                            // `.bzl` files in our projects.
-                            if key == &dep_key {
-                                continue;
-                            }
-
-                            buf.push_str(", ");
-                            buf.push_str(
-                                &content_hash_dependency_key(ctx, &dep_key, keys_being_calculated)?
-                                    .to_string(),
-                            );
-                        }
-                    }
-
-                    TargetName::Ellipsis => {
-                        anyhow::bail!(
+            let mut dep_keys = match (external_repository, target_name) {
+                (Some(_), _) => Vec::new(),
+                (None, TargetName::Ellipsis) => {
+                    anyhow::bail!(
                             "Got label referring to a ellipsis, but it should be a BUILD or .bzl file: {:?}",
                             label
                         );
-                    }
                 }
-            }
+
+                (None, TargetName::Name(target_name)) => {
+                    let path: PathBuf = {
+                        let mut path: PathBuf = path_components.iter().collect();
+                        path.push(target_name);
+                        path
+                    };
+                    let mut dep_keys = vec![DependencyKey::Path(path.clone())];
+
+                    let loaded_deps = match ctx.head_tree.get_path(&path) {
+                        Ok(tree_entry) => {
+                            if is_tree_entry_relevant_to_build_graph(&tree_entry) {
+                                extract_load_statements_from_tree_entry(ctx, &tree_entry)?
+                            } else {
+                                Default::default()
+                            }
+                        }
+                        Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
+                        Err(e) => return Err(e.into()),
+                    };
+
+                    dep_keys.extend(
+                        loaded_deps
+                            .into_iter()
+                            .map(DependencyKey::BazelBuildFile)
+                            .filter(|dep_key| key != dep_key),
+                    );
+
+                    dep_keys
+                }
+            };
 
             // Every `.bzl` file (or similar) has an implicit dependency on the
             // `WORKSPACE` file. However, the `WORKSPACE` file itself may `load`
             // `.bzl` files in the repository. To avoid a circular dependency,
             // use only the textual hash of the WORKSPACE as the dependency key
             // here.
-            let workspace_key = DependencyKey::Path("WORKSPACE".into());
-            buf.push_str(", ");
-            buf.push_str(
-                &content_hash_dependency_key(ctx, &workspace_key, keys_being_calculated)?
-                    .to_string(),
-            );
+            dep_keys.push(DependencyKey::Path("WORKSPACE".into()));
+
+            (
+                "BazelBuildFile",
+                Some(label),
+                dep_keys.into_iter().map(KeyOrPath::Key).collect(),
+            )
         }
 
-        DependencyKey::Path(path) => {
-            buf.push_str("::Path(");
-            buf.push_str(&content_hash_tree_path(ctx, path)?.to_string());
-        }
+        DependencyKey::Path(path) => ("Path", None, vec![KeyOrPath::Path(path)]),
 
-        DependencyKey::DummyForTesting(inner_dep_key) => {
-            buf.push_str("DummyForTesting(");
-            buf.push_str(
-                &content_hash_dependency_key(ctx, inner_dep_key.borrow(), keys_being_calculated)?
-                    .to_string(),
-            );
-        }
+        DependencyKey::DummyForTesting(inner_dep_key) => (
+            "DummyForTesting",
+            None,
+            vec![KeyOrPath::Key(inner_dep_key.as_ref().clone())],
+        ),
     };
 
-    buf.push(')');
+    let mut buf = String::new();
+    write!(&mut buf, "DependencyKeyV{VERSION}::{kind}(")?;
+    if let Some(label) = maybe_label {
+        write!(&mut buf, "{label}, ")?;
+    }
+    let hashes = values_to_hash
+        .into_iter()
+        .map(|key_or_hash| match key_or_hash {
+            KeyOrPath::Key(dep_key) => {
+                content_hash_dependency_key(ctx, &dep_key, keys_being_calculated)
+            }
+            KeyOrPath::Path(path) => content_hash_tree_path(ctx, path),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for hash in hashes {
+        write!(&mut buf, "{hash}, ")?;
+    }
+    write!(&mut buf, ")")?;
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
     let hash = ContentHash(hash);
+
     if let Some(old_value) = ctx
         .caches
         .borrow_mut()
