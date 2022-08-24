@@ -483,7 +483,7 @@ mod tests {
                             Label("//project_a/src/main/java/com/example/cmdline:runner"),
                         ),
                         ContentHash(
-                            195d337f9237a077659f7dac8b9c49cd9400c4df,
+                            03ef8e36eece908c6ac3ff6ec3ce571b1a1336e5,
                         ),
                     ),
                 },
