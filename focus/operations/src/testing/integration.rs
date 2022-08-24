@@ -101,6 +101,7 @@ impl RepoPairFixture {
         crate::clone::run(
             self.sparse_repo_path.clone(),
             clone_args,
+            None,
             &self.tracker,
             self.app.clone(),
         )

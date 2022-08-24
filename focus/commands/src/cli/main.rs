@@ -25,7 +25,7 @@ use focus_util::{
 
 use focus_internals::tracker::Tracker;
 use focus_operations::{
-    clone::CloneArgs,
+    clone::{CloneArgs, ClonedRepoTemplate},
     maintenance::{self, ScheduleOpts},
     sync::SyncMode,
 };
@@ -57,6 +57,9 @@ struct NewArgs {
 
     /// Initial projects and targets to add to the repo.
     projects_and_targets: Vec<String>,
+
+    #[clap(long, possible_values = ClonedRepoTemplate::VARIANTS)]
+    template: Option<ClonedRepoTemplate>,
 }
 
 #[derive(Parser, Debug)]
@@ -691,6 +694,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             days_of_history,
             copy_branches,
             projects_and_targets,
+            template,
         })
         | Subcommand::Clone(NewArgs {
             dense_repo,
@@ -699,6 +703,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             days_of_history,
             copy_branches,
             projects_and_targets,
+            template,
         }) => {
             let origin = focus_operations::clone::Origin::try_from(dense_repo.as_str())?;
             let sparse_repo = {
@@ -726,7 +731,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 ..Default::default()
             };
 
-            focus_operations::clone::run(sparse_repo.clone(), clone_args, tracker, app)?;
+            focus_operations::clone::run(sparse_repo.clone(), clone_args, template, tracker, app)?;
 
             perform_pending_migrations(&sparse_repo)
                 .context("Performing initial migrations after clone")?;

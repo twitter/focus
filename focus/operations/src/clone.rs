@@ -323,6 +323,7 @@ impl Default for CloneArgs {
 pub fn run(
     sparse_repo_path: PathBuf,
     clone_args: CloneArgs,
+    template: Option<ClonedRepoTemplate>,
     tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
@@ -351,25 +352,48 @@ pub fn run(
     tmp_sparse_repo_path.push("tmp_sparse_repo");
 
     let configure_repo_then_move_in_place = || -> Result<()> {
-        match origin {
-            Origin::Local(dense_repo_path) => clone_local(
-                &dense_repo_path,
-                &tmp_sparse_repo_path,
-                &branch,
-                copy_branches,
-                days_of_history,
-                app.clone(),
-            ),
-            Origin::Remote(url) => clone_remote(
-                url,
-                &tmp_sparse_repo_path,
-                &branch,
-                days_of_history,
-                app.clone(),
-            ),
-        }?;
+        let template = match origin {
+            Origin::Local(dense_repo_path) => {
+                clone_local(
+                    &dense_repo_path,
+                    &tmp_sparse_repo_path,
+                    &branch,
+                    copy_branches,
+                    days_of_history,
+                    app.clone(),
+                )?;
 
-        set_up_sparse_repo(&tmp_sparse_repo_path, projects_and_targets, app.clone())?;
+                if template.is_some() {
+                    warn!(
+                        ?template,
+                        "Repo template is ignored since this is a local clone"
+                    );
+                }
+                None
+            }
+            Origin::Remote(url) => {
+                clone_remote(
+                    url.clone(),
+                    &tmp_sparse_repo_path,
+                    &branch,
+                    days_of_history,
+                    app.clone(),
+                )?;
+
+                let template = template.or_else(|| ClonedRepoTemplate::from_url(url.clone()));
+                if let Some(template) = template {
+                    info!(?template, %url, "Using repo template for url");
+                }
+                template
+            }
+        };
+
+        set_up_sparse_repo(
+            &tmp_sparse_repo_path,
+            projects_and_targets,
+            template,
+            app.clone(),
+        )?;
 
         if do_post_clone_fetch {
             fetch_default_remote(&tmp_sparse_repo_path, app.clone())
@@ -537,6 +561,7 @@ fn clone_remote(
 fn set_up_sparse_repo(
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
+    template: Option<ClonedRepoTemplate>,
     app: Arc<App>,
 ) -> Result<()> {
     {
@@ -554,7 +579,7 @@ fn set_up_sparse_repo(
     // N.B. we must re-open the repo because otherwise it has no trees...
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
-    let target_set = compute_and_store_initial_selection(&repo, projects_and_targets)?;
+    let target_set = compute_and_store_initial_selection(&repo, projects_and_targets, template)?;
     debug!(target_set = ?target_set, "Complete target set");
 
     let odb = RocksDBCache::new(repo.underlying());
@@ -582,12 +607,31 @@ fn set_up_sparse_repo(
 fn compute_and_store_initial_selection(
     repo: &Repo,
     projects_and_targets: Vec<String>,
+    template: Option<ClonedRepoTemplate>,
 ) -> Result<TargetSet> {
     let mut selections = repo.selection_manager()?;
     let operations = projects_and_targets
         .iter()
         .map(|value| Operation::new(OperationAction::Add, value))
         .collect::<Vec<Operation>>();
+
+    // FIXME: ideally, we would check to make sure there is no `focus`
+    // directory, aand then create `focus/mandatory.projects.json` (and add it to
+    // the gitignore), but we don't have any facilities for modifying the
+    // mandatory projects programmatically.
+    let operations = match template {
+        None => operations,
+        Some(template) => operations
+            .into_iter()
+            .chain(
+                template
+                    .entries()
+                    .into_iter()
+                    .map(|entry| Operation::new(OperationAction::Add, entry)),
+            )
+            .collect(),
+    };
+
     let result = selections.process(&operations)?;
     if !result.is_success() {
         bail!("Selecting projects and targets failed");
@@ -908,13 +952,58 @@ fn set_up_bazel_preflight_script(sparse_repo: &Path) -> Result<()> {
     Ok(())
 }
 
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    strum_macros::Display,
+    strum_macros::EnumString,
+    strum_macros::EnumVariantNames,
+    strum_macros::IntoStaticStr,
+    strum_macros::EnumIter,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum ClonedRepoTemplate {
+    Envoy,
+    None,
+}
+
+impl ClonedRepoTemplate {
+    pub fn from_url(url: Url) -> Option<Self> {
+        match url.domain() {
+            Some("github.com") => {
+                let path = url.path();
+                let path = path.strip_suffix('/').unwrap_or(path);
+                match path {
+                    "/envoyproxy/envoy" => Some(Self::Envoy),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn entries(&self) -> impl IntoIterator<Item = &'static str> {
+        match self {
+            ClonedRepoTemplate::Envoy => {
+                vec!["directory:bazel", "directory:api", "directory:tools"]
+            }
+            ClonedRepoTemplate::None => vec![],
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::testing::integration::RepoPairFixture;
+    use crate::{clone::ClonedRepoTemplate, testing::integration::RepoPairFixture};
     use focus_internals::target::Target;
     use focus_testing::init_logging;
 
     use anyhow::Result;
+    use url::Url;
 
     #[test]
     fn clone_contains_an_initial_layer_set() -> Result<()> {
@@ -943,6 +1032,28 @@ mod test {
 
         assert!(selection.targets.contains(&library_a_target));
         assert!(selection.projects.contains(project_b));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_template_from_url() -> Result<()> {
+        assert_eq!(
+            ClonedRepoTemplate::from_url(Url::parse("https://github.com/envoyproxy/envoy")?),
+            Some(ClonedRepoTemplate::Envoy)
+        );
+        assert_eq!(
+            ClonedRepoTemplate::from_url(Url::parse("https://github.com/envoyproxy/envoy/")?),
+            Some(ClonedRepoTemplate::Envoy)
+        );
+        assert_eq!(
+            ClonedRepoTemplate::from_url(Url::parse("https://gitlab.com/envoyproxy/envoy/")?),
+            None
+        );
+        assert_eq!(
+            ClonedRepoTemplate::from_url(Url::parse("https://github.com/kubernetes/kubernetes")?),
+            None
+        );
 
         Ok(())
     }
