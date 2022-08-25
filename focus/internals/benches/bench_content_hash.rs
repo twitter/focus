@@ -12,7 +12,6 @@ use focus_internals::index::{
     ObjectDatabase, RocksDBMemoizationCacheExt, SimpleGitOdb,
 };
 use focus_internals::model::repo::Repo;
-use focus_internals::target::TargetSet;
 use focus_util::app::App;
 
 fn content_hash_dependency_keys(ctx: &HashContext, dep_keys: &[DependencyKey]) -> Vec<ContentHash> {
