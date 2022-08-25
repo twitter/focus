@@ -37,7 +37,7 @@ pub enum Pattern {
     },
 }
 
-fn pattern_default_precedence() -> usize {
+pub fn pattern_default_precedence() -> usize {
     usize::MAX
 }
 
@@ -311,7 +311,7 @@ pub fn create_hierarchical_patterns(patterns: &PatternSet) -> PatternSet {
 }
 
 lazy_static! {
-    pub static ref BASELINE_PATTERNS: PatternSet = {
+    pub static ref DEFAULT_OUTLINING_PATTERNS: PatternSet = {
         let mut patterns = PatternSet::new();
         patterns.insert(Pattern::Directory {
             precedence: patterns.len(),
@@ -319,7 +319,7 @@ lazy_static! {
             recursive: true,
         });
         patterns.insert(Pattern::Directory {
-            precedence: usize::MAX,
+            precedence: pattern_default_precedence(),
             path: PathBuf::from("focus"),
             recursive: true,
         });
@@ -368,15 +368,15 @@ mod testing {
     #[test]
     fn pattern_set_ops() {
         let mut pattern_set = PatternSet::new();
-        pattern_set.extend(BASELINE_PATTERNS.clone());
+        pattern_set.extend(DEFAULT_OUTLINING_PATTERNS.clone());
         pattern_set.insert(Pattern::Directory {
             precedence: pattern_set.len(),
             path: PathBuf::from("project_a"),
             recursive: true,
         });
         let count = pattern_set.len();
-        pattern_set.retain(|pattern| !BASELINE_PATTERNS.contains(pattern));
-        assert_eq!(pattern_set.len(), count - BASELINE_PATTERNS.len());
+        pattern_set.retain(|pattern| !DEFAULT_OUTLINING_PATTERNS.contains(pattern));
+        assert_eq!(pattern_set.len(), count - DEFAULT_OUTLINING_PATTERNS.len());
     }
 
     #[test]

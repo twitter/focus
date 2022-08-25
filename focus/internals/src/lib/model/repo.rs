@@ -32,7 +32,10 @@ use crate::{
 
 use super::{
     configuration::{Configuration, IndexConfig},
-    outlining::{PatternContainer, PatternSet, PatternSetWriter, BASELINE_PATTERNS},
+    outlining::{
+        pattern_default_precedence, PatternContainer, PatternSet, PatternSetWriter,
+        DEFAULT_OUTLINING_PATTERNS,
+    },
     selection::{Selection, SelectionManager},
 };
 
@@ -228,7 +231,18 @@ impl WorkingTree {
     }
 
     pub fn default_working_tree_patterns(&self) -> Result<PatternSet> {
-        Ok(BASELINE_PATTERNS.clone())
+        let mut patterns = PatternSet::new();
+        patterns.insert(Pattern::Directory {
+            precedence: patterns.len(),
+            path: PathBuf::default(),
+            recursive: true,
+        });
+        patterns.insert(Pattern::Directory {
+            precedence: pattern_default_precedence(),
+            path: PathBuf::from("focus"),
+            recursive: true,
+        });
+        Ok(patterns)
     }
 
     #[allow(dead_code)]
@@ -430,12 +444,20 @@ impl OutliningTree {
         let repo = repo.git_repo();
         let commit = repo.find_commit(commit_id).context("Resolving commit")?;
         let tree = commit.tree().context("Resolving tree")?;
-        let pattern_file = tree
-            .get_path(Path::new(OUTLINING_PATTERN_FILE_NAME)).with_context(|| format!(
-                "No outlining pattern file (named '{}') was found in the repository at this commit ({})",
-                OUTLINING_PATTERN_FILE_NAME,
-                &commit.id().to_string(),
-            ))?;
+        let pattern_file = match tree.get_path(Path::new(OUTLINING_PATTERN_FILE_NAME)) {
+            Ok(pattern_file) => pattern_file,
+            Err(err) if err.code() == git2::ErrorCode::NotFound => {
+                return Ok(DEFAULT_OUTLINING_PATTERNS.clone())
+            }
+            Err(err) => {
+                anyhow::bail!(
+                    "The outlining pattern file (named '{}') could not be loaded from the repository at this commit ({}): {}",
+                    OUTLINING_PATTERN_FILE_NAME,
+                    &commit.id().to_string(),
+                    err,
+                );
+            }
+        };
         let pattern_object = pattern_file.to_object(repo).context("Resolving object")?;
         let pattern_blob = pattern_object.as_blob().ok_or_else(|| {
             anyhow::anyhow!(

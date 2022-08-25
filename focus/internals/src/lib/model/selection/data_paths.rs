@@ -1,7 +1,8 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
+use tracing::warn;
 
 use std::path::PathBuf;
 
@@ -35,16 +36,14 @@ impl DataPaths {
 
     fn ensure_directories_are_set_up_correctly(&self) -> Result<()> {
         if !self.focus_dir.is_dir() {
-            bail!(
-                "The repo must have a 'focus' directory at the top of the working tree: expected {} to be a directory",
-                &self.focus_dir.display()
+            warn!(
+                focus_dir = ?self.focus_dir,
+                "The repo does not have a 'focus' directory at the top of the working tree; no focus configuration will be applied",
             );
-        }
-
-        if !self.project_dir.is_dir() {
-            bail!(
-                "The repo must have a 'focus/projects' directory: expected {} to be a directory",
-                &self.focus_dir.display()
+        } else if !self.project_dir.is_dir() {
+            warn!(
+                project_dir = ?self.project_dir,
+                "The repo does not have a 'focus/projects' directory at the top of the working tree; no focus projects will be loaded",
             );
         }
 

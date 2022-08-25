@@ -61,13 +61,16 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     /// Constructs a collection, loading all entities from the directory. The `extension` here is somewhat special in that it is treated as a suffix and can therefore contain period characters, allowing for files to have extensions such `foo.json`
     pub fn new(directory: impl AsRef<Path>, extension: OsString) -> Result<Self> {
         let directory = directory.as_ref().to_owned();
+        let directory_exists = directory.is_dir();
         let mut instance = Self {
             directory,
             extension,
             underlying: Default::default(),
         };
 
-        instance.revert()?;
+        if directory_exists {
+            instance.revert()?;
+        }
 
         Ok(instance)
     }
