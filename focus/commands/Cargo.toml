@@ -58,4 +58,6 @@ twttr = [
 ]
 
 [build-dependencies]
-vergen = "7.3.0"
+# Later versions depend on a version of `enum-iterator` which is not compatible
+# with our MSRV 1.60 (used in internal builds).
+vergen = "=7.2.0"
