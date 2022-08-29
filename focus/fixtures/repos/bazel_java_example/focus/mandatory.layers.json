@@ -1,0 +1,11 @@
+{
+    "layers": [
+        {
+            "name": "mandatory",
+            "description": "Mandatory dependencies imposed by the repository",
+            "coordinates": [
+                "bazel://mandatory_z/..."
+            ]
+        }
+    ]
+}

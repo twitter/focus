@@ -1,0 +1,11 @@
+{
+    "layers": [
+        {
+            "name": "team_zissou/project_b",
+            "description": "Stuff relating to project B",
+            "coordinates": [
+                "bazel://project_b/..."
+            ]
+        }
+    ]
+}

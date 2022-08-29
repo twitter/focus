@@ -1,0 +1,31 @@
+[package]
+name = "focus-internals"
+version = "0.3.3"
+authors = ["Wilhelm Bierbaum <wilhelm@twitter.com>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.45"
+dirs = "4.0.0"
+git2 = { version = "0.13.23", default-features = false }
+lazy_static = "1.4.0"
+log = "0.4.14"
+prost = "0.9.0"
+serde = "1.0.130"
+serde_derive = "1.0.130"
+serde_json = "1.0.68"
+tempfile = "3.2.0"
+termion = "1.5.6"
+thiserror = "1.0.30"
+url = "2.2.2"
+uuid = { version = "0.8.2", features = ["v4"] }
+walkdir = "2.3.2"
+nix = "0.23.0"
+rayon = "1.5.1"
+env_logger = "0.9.0"
+
+[lib]
+name = "focus_internals"
+path = "src/lib/lib.rs"
