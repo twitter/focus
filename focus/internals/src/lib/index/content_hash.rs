@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::cell::RefCell;
-use std::collections::HashMap;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::{Display, Write};
 use std::hash::Hash;
 use std::path::Path;
@@ -107,31 +106,19 @@ impl std::fmt::Debug for HashContext<'_> {
 /// Compute a content-addressable hash for the provided [`DependencyKey`] using
 /// the context in `ctx`.
 pub fn content_hash(ctx: &HashContext, key: &DependencyKey) -> anyhow::Result<ContentHash> {
-    content_hash_dependency_key(ctx, key, &mut HashSet::new())
+    content_hash_dependency_key(ctx, key)
 }
 
 fn content_hash_dependency_key(
     ctx: &HashContext,
     key: &DependencyKey,
-    keys_being_calculated: &mut HashSet<DependencyKey>,
 ) -> anyhow::Result<ContentHash> {
     debug!(?key, "Hashing dependency key");
 
     {
         let cache = &mut ctx.caches.borrow_mut().dependency_key_cache;
-        match cache.get(key) {
-            Some(hash) => return Ok(hash.to_owned()),
-            None => {
-                if !keys_being_calculated.insert(key.clone()) {
-                    anyhow::bail!(
-                        "\
-Circular dependency when hashing: {:?}
-These are the keys currently being hashed: {:?}",
-                        key,
-                        keys_being_calculated.iter().collect::<BTreeSet<_>>(),
-                    );
-                }
-            }
+        if let Some(hash) = cache.get(key) {
+            return Ok(hash.to_owned());
         }
     }
 
@@ -259,9 +246,7 @@ These are the keys currently being hashed: {:?}",
     let hashes = values_to_hash
         .into_iter()
         .map(|key_or_hash| match key_or_hash {
-            KeyOrPath::Key(dep_key) => {
-                content_hash_dependency_key(ctx, &dep_key, keys_being_calculated)
-            }
+            KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, &dep_key),
             KeyOrPath::Path(path) => content_hash_tree_path(ctx, path),
         })
         .collect::<Result<Vec<_>, _>>()?;
