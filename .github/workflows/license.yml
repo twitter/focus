@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install `addlicense``
+      - name: Install `addlicense`
         run: go install github.com/google/addlicense@latest
 
       - name: Check licensing
