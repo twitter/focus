@@ -257,21 +257,21 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
         let ContentHash(key_oid) = content_hash(ctx, key)?;
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
         let value_oid = ctx
-            .repo
+            .repo()
             .blob(&payload)
             .context("writing DependencyValue as blob")?;
 
-        let mut kv_tree = match ctx.repo.find_reference(Self::REF_NAME) {
+        let mut kv_tree = match ctx.repo().find_reference(Self::REF_NAME) {
             Ok(reference) => {
                 let tree = reference
                     .peel_to_tree()
                     .context("peeling kv tree reference")?;
-                ctx.repo
+                ctx.repo()
                     .treebuilder(Some(&tree))
                     .context("initializing TreeBuilder from kv tree reference")?
             }
             Err(e) if e.code() == git2::ErrorCode::NotFound => ctx
-                .repo
+                .repo()
                 .treebuilder(None)
                 .context("initializing new TreeBuilder")?,
             Err(e) => return Err(e.into()),
@@ -280,7 +280,7 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
             .insert(key_oid.to_string(), value_oid, git2::FileMode::Blob.into())
             .context("adding entry to tree")?;
         let kv_tree_oid = kv_tree.write().context("writing new tree")?;
-        ctx.repo
+        ctx.repo()
             .reference(
                 Self::REF_NAME,
                 kv_tree_oid,
@@ -332,11 +332,7 @@ mod tests {
 
         let head_tree_oid = repo.treebuilder(None)?.write()?;
         let head_tree = repo.find_tree(head_tree_oid)?;
-        let ctx = HashContext {
-            repo: &repo,
-            head_tree: &head_tree,
-            caches: Default::default(),
-        };
+        let ctx = HashContext::new(&repo, &head_tree);
         let key = DependencyKey::BazelPackage(Label {
             external_repository: None,
             path_components: vec!["foo".to_string(), "bar".to_string()],

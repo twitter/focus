@@ -79,13 +79,13 @@ pub struct Caches {
 /// Context used to compute a content hash.
 pub struct HashContext<'a> {
     /// The Git repository.
-    pub repo: &'a git2::Repository,
+    repo: &'a git2::Repository,
 
     /// The tree corresponding to the current working copy.
-    pub head_tree: &'a git2::Tree<'a>,
+    head_tree: &'a git2::Tree<'a>,
 
     /// Associated caches.
-    pub caches: RefCell<Caches>,
+    caches: RefCell<Caches>,
 }
 
 impl std::fmt::Debug for HashContext<'_> {
@@ -100,6 +100,27 @@ impl std::fmt::Debug for HashContext<'_> {
             .field("head_tree", &head_tree.id())
             .field("caches", &caches)
             .finish()
+    }
+}
+
+impl<'repo> HashContext<'repo> {
+    /// Construct a new hash context from the given repository state.
+    pub fn new(repo: &'repo git2::Repository, head_tree: &'repo git2::Tree) -> Self {
+        Self {
+            repo,
+            head_tree,
+            caches: Default::default(),
+        }
+    }
+
+    /// Get the underlying repository.
+    pub fn repo(&self) -> &git2::Repository {
+        self.repo
+    }
+
+    /// Get the underlying head tree.
+    pub fn head_tree(&self) -> &git2::Tree {
+        self.head_tree
     }
 }
 
