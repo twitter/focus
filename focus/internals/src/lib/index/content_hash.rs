@@ -159,15 +159,16 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Compute a content-addressable hash for the provided [`DependencyKey`] using
 /// the context in `ctx`.
 pub fn content_hash(ctx: &HashContext, key: &DependencyKey) -> Result<ContentHash> {
+    let key = key.clone();
     content_hash_dependency_key(ctx, key)
 }
 
-fn content_hash_dependency_key(ctx: &HashContext, key: &DependencyKey) -> Result<ContentHash> {
+fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<ContentHash> {
     debug!(?key, "Hashing dependency key");
 
     {
         let cache = &mut ctx.caches.borrow_mut().dependency_key_cache;
-        if let Some(hash) = cache.get(key) {
+        if let Some(hash) = cache.get(&key) {
             return Ok(hash.to_owned());
         }
     }
@@ -176,7 +177,7 @@ fn content_hash_dependency_key(ctx: &HashContext, key: &DependencyKey) -> Result
         Key(DependencyKey),
         Path(&'a Path),
     }
-    let (kind, maybe_label, values_to_hash) = match key {
+    let (kind, maybe_label, values_to_hash) = match &key {
         DependencyKey::BazelPackage(
             label @ Label {
                 external_repository,
@@ -258,7 +259,7 @@ fn content_hash_dependency_key(ctx: &HashContext, key: &DependencyKey) -> Result
                         loaded_deps
                             .into_iter()
                             .map(DependencyKey::BazelBuildFile)
-                            .filter(|dep_key| key != dep_key),
+                            .filter(|dep_key| &key != dep_key),
                     );
 
                     dep_keys
@@ -296,7 +297,7 @@ fn content_hash_dependency_key(ctx: &HashContext, key: &DependencyKey) -> Result
     let hashes = values_to_hash
         .into_iter()
         .map(|key_or_hash| match key_or_hash {
-            KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, &dep_key),
+            KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, dep_key),
             KeyOrPath::Path(path) => content_hash_tree_path(ctx, path),
         })
         .collect::<Result<Vec<_>>>()?;
