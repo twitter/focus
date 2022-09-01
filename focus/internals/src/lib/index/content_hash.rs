@@ -9,9 +9,9 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::Context;
 use lazy_static::lazy_static;
 use regex::Regex;
+use thiserror::Error;
 use tracing::debug;
 use tracing::error;
 use tracing::trace;
@@ -48,7 +48,7 @@ impl Display for ContentHash {
 impl FromStr for ContentHash {
     type Err = git2::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let oid = git2::Oid::from_str(s)?;
         Ok(ContentHash(oid))
     }
@@ -105,10 +105,7 @@ impl std::fmt::Debug for HashContext<'_> {
 
 impl<'repo> HashContext<'repo> {
     /// Construct a new hash context from the given repository state.
-    pub fn new(
-        repo: &'repo git2::Repository,
-        head_tree: &'repo git2::Tree,
-    ) -> anyhow::Result<Self> {
+    pub fn new(repo: &'repo git2::Repository, head_tree: &'repo git2::Tree) -> Result<Self> {
         Ok(Self {
             repo,
             head_tree,
@@ -127,16 +124,45 @@ impl<'repo> HashContext<'repo> {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("could not read tree entry: {0}")]
+    ReadTreeEntry(#[source] git2::Error),
+
+    #[error("could not hash object: {0}")]
+    HashObject(#[source] git2::Error),
+
+    #[error("I/O error: {0}")]
+    Fmt(#[from] std::fmt::Error),
+
+    #[error("bug: {0}")]
+    Bug(String),
+}
+
+fn clone_git_error(error: &git2::Error) -> git2::Error {
+    git2::Error::new(error.code(), error.class(), error.message())
+}
+
+impl Clone for Error {
+    fn clone(&self) -> Self {
+        match self {
+            Self::ReadTreeEntry(e) => Self::ReadTreeEntry(clone_git_error(e)),
+            Self::HashObject(e) => Self::HashObject(clone_git_error(e)),
+            Self::Fmt(e) => Self::Fmt(*e),
+            Self::Bug(message) => Self::Bug(message.clone()),
+        }
+    }
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
 /// Compute a content-addressable hash for the provided [`DependencyKey`] using
 /// the context in `ctx`.
-pub fn content_hash(ctx: &HashContext, key: &DependencyKey) -> anyhow::Result<ContentHash> {
+pub fn content_hash(ctx: &HashContext, key: &DependencyKey) -> Result<ContentHash> {
     content_hash_dependency_key(ctx, key)
 }
 
-fn content_hash_dependency_key(
-    ctx: &HashContext,
-    key: &DependencyKey,
-) -> anyhow::Result<ContentHash> {
+fn content_hash_dependency_key(ctx: &HashContext, key: &DependencyKey) -> Result<ContentHash> {
     debug!(?key, "Hashing dependency key");
 
     {
@@ -202,10 +228,10 @@ fn content_hash_dependency_key(
             let mut dep_keys = match (external_repository, target_name) {
                 (Some(_), _) => Vec::new(),
                 (None, TargetName::Ellipsis) => {
-                    anyhow::bail!(
-                            "Got label referring to a ellipsis, but it should be a BUILD or .bzl file: {:?}",
-                            label
-                        );
+                    return Err(Error::Bug(format!(
+                        "Got label referring to a ellipsis, but it should be a BUILD or .bzl file: {:?}",
+                        label
+                    )));
                 }
 
                 (None, TargetName::Name(target_name)) => {
@@ -225,7 +251,7 @@ fn content_hash_dependency_key(
                             }
                         }
                         Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
-                        Err(e) => return Err(e.into()),
+                        Err(e) => return Err(Error::ReadTreeEntry(e)),
                     };
 
                     dep_keys.extend(
@@ -273,12 +299,13 @@ fn content_hash_dependency_key(
             KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, &dep_key),
             KeyOrPath::Path(path) => content_hash_tree_path(ctx, path),
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>>>()?;
     for hash in hashes {
         write!(&mut buf, "{hash}, ")?;
     }
     write!(&mut buf, ")")?;
-    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
+    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())
+        .map_err(Error::HashObject)?;
     let hash = ContentHash(hash);
 
     if let Some(old_value) = ctx
@@ -298,7 +325,7 @@ fn content_hash_dependency_key(
 /// `tools/build_rules/prelude_bazel` file (if present). See
 /// https://github.com/bazelbuild/bazel/issues/1674 for discussion on what this
 /// file is.
-pub fn get_prelude_deps(ctx: &HashContext) -> anyhow::Result<BTreeSet<Label>> {
+pub fn get_prelude_deps(ctx: &HashContext) -> Result<BTreeSet<Label>> {
     if let Some(prelude_deps) = &ctx.caches.borrow().prelude_deps_cache {
         return Ok(prelude_deps.clone());
     }
@@ -319,14 +346,14 @@ pub fn get_prelude_deps(ctx: &HashContext) -> anyhow::Result<BTreeSet<Label>> {
             result
         }
         Err(err) if err.code() == git2::ErrorCode::NotFound => Default::default(),
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(Error::ReadTreeEntry(err)),
     };
 
     ctx.caches.borrow_mut().prelude_deps_cache = Some(result.clone());
     Ok(result)
 }
 
-fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<ContentHash> {
+fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> Result<ContentHash> {
     if let Some(hash) = ctx.caches.borrow().tree_path_cache.get(path) {
         return Ok(hash.clone());
     }
@@ -335,10 +362,11 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<Cont
     write!(
         &mut buf,
         "PathBufV{VERSION}({tree_id})",
-        tree_id = get_tree_path_id(ctx.head_tree, path)?
+        tree_id = get_tree_path_id(ctx.head_tree, path).map_err(Error::ReadTreeEntry)?,
     )?;
 
-    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())?;
+    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())
+        .map_err(Error::HashObject)?;
     let hash = ContentHash(hash);
     if let Some(old_value) = ctx
         .caches
@@ -353,7 +381,7 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> anyhow::Result<Cont
     Ok(hash)
 }
 
-fn get_tree_path_id(tree: &git2::Tree, path: &Path) -> Result<git2::Oid, git2::Error> {
+fn get_tree_path_id(tree: &git2::Tree, path: &Path) -> std::result::Result<git2::Oid, git2::Error> {
     if path == Path::new("") {
         // `get_path` will produce an error if we pass an empty path, so
         // manually handle that here.
@@ -373,24 +401,24 @@ fn get_tree_path_id(tree: &git2::Tree, path: &Path) -> Result<git2::Oid, git2::E
 fn get_tree_for_path<'repo>(
     ctx: &HashContext<'repo>,
     package_path: &Path,
-) -> anyhow::Result<Option<git2::Tree<'repo>>> {
+) -> Result<Option<git2::Tree<'repo>>> {
     if package_path == Path::new("") {
         Ok(Some(ctx.head_tree.to_owned()))
     } else {
         let tree_entry = match ctx.head_tree.get_path(package_path) {
             Ok(tree_entry) => tree_entry,
             Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(None),
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(Error::ReadTreeEntry(e)),
         };
         let object = tree_entry
             .to_object(ctx.repo)
-            .context("converting tree entry to object")?;
+            .map_err(Error::ReadTreeEntry)?;
         let tree = object.as_tree().map(|tree| tree.to_owned());
         Ok(tree)
     }
 }
 
-fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> anyhow::Result<BTreeSet<Label>> {
+fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> Result<BTreeSet<Label>> {
     trace!(?tree, "Finding load dependencies");
     if let Some(result) = ctx.caches.borrow().load_dependencies_cache.get(&tree.id()) {
         return Ok(result.clone());
@@ -429,10 +457,10 @@ fn is_tree_entry_relevant_to_build_graph(tree_entry: &git2::TreeEntry) -> bool {
 fn extract_load_statements_from_tree_entry(
     ctx: &HashContext,
     tree_entry: &git2::TreeEntry,
-) -> anyhow::Result<BTreeSet<Label>> {
+) -> Result<BTreeSet<Label>> {
     let object = tree_entry
         .to_object(ctx.repo)
-        .context("converting tree entry to object")?;
+        .map_err(Error::ReadTreeEntry)?;
     let blob = match object.as_blob() {
         Some(blob) => blob,
         None => {
@@ -502,7 +530,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_load_statements() -> anyhow::Result<()> {
+    fn test_extract_load_statements() -> Result<()> {
         let content = r#"
 load("//foo/bar:baz.bzl")
 load   (
