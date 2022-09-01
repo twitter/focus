@@ -332,7 +332,7 @@ mod tests {
 
         let head_tree_oid = repo.treebuilder(None)?.write()?;
         let head_tree = repo.find_tree(head_tree_oid)?;
-        let ctx = HashContext::new(&repo, &head_tree);
+        let ctx = HashContext::new(&repo, &head_tree)?;
         let key = DependencyKey::BazelPackage(Label {
             external_repository: None,
             path_components: vec!["foo".to_string(), "bar".to_string()],

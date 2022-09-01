@@ -416,7 +416,7 @@ sh_binary(
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let ctx = HashContext::new(&repo, &head_tree);
+            let ctx = HashContext::new(&repo, &head_tree)?;
             get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
         };
         // Confirm that the object for package1 is not yet in the database.
@@ -496,7 +496,7 @@ sh_binary(
         let repo = fix.repo()?;
         let head_commit = repo.find_commit(head_oid)?;
         let head_tree = head_commit.tree()?;
-        let ctx = HashContext::new(&repo, &head_tree);
+        let ctx = HashContext::new(&repo, &head_tree)?;
         update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
         let files_to_materialize =
             get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?;
@@ -590,7 +590,7 @@ New contents
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let hash_context = HashContext::new(&repo, &head_tree);
+            let hash_context = HashContext::new(&repo, &head_tree)?;
             update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
 
             get_files_to_materialize(
@@ -637,7 +637,7 @@ def my_macro_inner(name):
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let hash_context = HashContext::new(&repo, &head_tree);
+            let hash_context = HashContext::new(&repo, &head_tree)?;
             get_files_to_materialize(
                 &hash_context,
                 &odb,
@@ -668,7 +668,7 @@ def my_macro_inner(name):
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let hash_context = HashContext::new(&repo, &head_tree);
+            let hash_context = HashContext::new(&repo, &head_tree)?;
             update_object_database_from_resolution(&hash_context, &odb, &resolve_result)?;
             get_files_to_materialize(
                 &hash_context,
@@ -744,7 +744,7 @@ def some_macro():
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let ctx = HashContext::new(&repo, &head_tree);
+            let ctx = HashContext::new(&repo, &head_tree)?;
             update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
             get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
         };
@@ -776,7 +776,7 @@ def some_macro():
             )?;
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let hash_context = HashContext::new(&repo, &head_tree);
+            let hash_context = HashContext::new(&repo, &head_tree)?;
             get_files_to_materialize(
                 &hash_context,
                 &odb,
@@ -849,7 +849,7 @@ macro("foo")
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let ctx = HashContext::new(&repo, &head_tree);
+            let ctx = HashContext::new(&repo, &head_tree)?;
 
             let target_set = hashset! { "bazel://package1:foo".try_into()? };
             let request = ResolutionRequest {
@@ -905,7 +905,7 @@ def macro2(name):
         let (old_files_to_materialize, new_files_to_materialize) = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let ctx = HashContext::new(&repo, &head_tree);
+            let ctx = HashContext::new(&repo, &head_tree)?;
             let old_files_to_materialize =
                 get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?;
 
@@ -1019,7 +1019,7 @@ def some_macro():
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let ctx = HashContext::new(&repo, &head_tree);
+            let ctx = HashContext::new(&repo, &head_tree)?;
             update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
             get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
         };
@@ -1131,7 +1131,7 @@ foo(
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let ctx = HashContext::new(&repo, &head_tree);
+            let ctx = HashContext::new(&repo, &head_tree)?;
             update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
             get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1/...")? })?
         };
@@ -1174,7 +1174,7 @@ def foo(name, srcs):
         let files_to_materialize = {
             let head_commit = repo.find_commit(head_oid)?;
             let head_tree = head_commit.tree()?;
-            let ctx = HashContext::new(&repo, &head_tree);
+            let ctx = HashContext::new(&repo, &head_tree)?;
             get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1/...")? })?
         };
 

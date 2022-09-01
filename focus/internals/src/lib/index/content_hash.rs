@@ -105,12 +105,15 @@ impl std::fmt::Debug for HashContext<'_> {
 
 impl<'repo> HashContext<'repo> {
     /// Construct a new hash context from the given repository state.
-    pub fn new(repo: &'repo git2::Repository, head_tree: &'repo git2::Tree) -> Self {
-        Self {
+    pub fn new(
+        repo: &'repo git2::Repository,
+        head_tree: &'repo git2::Tree,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
             repo,
             head_tree,
             caches: Default::default(),
-        }
+        })
     }
 
     /// Get the underlying repository.
