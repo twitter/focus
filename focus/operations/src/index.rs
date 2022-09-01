@@ -75,7 +75,7 @@ fn resolve_targets(
     let repo = git2::Repository::open(sparse_repo_path).context("opening sparse repo")?;
     let head_commit = git_helper::get_head_commit(&repo).context("Resolving head commit")?;
     let tree = head_commit.tree().context("Resolving tree")?;
-    let ctx = HashContext::new(&repo, &tree);
+    let ctx = HashContext::new(&repo, &tree)?;
     let odb = RocksDBCache::new(&repo);
 
     let borrowed_odb = odb.borrow();
@@ -177,7 +177,7 @@ pub fn hash(
         .with_context(|| format!("Resolving commit {commit}"))?;
     let commit = object.as_commit().expect("Object was not a commit");
     let tree = commit.tree()?;
-    let hash_context = HashContext::new(&repo, &tree);
+    let hash_context = HashContext::new(&repo, &tree)?;
     info!(?hash_context, "Using this hash context");
 
     for target in targets {
@@ -347,7 +347,7 @@ pub fn push(
 
     let head_commit = repo.get_head_commit()?;
     let head_tree = head_commit.tree().context("finding HEAD tree")?;
-    let ctx = HashContext::new(repo.underlying(), &head_tree);
+    let ctx = HashContext::new(repo.underlying(), &head_tree)?;
 
     let ResolveTargetResult {
         seen_keys,
@@ -449,7 +449,7 @@ mod tests {
         let repo = fixture.sparse_repo()?;
         let repo = repo.underlying();
         let head_tree = repo.head()?.peel_to_commit()?.tree()?;
-        let ctx = HashContext::new(repo, &head_tree);
+        let ctx = HashContext::new(repo, &head_tree)?;
 
         // Try to materialize files -- this should be a cache miss.
         {

@@ -675,7 +675,7 @@ impl Repo {
             .find_commit(commit_id)
             .with_context(|| format!("Resolving commit {}", commit_id))?;
         let tree = commit.tree().context("Resolving tree")?;
-        let hash_context = HashContext::new(&self.repo, &tree);
+        let hash_context = HashContext::new(&self.repo, &tree)?;
 
         let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
             (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),
