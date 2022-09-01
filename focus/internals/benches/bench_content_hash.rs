@@ -44,11 +44,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
 
     c.bench_function("content_hash_mandatory_layers", |b| {
         b.iter(|| {
-            let hash_context = HashContext {
-                repo: git_repo,
-                head_tree: &head_tree,
-                caches: Default::default(),
-            };
+            let hash_context = HashContext::new(git_repo, &head_tree);
             content_hash_dependency_keys(&hash_context, &dep_keys)
         })
     });
@@ -59,11 +55,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     odb.clear().unwrap();
-                    HashContext {
-                        repo: git_repo,
-                        head_tree: &head_tree,
-                        caches: Default::default(),
-                    }
+                    HashContext::new(git_repo, &head_tree)
                 },
                 |hash_context| {
                     for dep_key in dep_keys.iter() {
@@ -87,11 +79,7 @@ pub fn bench_content_hash(c: &mut Criterion) {
             b.iter_batched(
                 || {
                     odb.clear().unwrap();
-                    HashContext {
-                        repo: git_repo,
-                        head_tree: &head_tree,
-                        caches: Default::default(),
-                    }
+                    HashContext::new(git_repo, &head_tree)
                 },
                 |hash_context| {
                     for dep_key in dep_keys.iter() {

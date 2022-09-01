@@ -156,11 +156,7 @@ fn main() -> anyhow::Result<()> {
                 commit.summary().unwrap()
             );
             let tree = commit.tree().unwrap();
-            let hash_context = HashContext {
-                repo: &repo,
-                head_tree: &tree,
-                caches: Default::default(),
-            };
+            let hash_context = HashContext::new(&repo, &tree);
             all_targets
                 .iter()
                 .map(|target| {
