@@ -3,13 +3,16 @@
 
 pub mod launchd;
 pub mod scheduling;
+
 use std::{
+    collections::HashMap,
     ffi::OsString,
     fmt::Debug,
     ops::Deref,
     path::{Path, PathBuf},
     process::{Command, ExitStatus},
     sync::Arc,
+    time::{Duration, Instant, SystemTime},
 };
 
 use content_addressed_cache::RocksDBCache;
@@ -18,6 +21,7 @@ use focus_internals::{index::RocksDBMemoizationCacheExt, locking, tracker::Track
 use anyhow::{bail, Context, Result};
 use focus_util::git_helper::{git_command_with_git_binary, GitBinary};
 use focus_util::{app::App, git_helper::ConfigExt, sandbox_command::SandboxCommandOutput};
+use maplit::hashmap;
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
@@ -166,6 +170,27 @@ fn does_repo_exist(path: &Path) -> Result<bool> {
     }
 }
 
+fn maint_exit_status_metric_helper(exit_status: ExitStatus) -> String {
+    match exit_status.code() {
+        Some(code) => code.to_string(),
+        None => "signal_terminated".to_string(),
+    }
+}
+
+fn sync_status_metric_helper(sync_status: crate::sync::SyncStatus) -> String {
+    match sync_status {
+        crate::sync::SyncStatus::Success => "success".to_string(),
+        crate::sync::SyncStatus::SkippedSyncPointUnchanged => "skipped_unchanged".to_string(),
+        crate::sync::SyncStatus::SkippedSyncPointDifferenceIrrelevant => {
+            "skipped_irrelevant".to_string()
+        }
+        crate::sync::SyncStatus::SkippedPreemptiveSyncDisabled => "skipped_disabled".to_string(),
+        crate::sync::SyncStatus::SkippedPreemptiveSyncCancelledByActivity => {
+            "skipped_activity".to_string()
+        }
+    }
+}
+
 #[derive(Debug)]
 enum MaintResult {
     Success(ExitStatus),
@@ -242,18 +267,21 @@ impl Runner<'_> {
     }
 
     #[tracing::instrument]
-    fn run_internal_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<()> {
-        crate::sync::run(
+    fn run_internal_maint(
+        &self,
+        time_period: TimePeriod,
+        repo_path: &Path,
+    ) -> Result<crate::sync::SyncStatus> {
+        let sync_result = crate::sync::run(
             repo_path,
             crate::sync::SyncMode::Preemptive { force: false },
             self.app.clone(),
         )
-        .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))
-        .map(|_| ())?;
+        .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))?;
 
         self.run_rocksdb_compaction(repo_path)?;
 
-        Ok(())
+        Ok(sync_result.status)
     }
 
     #[tracing::instrument]
@@ -266,12 +294,24 @@ impl Runner<'_> {
             }
         };
 
+        let git_maint_started_at = Instant::now();
         let git_maint_result = self
             .run_git_maint(time_period, repo_path)
             .with_context(|| format!("Running internal maintenance in {}", repo_path.display()))?;
+        let git_maint_runtime = git_maint_started_at.elapsed();
 
-        self.run_internal_maint(time_period, repo_path)
+        let sync_maint_started_at = Instant::now();
+        let sync_result = self
+            .run_internal_maint(time_period, repo_path)
             .with_context(|| format!("Running internal maintenance in {}", repo_path.display()))?;
+        let sync_maint_runtime = sync_maint_started_at.elapsed();
+
+        self.add_maint_ti_invocation_message(
+            &git_maint_result,
+            git_maint_runtime,
+            sync_result,
+            sync_maint_runtime,
+        );
 
         Ok(git_maint_result)
     }
@@ -328,20 +368,57 @@ impl Runner<'_> {
     fn run_in_path(&self, time_period: TimePeriod, path: &Path) -> Result<()> {
         info!(?time_period, ?path, "running tasks");
         set_default_git_maintenance_config(path)?;
-        match self.run_maint(time_period, path) {
+
+        let maint_result = match self.run_maint(time_period, path) {
             Ok(MaintResult::Success(status)) => {
                 if status.success() {
-                    debug!(?time_period, ?path, "completed maintenance",)
+                    debug!(?time_period, ?path, "completed maintenance",);
+                    None
                 } else {
                     warn!(?path, exit_status = ?status, "maintenance failed");
+                    Some(maint_exit_status_metric_helper(status))
                 }
             }
-            Ok(MaintResult::LockFailed) => warn!(?path, "failed to acquire lock"),
-            Err(e) => {
-                warn!(?path, ?e, "failed runing git-maintenance");
+            Ok(MaintResult::LockFailed) => {
+                warn!(?path, "failed to acquire lock");
+                Some("lock_failed".to_string())
             }
-        }
+            Err(e) => {
+                warn!(?path, ?e, "failed running git-maintenance");
+                Some("git_error".to_string())
+            }
+        };
+
+        if let Some(maint_result) = maint_result {
+            self.add_ti_invocation_message(&hashmap! { "maint_result".to_string() => maint_result })
+        };
         Ok(())
+    }
+
+    fn add_ti_invocation_message(&self, maint_custom_map: &HashMap<String, String>) {
+        let ti_client = self.app.tool_insights_client();
+        ti_client.get_inner().add_invocation_message(
+            SystemTime::now(),
+            None,
+            Some(maint_custom_map),
+        );
+    }
+
+    fn add_maint_ti_invocation_message(
+        &self,
+        git_maint_result: &MaintResult,
+        git_maint_runtime: Duration,
+        sync_maint_result: crate::sync::SyncStatus,
+        sync_maint_runtime: Duration,
+    ) {
+        self.add_ti_invocation_message(&hashmap! { "maint_result".to_string() => match git_maint_result {
+                MaintResult::Success(status) => maint_exit_status_metric_helper(*status),
+                MaintResult::LockFailed => "lock_failed".to_string(),
+            },
+            "sync_return_status".to_string() => sync_status_metric_helper(sync_maint_result),
+            "git_maint_duration_sec".to_string() => git_maint_runtime.as_secs_f32().to_string(),
+            "sync_maint_duration_sec".to_string() => sync_maint_runtime.as_secs_f32().to_string()
+        });
     }
 
     #[tracing::instrument]
