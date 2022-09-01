@@ -392,7 +392,7 @@ pub fn push(
 
     if !dry_run {
         info!("Pushing index");
-        synchronizer.share(ctx.head_tree().id(), &keyset, &odb, None)?;
+        synchronizer.share(head_tree.id(), &keyset, &odb, None)?;
     } else {
         info!("This is a dry run, so not pushing index");
     }

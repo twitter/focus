@@ -256,39 +256,37 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
     ) -> anyhow::Result<()> {
         let ContentHash(key_oid) = content_hash(ctx, key)?;
         let payload = serde_json::to_vec(&value).context("serializing DependencyValue as JSON")?;
-        let value_oid = ctx
-            .repo()
-            .blob(&payload)
-            .context("writing DependencyValue as blob")?;
+        ctx.with_repo(|repo| {
+            let value_oid = repo
+                .blob(&payload)
+                .context("writing DependencyValue as blob")?;
 
-        let mut kv_tree = match ctx.repo().find_reference(Self::REF_NAME) {
-            Ok(reference) => {
-                let tree = reference
-                    .peel_to_tree()
-                    .context("peeling kv tree reference")?;
-                ctx.repo()
-                    .treebuilder(Some(&tree))
-                    .context("initializing TreeBuilder from kv tree reference")?
-            }
-            Err(e) if e.code() == git2::ErrorCode::NotFound => ctx
-                .repo()
-                .treebuilder(None)
-                .context("initializing new TreeBuilder")?,
-            Err(e) => return Err(e.into()),
-        };
-        kv_tree
-            .insert(key_oid.to_string(), value_oid, git2::FileMode::Blob.into())
-            .context("adding entry to tree")?;
-        let kv_tree_oid = kv_tree.write().context("writing new tree")?;
-        ctx.repo()
-            .reference(
+            let mut kv_tree = match repo.find_reference(Self::REF_NAME) {
+                Ok(reference) => {
+                    let tree = reference
+                        .peel_to_tree()
+                        .context("peeling kv tree reference")?;
+                    repo.treebuilder(Some(&tree))
+                        .context("initializing TreeBuilder from kv tree reference")?
+                }
+                Err(e) if e.code() == git2::ErrorCode::NotFound => repo
+                    .treebuilder(None)
+                    .context("initializing new TreeBuilder")?,
+                Err(e) => return Err(e.into()),
+            };
+            kv_tree
+                .insert(key_oid.to_string(), value_oid, git2::FileMode::Blob.into())
+                .context("adding entry to tree")?;
+            let kv_tree_oid = kv_tree.write().context("writing new tree")?;
+            repo.reference(
                 Self::REF_NAME,
                 kv_tree_oid,
                 true,
                 &format!("updating with key {:?}", key),
             )
             .context("updating reference")?;
-        Ok(())
+            Ok(())
+        })
     }
 
     fn clear(&self) -> anyhow::Result<()> {
