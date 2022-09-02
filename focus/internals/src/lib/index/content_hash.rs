@@ -113,11 +113,6 @@ impl<'repo> HashContext<'repo> {
         })
     }
 
-    /// Get the underlying repository.
-    pub fn repo(&self) -> &git2::Repository {
-        self.repo
-    }
-
     /// Get the underlying head tree.
     pub fn head_tree(&self) -> &git2::Tree {
         self.head_tree

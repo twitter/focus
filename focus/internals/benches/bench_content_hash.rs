@@ -43,10 +43,11 @@ pub fn bench_content_hash(c: &mut Criterion) {
     println!("Dependency keys: {:?}", &dep_keys);
 
     c.bench_function("content_hash_mandatory_layers", |b| {
-        b.iter(|| {
-            let hash_context = HashContext::new(git_repo, &head_tree).unwrap();
-            content_hash_dependency_keys(&hash_context, &dep_keys)
-        })
+        b.iter_batched(
+            || HashContext::new(git_repo, &head_tree).unwrap(),
+            |hash_context| content_hash_dependency_keys(&hash_context, &dep_keys),
+            criterion::BatchSize::SmallInput,
+        )
     });
 
     {
