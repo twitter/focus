@@ -9,6 +9,7 @@ pub mod event;
 pub mod index;
 pub mod init;
 pub mod maintenance;
+pub mod pull;
 pub mod refs;
 pub mod repo;
 pub mod selection;

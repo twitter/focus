@@ -195,6 +195,9 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: BackgroundSubcommand,
     },
+
+    /// Incorporate changes from `prefetch` into the current branch.
+    Pull,
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -263,6 +266,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             BackgroundSubcommand::Disable { .. } => "background-disable".to_string(),
             BackgroundSubcommand::Sync { .. } => "background-sync".to_string(),
         },
+        Subcommand::Pull => "pull".to_string(),
     }
 }
 
@@ -1130,6 +1134,10 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 focus_operations::background::sync(app, sparse_repo)
             }
         },
+        Subcommand::Pull => {
+            let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
+            focus_operations::pull::run(app, sparse_repo)
+        }
     }
 }
 
