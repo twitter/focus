@@ -11,6 +11,7 @@ pub mod ensure_clean;
 pub mod event;
 pub mod index;
 pub mod maintenance;
+pub mod pull;
 pub mod refs;
 pub mod repo;
 pub mod selection;

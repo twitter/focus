@@ -83,6 +83,36 @@ pub fn fetch_refs<P: AsRef<Path>>(
         .map(|_| ())
 }
 
+pub fn pull<P: AsRef<Path>>(
+    repo_path: P,
+    refspecs: impl Iterator<Item = impl AsRef<OsStr>>,
+    remote: &str,
+    app: Arc<App>,
+    depth: Option<u64>,
+    rebase: Option<bool>,
+) -> Result<()> {
+    let (mut cmd, scmd) = git_command(app)?;
+    cmd.current_dir(repo_path).arg("pull").arg("--force");
+    if let Some(d) = depth {
+        cmd.arg(format!("--depth={}", d));
+    }
+
+    if let Some(val) = rebase {
+        if val {
+            cmd.arg("--rebase");
+        } else {
+            cmd.arg("--no-rebase");
+        }
+    }
+
+    cmd.arg(remote);
+    for s in refspecs {
+        cmd.arg(s.as_ref());
+    }
+    scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr)
+        .map(|_| ())
+}
+
 pub fn fetch_all_tags<P: AsRef<Path>>(
     repo_path: P,
     remote: &str,
@@ -202,6 +232,26 @@ pub fn get_current_revision(app: Arc<App>, repo: &Path) -> Result<String> {
 
 pub fn get_current_branch(app: Arc<App>, repo: &Path) -> Result<String> {
     run_consuming_stdout(repo, &["branch", "--show-current"], app)
+}
+
+pub fn parse_ref(app: Arc<App>, repo: &Path, reference: &str) -> Result<String> {
+    run_consuming_stdout(repo, &["rev-parse", "--revs-only", reference], app)
+}
+
+pub fn get_merge_base(
+    app: Arc<App>,
+    repo: &Path,
+    commitish1: &str,
+    commitish2: &str,
+    options: Option<&[&str]>,
+) -> Result<String> {
+    let mut args = vec!["merge-base"];
+    if let Some(optional_args) = options {
+        args.extend(optional_args);
+    }
+    args.extend(vec![commitish1, commitish2]);
+
+    run_consuming_stdout(repo, args, app)
 }
 
 // Switches to a branch in a given repository, switching back to the previous branch afterwards
