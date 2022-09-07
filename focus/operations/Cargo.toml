@@ -51,3 +51,7 @@ focus-testing = { path = "../testing" }
 insta = { version = "1.13.0", features = ["yaml"] }
 maplit = "1.0.2"
 tracing = "0.1.31"
+
+[[bench]]
+name = "bench_sync"
+harness = false
