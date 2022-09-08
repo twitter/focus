@@ -1159,6 +1159,7 @@ fn setup_thread_pool(resolution_threads: usize) -> Result<()> {
 
 // TODO: there needs to be a way to know if we should re-load the plists, (eg. on a version change)
 fn setup_maintenance_scheduler(opts: &FocusOpts) -> Result<()> {
+    return Ok(());
     if std::env::var("FOCUS_NO_SCHEDULE").is_ok() {
         return Ok(());
     }
