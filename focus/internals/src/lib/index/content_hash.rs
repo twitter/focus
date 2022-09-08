@@ -198,6 +198,7 @@ impl HashContext {
         };
         let thread_pool = ThreadPoolBuilder::new()
             .name_prefix("content-hash-")
+            .pool_size(100)
             .create()
             .map_err(Error::CreateThreadPool)?;
         Ok(Self {
