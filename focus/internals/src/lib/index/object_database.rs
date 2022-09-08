@@ -286,7 +286,7 @@ impl ObjectDatabase for SimpleGitOdb<'_> {
             )
             .context("updating reference")?;
             Ok(())
-        })
+        })?
     }
 
     fn clear(&self) -> anyhow::Result<()> {

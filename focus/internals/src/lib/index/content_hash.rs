@@ -1,13 +1,18 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{Display, Write};
 use std::hash::Hash;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
+use futures::executor::{block_on, ThreadPool, ThreadPoolBuilder};
+use futures::future::{try_join_all, BoxFuture, Fuse, Shared};
+use futures::task::SpawnExt;
+use futures::FutureExt;
 use lazy_static::lazy_static;
 use ouroboros::self_referencing;
 use regex::Regex;
@@ -57,7 +62,8 @@ impl FromStr for ContentHash {
 #[derive(Debug, Default)]
 pub struct Caches {
     /// Cache of hashed dependency keys. These are only valid for the provided `repo`/`head_tree`.
-    dependency_key_cache: HashMap<DependencyKey, ContentHash>,
+    dependency_key_cache:
+        HashMap<DependencyKey, Shared<Fuse<BoxFuture<'static, Result<ContentHash>>>>>,
 
     /// Cache of hashed tree paths, which should be either:
     ///
@@ -84,6 +90,8 @@ struct RepoState {
     head_tree: git2::Tree<'this>,
 }
 
+unsafe impl Send for RepoState {}
+
 impl std::fmt::Debug for RepoState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RepoState")
@@ -96,49 +104,135 @@ impl std::fmt::Debug for RepoState {
     }
 }
 
+#[derive(Clone, Debug)]
+struct RepoPool {
+    repo_path: PathBuf,
+    head_tree_oid: git2::Oid,
+    items: Arc<Mutex<Vec<RepoState>>>,
+}
+
+struct RepoStateGuard<'a> {
+    pool: &'a RepoPool,
+    inner: Option<RepoState>,
+}
+
+impl Deref for RepoStateGuard<'_> {
+    type Target = RepoState;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.as_ref().unwrap()
+    }
+}
+
+impl Drop for RepoStateGuard<'_> {
+    fn drop(&mut self) {
+        if let Some(inner) = self.inner.take() {
+            self.pool.dealloc(inner);
+        }
+    }
+}
+
+impl RepoPool {
+    fn create(&self) -> Result<RepoStateGuard> {
+        let inner = self.alloc()?;
+        let guard = RepoStateGuard {
+            pool: self,
+            inner: Some(inner),
+        };
+        Ok(guard)
+    }
+
+    fn alloc(&self) -> Result<RepoState> {
+        let mut items = self.items.lock().unwrap();
+        match items.pop() {
+            Some(item) => Ok(item),
+            None => {
+                let repo =
+                    git2::Repository::open(&self.repo_path).map_err(Error::CloneRepository)?;
+                let repo_state = RepoStateTryBuilder {
+                    repo,
+                    head_tree_builder: |repo| {
+                        repo.find_tree(self.head_tree_oid).map_err(Error::ReadTree)
+                    },
+                }
+                .try_build()?;
+                Ok(repo_state)
+            }
+        }
+    }
+
+    fn dealloc(&self, repo_state: RepoState) {
+        let mut items = self.items.lock().unwrap();
+        items.push(repo_state);
+    }
+}
+
 /// Context used to compute a content hash.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct HashContext {
     /// The Git repository and head tree state.
-    repo_state: RepoState,
+    repo_pool: RepoPool,
 
     /// Associated caches.
-    caches: RefCell<Caches>,
+    caches: Arc<Mutex<Caches>>,
+
+    thread_pool: ThreadPool,
 }
+
+const _: () = {
+    fn assert_hash_context_sync<T: Sync>() {}
+    fn assert_hash_context_send<T: Send>() {}
+    fn assert() {
+        assert_hash_context_sync::<HashContext>();
+        assert_hash_context_send::<HashContext>();
+    }
+};
 
 impl HashContext {
     /// Construct a new hash context from the given repository state.
     pub fn new(repo: &git2::Repository, head_tree: &git2::Tree) -> Result<Self> {
-        let head_tree_oid = head_tree.id();
-        let repo = git2::Repository::open(repo.path()).map_err(Error::CloneRepository)?;
-        let repo_state = RepoStateTryBuilder {
-            repo,
-            head_tree_builder: |repo| -> Result<git2::Tree> {
-                let tree = repo.find_tree(head_tree_oid).map_err(Error::ReadTree)?;
-                Ok(tree)
-            },
-        }
-        .try_build()?;
+        let repo_pool = RepoPool {
+            repo_path: repo.path().to_owned(),
+            head_tree_oid: head_tree.id(),
+            items: Default::default(),
+        };
+        let thread_pool = ThreadPoolBuilder::new()
+            .name_prefix("content-hash-")
+            .create()
+            .map_err(Error::CreateThreadPool)?;
         Ok(Self {
-            repo_state,
+            repo_pool,
             caches: Default::default(),
+            thread_pool,
         })
     }
 
     /// Call the provided function with a reference to the underlying
     /// repository.
-    pub fn with_repo<T>(&self, f: impl Fn(&git2::Repository) -> T) -> T {
-        f(self.repo_state.borrow_repo())
+    pub fn with_repo<T>(&self, f: impl Fn(&git2::Repository) -> T) -> Result<T> {
+        // TODO: don't leak repo
+        let repo_state = self.repo_pool.create()?;
+        let result = f(repo_state.borrow_repo());
+        Ok(result)
     }
 
     /// Call the provided function with a reference to the underlying head tree.
-    pub fn with_head_tree<T>(&self, f: impl Fn(&git2::Tree) -> T) -> T {
-        f(self.repo_state.borrow_head_tree())
+    pub fn with_head_tree<T>(&self, f: impl Fn(&git2::Tree) -> T) -> Result<T> {
+        // TODO: don't leak repo
+        let repo_state = self.repo_pool.create()?;
+        let result = f(repo_state.borrow_head_tree());
+        Ok(result)
     }
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("could not create thread pool: {0}")]
+    CreateThreadPool(#[source] std::io::Error),
+
+    #[error("could not spawn task: {0}")]
+    SpawnTask(String),
+
     #[error("could not read tree: {0}")]
     ReadTree(#[source] git2::Error),
 
@@ -165,6 +259,8 @@ fn clone_git_error(error: &git2::Error) -> git2::Error {
 impl Clone for Error {
     fn clone(&self) -> Self {
         match self {
+            Self::CreateThreadPool(e) => Self::CreateThreadPool(std::io::Error::from(e.kind())),
+            Self::SpawnTask(message) => Self::SpawnTask(message.clone()),
             Self::ReadTree(e) => Self::ReadTree(clone_git_error(e)),
             Self::ReadTreeEntry(e) => Self::ReadTreeEntry(clone_git_error(e)),
             Self::HashObject(e) => Self::HashObject(clone_git_error(e)),
@@ -180,23 +276,36 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Compute a content-addressable hash for the provided [`DependencyKey`] using
 /// the context in `ctx`.
 pub fn content_hash(ctx: &HashContext, key: &DependencyKey) -> Result<ContentHash> {
+    let ctx = ctx.clone();
     let key = key.clone();
-    content_hash_dependency_key(ctx, key)
+    block_on(content_hash_dependency_key(ctx, key))
 }
 
-fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<ContentHash> {
+fn content_hash_dependency_key(
+    ctx: HashContext,
+    key: DependencyKey,
+) -> Shared<Fuse<BoxFuture<'static, Result<ContentHash>>>> {
     debug!(?key, "Hashing dependency key");
 
-    {
-        let cache = &mut ctx.caches.borrow_mut().dependency_key_cache;
-        if let Some(hash) = cache.get(&key) {
-            return Ok(hash.to_owned());
-        }
+    let cache = &mut ctx.caches.lock().unwrap().dependency_key_cache;
+    if let Some(task) = cache.get(&key) {
+        return task.clone();
     }
 
-    enum KeyOrPath<'a> {
+    println!("@nocommit starting task for {key:?}");
+    let task = content_hash_dependency_key_inner(ctx.clone(), key.clone());
+    let task = task.boxed().fuse().shared();
+    cache.insert(key.to_owned(), task.clone());
+    task
+}
+
+async fn content_hash_dependency_key_inner(
+    ctx: HashContext,
+    key: DependencyKey,
+) -> Result<ContentHash> {
+    enum KeyOrPath {
         Key(DependencyKey),
-        Path(&'a Path),
+        Path(PathBuf),
     }
     let (kind, maybe_label, values_to_hash) = match &key {
         DependencyKey::BazelPackage(
@@ -212,12 +321,13 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
             dep_keys.extend(match external_repository {
                 Some(_) => vec![],
                 None => {
-                    let mut loaded_deps = match get_tree_for_path(&ctx.repo_state, &path)? {
-                        Some(tree) => find_load_dependencies(ctx, &tree)?,
+                    let repo_state = ctx.repo_pool.create()?;
+                    let mut loaded_deps = match get_tree_for_path(&repo_state, &path)? {
+                        Some(tree) => find_load_dependencies(&ctx, &tree)?,
                         None => Default::default(),
                     };
 
-                    let prelude_deps = get_prelude_deps(ctx)?;
+                    let prelude_deps = get_prelude_deps(&ctx)?;
                     loaded_deps.extend(prelude_deps);
                     loaded_deps
                         .into_iter()
@@ -264,19 +374,23 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
                     };
                     let mut dep_keys = vec![DependencyKey::Path(path.clone())];
 
-                    let loaded_deps = match ctx.repo_state.borrow_head_tree().get_path(&path) {
-                        Ok(tree_entry) => {
-                            if is_tree_entry_relevant_to_build_graph(&tree_entry) {
-                                extract_load_statements_from_tree_entry(
-                                    &ctx.repo_state,
-                                    &tree_entry,
-                                )?
-                            } else {
-                                Default::default()
+                    let loaded_deps = {
+                        // TODO: don't leak repo
+                        let repo_state = ctx.repo_pool.create()?;
+                        match repo_state.borrow_head_tree().get_path(&path) {
+                            Ok(tree_entry) => {
+                                if is_tree_entry_relevant_to_build_graph(&tree_entry) {
+                                    extract_load_statements_from_tree_entry(
+                                        &repo_state,
+                                        &tree_entry,
+                                    )?
+                                } else {
+                                    Default::default()
+                                }
                             }
+                            Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
+                            Err(e) => return Err(Error::ReadTreeEntry(e)),
                         }
-                        Err(e) if e.code() == git2::ErrorCode::NotFound => Default::default(),
-                        Err(e) => return Err(Error::ReadTreeEntry(e)),
                     };
 
                     dep_keys.extend(
@@ -304,7 +418,7 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
             )
         }
 
-        DependencyKey::Path(path) => ("Path", None, vec![KeyOrPath::Path(path)]),
+        DependencyKey::Path(path) => ("Path", None, vec![KeyOrPath::Path(path.to_owned())]),
 
         DependencyKey::DummyForTesting(inner_dep_key) => (
             "DummyForTesting",
@@ -318,13 +432,25 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
     if let Some(label) = maybe_label {
         write!(&mut buf, "{label}, ")?;
     }
-    let hashes = values_to_hash
+    let tasks = values_to_hash
         .into_iter()
-        .map(|key_or_hash| match key_or_hash {
-            KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, dep_key),
-            KeyOrPath::Path(path) => content_hash_tree_path(ctx, path),
+        .map(|key_or_hash| {
+            let ctx = ctx.clone();
+            match key_or_hash {
+                KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, dep_key),
+                KeyOrPath::Path(path) => async move { content_hash_tree_path(&ctx, &path) }
+                    .boxed()
+                    .fuse()
+                    .shared(),
+            }
+        })
+        .map(|task| {
+            ctx.thread_pool
+                .spawn_with_handle(task)
+                .map_err(|err| Error::SpawnTask(err.to_string()))
         })
         .collect::<Result<Vec<_>>>()?;
+    let hashes = try_join_all(tasks).await?;
     for hash in hashes {
         write!(&mut buf, "{hash}, ")?;
     }
@@ -332,17 +458,6 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())
         .map_err(Error::HashObject)?;
     let hash = ContentHash(hash);
-
-    if let Some(old_value) = ctx
-        .caches
-        .borrow_mut()
-        .dependency_key_cache
-        .insert(key.to_owned(), hash.clone())
-    {
-        if old_value != hash {
-            error!(?key, ?old_value, new_value = ?hash, "Non-deterministic content hashing for dependency key");
-        }
-    }
     Ok(hash)
 }
 
@@ -351,7 +466,7 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
 /// https://github.com/bazelbuild/bazel/issues/1674 for discussion on what this
 /// file is.
 pub fn get_prelude_deps(ctx: &HashContext) -> Result<BTreeSet<Label>> {
-    if let Some(prelude_deps) = &ctx.caches.borrow().prelude_deps_cache {
+    if let Some(prelude_deps) = &ctx.caches.lock().unwrap().prelude_deps_cache {
         return Ok(prelude_deps.clone());
     }
 
@@ -359,36 +474,43 @@ pub fn get_prelude_deps(ctx: &HashContext) -> Result<BTreeSet<Label>> {
     let prelude_file_name = "prelude_bazel";
     let prelude_path: PathBuf = prelude_dir.into_iter().chain([prelude_file_name]).collect();
 
-    let result = match ctx.repo_state.borrow_head_tree().get_path(&prelude_path) {
-        Ok(tree_entry) => {
-            let mut result = BTreeSet::new();
-            result.insert(Label {
-                external_repository: None,
-                path_components: prelude_dir.into_iter().map(|s| s.to_string()).collect(),
-                target_name: TargetName::Name(prelude_file_name.to_string()),
-            });
-            result.extend(extract_load_statements_from_tree_entry(
-                &ctx.repo_state,
-                &tree_entry,
-            )?);
-            result
+    let result = {
+        // TODO: don't leak repo
+        let repo_state = ctx.repo_pool.create()?;
+        match repo_state.borrow_head_tree().get_path(&prelude_path) {
+            Ok(tree_entry) => {
+                let mut result = BTreeSet::new();
+                result.insert(Label {
+                    external_repository: None,
+                    path_components: prelude_dir.into_iter().map(|s| s.to_string()).collect(),
+                    target_name: TargetName::Name(prelude_file_name.to_string()),
+                });
+                result.extend(extract_load_statements_from_tree_entry(
+                    &repo_state,
+                    &tree_entry,
+                )?);
+                result
+            }
+            Err(err) if err.code() == git2::ErrorCode::NotFound => Default::default(),
+            Err(err) => return Err(Error::ReadTreeEntry(err)),
         }
-        Err(err) if err.code() == git2::ErrorCode::NotFound => Default::default(),
-        Err(err) => return Err(Error::ReadTreeEntry(err)),
     };
 
-    ctx.caches.borrow_mut().prelude_deps_cache = Some(result.clone());
+    ctx.caches.lock().unwrap().prelude_deps_cache = Some(result.clone());
     Ok(result)
 }
 
 fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> Result<ContentHash> {
-    if let Some(hash) = ctx.caches.borrow().tree_path_cache.get(path) {
+    if let Some(hash) = ctx.caches.lock().unwrap().tree_path_cache.get(path) {
         return Ok(hash.clone());
     }
 
     let mut buf = String::new();
-    let tree_id =
-        get_tree_path_id(ctx.repo_state.borrow_head_tree(), path).map_err(Error::ReadTreeEntry)?;
+    let tree_id = {
+        // TODO: don't leak repo
+        let repo_state = ctx.repo_pool.create()?;
+        get_tree_path_id(repo_state.borrow_head_tree(), path).map_err(Error::ReadTreeEntry)?
+    };
     write!(&mut buf, "PathBufV{VERSION}({tree_id})")?;
 
     let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())
@@ -396,7 +518,8 @@ fn content_hash_tree_path(ctx: &HashContext, path: &Path) -> Result<ContentHash>
     let hash = ContentHash(hash);
     if let Some(old_value) = ctx
         .caches
-        .borrow_mut()
+        .lock()
+        .unwrap()
         .tree_path_cache
         .insert(path.to_owned(), hash.clone())
     {
@@ -446,20 +569,33 @@ fn get_tree_for_path<'repo>(
 
 fn find_load_dependencies(ctx: &HashContext, tree: &git2::Tree) -> Result<BTreeSet<Label>> {
     trace!(?tree, "Finding load dependencies");
-    if let Some(result) = ctx.caches.borrow().load_dependencies_cache.get(&tree.id()) {
+    if let Some(result) = ctx
+        .caches
+        .lock()
+        .unwrap()
+        .load_dependencies_cache
+        .get(&tree.id())
+    {
         return Ok(result.clone());
     }
 
-    let mut result = BTreeSet::new();
-    for tree_entry in tree {
-        if is_tree_entry_relevant_to_build_graph(&tree_entry) {
-            let deps = extract_load_statements_from_tree_entry(&ctx.repo_state, &tree_entry)?;
-            result.extend(deps);
+    let result = {
+        // TODO: don't leak repo
+        let repo_state = ctx.repo_pool.create()?;
+        let mut result = BTreeSet::new();
+        for tree_entry in tree {
+            if is_tree_entry_relevant_to_build_graph(&tree_entry) {
+                let deps = extract_load_statements_from_tree_entry(&repo_state, &tree_entry)?;
+                result.extend(deps);
+            }
         }
-    }
+        result
+    };
+
     if let Some(old_value) = ctx
         .caches
-        .borrow_mut()
+        .lock()
+        .unwrap()
         .load_dependencies_cache
         .insert(tree.id(), result.clone())
     {
