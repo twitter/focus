@@ -286,17 +286,31 @@ fn content_hash_dependency_key(
     ctx: HashContext,
     key: DependencyKey,
 ) -> Shared<Fuse<BoxFuture<'static, Result<ContentHash>>>> {
-    debug!(?key, "Hashing dependency key");
+    let cache_key = match key {
+        DependencyKey::BazelPackage(Label {
+            external_repository,
+            path_components,
+            target_name: _,
+        }) => DependencyKey::BazelPackage(Label {
+            external_repository: external_repository.clone(),
+            path_components: path_components.clone(),
+            target_name: TargetName::Ellipsis,
+        }),
+        other @ (DependencyKey::BazelBuildFile(_)
+        | DependencyKey::Path(_)
+        | DependencyKey::DummyForTesting(_)) => other.clone(),
+    };
+    let key = cache_key.clone();
+    debug!(?key, ?cache_key, "Hashing dependency key");
 
     let cache = &mut ctx.caches.lock().unwrap().dependency_key_cache;
-    if let Some(task) = cache.get(&key) {
+    if let Some(task) = cache.get(&cache_key) {
         return task.clone();
     }
 
-    println!("@nocommit starting task for {key:?}");
     let task = content_hash_dependency_key_inner(ctx.clone(), key.clone());
     let task = task.boxed().fuse().shared();
-    cache.insert(key.to_owned(), task.clone());
+    cache.insert(cache_key.to_owned(), task.clone());
     task
 }
 
@@ -304,6 +318,7 @@ async fn content_hash_dependency_key_inner(
     ctx: HashContext,
     key: DependencyKey,
 ) -> Result<ContentHash> {
+    println!("@nocommit hashing {key:?}");
     enum KeyOrPath {
         Key(DependencyKey),
         Path(PathBuf),
