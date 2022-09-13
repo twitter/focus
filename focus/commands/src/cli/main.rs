@@ -248,6 +248,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Upgrade { .. } => "upgrade".to_string(),
         Subcommand::Index { subcommand } => match subcommand {
             IndexSubcommand::Clear { .. } => "index-clear".to_string(),
+            IndexSubcommand::CalculateChurn { .. } => "index-calculate-churn".to_string(),
             IndexSubcommand::Fetch { .. } => "index-fetch".to_string(),
             IndexSubcommand::Get { .. } => "index-get".to_string(),
             IndexSubcommand::Generate { .. } => "index-generate".to_string(),
@@ -492,6 +493,18 @@ enum IndexSubcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+    },
+
+    /// Calculate statistics on cache invalidation for the projects in the
+    /// repository.
+    CalculateChurn {
+        /// Path to the sparse repository.
+        #[clap(long, parse(from_os_str), default_value = ".")]
+        sparse_repo: PathBuf,
+
+        /// The number of commits backwards to examine.
+        #[clap(long, default_value = "1000")]
+        num_commits: usize,
     },
 
     /// Fetch the pre-computed index for the repository.
@@ -1033,6 +1046,15 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             IndexSubcommand::Clear { sparse_repo } => {
                 let sparse_repo = paths::find_repo_root_from(app, sparse_repo)?;
                 focus_operations::index::clear(sparse_repo)?;
+                Ok(ExitCode(0))
+            }
+
+            IndexSubcommand::CalculateChurn {
+                sparse_repo,
+                num_commits,
+            } => {
+                let sparse_repo_path = paths::find_repo_root_from(app.clone(), sparse_repo)?;
+                focus_operations::index::print_churn_stats(app, sparse_repo_path, num_commits)?;
                 Ok(ExitCode(0))
             }
 
