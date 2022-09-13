@@ -41,4 +41,4 @@ name = "focus_util"
 path = "src/lib.rs"
 
 [features]
-twttr = ["dep:tool-insights-client"]
+twttr = ["dep:tool-insights-client", "focus-testing/twttr"]

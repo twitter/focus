@@ -37,4 +37,4 @@ name = "focus_migrations"
 path = "src/lib.rs"
 
 [features]
-twttr = []
+twttr = ["focus-internals/twttr", "focus-operations/twttr"]
