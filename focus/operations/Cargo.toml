@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 ci = []
-twttr = []
+twttr = ["focus-internals/twttr", "focus-platform/twttr", "focus-testing/twttr"]
 
 [dependencies]
 anyhow = { version = "1.0.45", features = ["backtrace"] }

@@ -48,4 +48,4 @@ name = "bench_content_hash"
 harness = false
 
 [features]
-twttr = ["dep:tool-insights-client"]
+twttr = ["dep:tool-insights-client", "focus-util/twttr"]
