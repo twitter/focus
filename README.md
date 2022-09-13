@@ -4,7 +4,22 @@
 
 # Installation
 
-`focus` is written in [Rust](https://www.rust-lang.org/) and supports macOS and Linux. [Install Rust](https://rustup.rs/), then install `focus` with
+`focus` is written in [Rust](https://www.rust-lang.org/) and supports macOS and Linux. Git v2.35+ and Bazel need to be installed in the PATH env.
+
+## MacOS Prerequisites
+[Install Bazel](https://bazel.build/install/os-x)
+
+[Install git > 2.35](https://formulae.brew.sh/formula/git)
+
+WARN: If you run a `cargo test` you may run out of file descriptors. On MacOS you will need to use `ulimit -n X` to set a large file limit for the current shell.
+
+TODO: Find instructions for increasing fd limit permanently.
+
+## Linux Prerequisites
+TODO: Install Prerequisites for Linux
+
+## Common
+[Install Rust](https://rustup.rs/), then install `focus` with
 
 ```
 $ cargo install --locked --git https://github.com/twitter/focus

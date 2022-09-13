@@ -967,6 +967,7 @@ fn set_up_bazel_preflight_script(sparse_repo: &Path) -> Result<()> {
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum ClonedRepoTemplate {
+    Bazel,
     Envoy,
     None,
 }
@@ -978,6 +979,7 @@ impl ClonedRepoTemplate {
                 let path = url.path();
                 let path = path.strip_suffix('/').unwrap_or(path);
                 match path {
+                    "/bazelbuild/bazel" => Some(Self::Bazel),
                     "/envoyproxy/envoy" => Some(Self::Envoy),
                     _ => None,
                 }
@@ -988,6 +990,9 @@ impl ClonedRepoTemplate {
 
     pub fn entries(&self) -> impl IntoIterator<Item = &'static str> {
         match self {
+            ClonedRepoTemplate::Bazel => {
+                vec!["directory:third_party", "directory:tools"]
+            }
             ClonedRepoTemplate::Envoy => {
                 vec!["directory:bazel", "directory:api", "directory:tools"]
             }
