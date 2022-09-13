@@ -16,7 +16,7 @@ use focus_util::paths::assert_focused_repo;
 use tracing::{debug, debug_span, info};
 
 use focus_internals::index::{
-    content_hash, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
+    self, content_hash, get_files_to_materialize, ContentHash, DependencyKey, HashContext,
     ObjectDatabase, PathsToMaterializeResult, RocksDBCache, RocksDBMemoizationCacheExt,
     FUNCTION_ID,
 };
@@ -398,6 +398,14 @@ pub fn push(
     }
 
     Ok(ExitCode(0))
+}
+
+pub fn print_churn_stats(
+    app: Arc<App>,
+    sparse_repo: PathBuf,
+    num_commits: usize,
+) -> anyhow::Result<()> {
+    index::print_churn_stats(app, sparse_repo, num_commits)
 }
 
 #[cfg(test)]

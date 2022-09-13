@@ -1,12 +1,6 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Run with
-//!
-//! ```bash
-//! cargo run --example calc_invalidation_rate -- ~/workspace/path/to/repo 10000
-//! ```
-
 use std::{
     collections::HashMap,
     ops::Deref,
@@ -17,22 +11,13 @@ use std::{
     },
 };
 
-use clap::Parser;
-use focus_internals::{
+use crate::{
     index::{content_hash, ContentHash, DependencyKey, HashContext},
     model::{repo::Repo, selection::Project},
     target::{Target, TargetSet},
 };
 use focus_util::{app::App, git_helper};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
-#[derive(Parser, Debug)]
-struct Opts {
-    sparse_repo_path: PathBuf,
-
-    /// The number of commits backward from the `HEAD` commit to sample.
-    num_commits: usize,
-}
 
 struct RepoPool {
     repo_path: PathBuf,
@@ -90,13 +75,12 @@ fn average(values: impl IntoIterator<Item = f64>) -> f64 {
     sum / len
 }
 
-fn main() -> anyhow::Result<()> {
-    let Opts {
-        sparse_repo_path,
-        num_commits,
-    } = Opts::parse();
-
-    let app = Arc::new(App::new(false, None, None, None)?);
+/// Calculate and print statistics on target/project churn.
+pub fn print_churn_stats(
+    app: Arc<App>,
+    sparse_repo_path: PathBuf,
+    num_commits: usize,
+) -> anyhow::Result<()> {
     let repo = Repo::open(&sparse_repo_path, app)?;
     let selections = repo.selection_manager()?;
     let all_projects: HashMap<String, Project> = selections
