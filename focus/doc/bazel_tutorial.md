@@ -7,7 +7,7 @@ First you will need to follow the directions in the top-level README.md to insta
 Then you will need to install `brew install openjdk@11` to be able to build bazel with bazel.
 
 ## Clone bazelbuild/bazel
-If focus is not already in your path, you may want to temporarily add it with:
+If focus is not already in your path, you may want to temporarily add it with something like:
 
 `export PATH="/Users/dbernadett/workspace/focus/target/debug:$PATH"`
 
