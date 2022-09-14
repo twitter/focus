@@ -9,11 +9,14 @@ Then you will need to install `brew install openjdk@11` to be able to build baze
 ## Clone bazelbuild/bazel
 If focus is not already in your path, you may want to temporarily add it with something like:
 
-`export PATH="/Users/dbernadett/workspace/focus/target/debug:$PATH"`
+```export PATH="/Users/dbernadett/workspace/focus/target/debug:$PATH"```
 
 You can then `focus new` a new sparse repo:
 
-`focus new --dense-repo=https://github.com/bazelbuild/bazel --template bazel bazel-focus`
+```focus new --dense-repo=https://github.com/bazelbuild/bazel --template bazel bazel-focus```
+
+*Note: The reason we are using the `--template bazel` flag is because there are some implicit dependencies needed for bazel to work.
+
 `cd bazel-focus`
 
 ## Checkout to build //src/main/cpp:blaze_util
