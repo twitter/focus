@@ -4,7 +4,7 @@ If you want to test-out focus, but don't have a monorepo to setup and test again
 ## Setup Steps
 First you will need to follow the directions in the top-level README.md to install focus.
 
-Then you will need to install `brew install openjdk@11`.
+Then you will need to install `brew install openjdk@11` to be able to build bazel with bazel.
 
 ## Clone bazelbuild/bazel
 If focus is not already in your path, you may want to temporarily add it with:
