@@ -4,7 +4,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
 
-use crate::index::content_hash::get_prelude_deps;
+use crate::index::content_hash::{get_prelude_deps, get_workspace_deps};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -15,7 +15,7 @@ use super::content_hash::HashContext;
 use super::{ContentHash, ObjectDatabase};
 
 /// A key into the "Focus Build Graph" which lets us identify a corresponding
-/// [`DependencyValue`] node.  A [`DependencyKey`] in combination with a
+/// [`DependencyValue`] node.  A [`DependencyKey`] in combination with aG
 /// snapshot of the repository is *syntactically* content-addressable in this
 /// sense: the hash of the [`DependencyKey`] can be calculated only by looking
 /// at file contents, without having to evaluate any Bazel queries.
@@ -220,6 +220,8 @@ pub fn get_files_to_materialize(
 ) -> anyhow::Result<PathsToMaterializeResult> {
     let mut dep_keys = dep_keys;
     debug!(?dep_keys, "Initial set of dependency keys");
+
+    dep_keys.extend(get_workspace_deps(ctx)?);
 
     // The result of `bazel query` appears to not include dependencies that are
     // caused by `prelude_bazel`, so we have to manually add them as part of the
@@ -436,6 +438,9 @@ sh_binary(
                 BazelPackage(
                     Label("//package1:foo"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
         }
         "###);
@@ -515,8 +520,12 @@ sh_binary(
                 BazelPackage(
                     Label("//package2:bar.sh"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
                 "package1",
                 "package2",
             },
@@ -608,8 +617,12 @@ New contents
                 BazelPackage(
                     Label("//package2:contents"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
                 "package1",
                 "package2",
             },
@@ -660,6 +673,9 @@ def my_macro_inner(name):
                 BazelPackage(
                     Label("//package1:foo"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
         }
         "###);
@@ -685,8 +701,12 @@ def my_macro_inner(name):
                 BazelPackage(
                     Label("//package3:contents"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
                 "package1",
                 "package3",
             },
@@ -757,8 +777,16 @@ def some_macro():
                 BazelPackage(
                     Label("//package1:foo.sh"),
                 ),
+                BazelBuildFile(
+                    Label("//macro:macro.bzl"),
+                ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
+                "macro",
                 "package1",
             },
         }
@@ -798,6 +826,12 @@ def some_macro():
             seen_keys: {
                 BazelPackage(
                     Label("//package1:foo"),
+                ),
+                BazelBuildFile(
+                    Label("//macro:macro.bzl"),
+                ),
+                Path(
+                    "WORKSPACE",
                 ),
             },
         }
@@ -872,8 +906,12 @@ macro("foo")
                 BazelBuildFile(
                     Label("//tools/build_rules:prelude_bazel"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
                 "macro",
                 "package1",
                 "tools/build_rules",
@@ -945,6 +983,9 @@ def macro2(name):
                 BazelBuildFile(
                     Label("//tools/build_rules:prelude_bazel"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
         }
         "###);
@@ -960,8 +1001,12 @@ def macro2(name):
                 BazelBuildFile(
                     Label("//tools/build_rules:prelude_bazel"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
                 "macro",
                 "package1",
                 "tools/build_rules",
@@ -1032,8 +1077,16 @@ def some_macro():
                 BazelPackage(
                     Label("//package1:foo.sh"),
                 ),
+                BazelBuildFile(
+                    Label("//macro:macro.bzl"),
+                ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
+                "macro",
                 "package1",
             },
         }
@@ -1147,8 +1200,12 @@ foo(
                 BazelPackage(
                     Label("//package1/some/sub/package:foo.sh"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
             paths: {
+                "WORKSPACE",
                 "package1",
                 "package1/some/sub/package",
             },
@@ -1215,6 +1272,9 @@ def foo(name, srcs):
                 BazelPackage(
                     Label("//package1/some/sub/package:foo.sh"),
                 ),
+                Path(
+                    "WORKSPACE",
+                ),
             },
         }
         "###);
@@ -1254,6 +1314,87 @@ def foo(name, srcs):
                         ),
                     },
                 },
+            },
+        }
+        "###);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_load_statements() -> anyhow::Result<()> {
+        init_logging();
+
+        let temp = tempfile::tempdir()?;
+        let fix = ScratchGitRepo::new_static_fixture(temp.path())?;
+
+        write_files(
+            &fix,
+            r#"
+file: WORKSPACE
+load("//repository_rule:rule.bzl", "foo")
+foo("bar")
+
+file: repository_rule/rule.bzl
+def foo(name):
+    pass
+
+file: repository_rule/BUILD
+
+file: package1/foo.sh
+
+file: package1/BUILD
+sh_binary(
+    name = "foo",
+    srcs = ["foo.sh"],
+)
+"#,
+        )?;
+        let head_oid = fix.commit_all("Wrote files")?;
+        let repo = fix.repo()?;
+
+        let app = Arc::new(App::new_for_testing()?);
+        let cache_dir = tempfile::tempdir()?;
+        let resolver = BazelResolver::new(cache_dir.path());
+        let target_set = hashset! {
+            "bazel://package1:foo".try_into()?,
+        };
+
+        let request = ResolutionRequest {
+            repo: fix.path().to_path_buf(),
+            targets: target_set,
+        };
+        let cache_options = CacheOptions::default();
+        let resolve_result = resolver.resolve(&request, &cache_options, app)?;
+
+        let odb = HashMapOdb::new();
+        let files_to_materialize = {
+            let head_commit = repo.find_commit(head_oid)?;
+            let head_tree = head_commit.tree()?;
+            let ctx = HashContext::new(&repo, &head_tree)?;
+            update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
+            get_files_to_materialize(&ctx, &odb, hashset! { parse_label("//package1:foo")? })?
+        };
+        insta::assert_debug_snapshot!(files_to_materialize, @r###"
+        Ok {
+            seen_keys: {
+                BazelPackage(
+                    Label("//package1:foo"),
+                ),
+                BazelPackage(
+                    Label("//package1:foo.sh"),
+                ),
+                BazelBuildFile(
+                    Label("//repository_rule:rule.bzl"),
+                ),
+                Path(
+                    "WORKSPACE",
+                ),
+            },
+            paths: {
+                "WORKSPACE",
+                "package1",
+                "repository_rule",
             },
         }
         "###);

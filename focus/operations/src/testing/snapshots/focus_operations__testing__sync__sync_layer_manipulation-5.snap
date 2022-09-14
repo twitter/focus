@@ -4,6 +4,7 @@ expression: "std::fs::read_to_string(&profile_path)?"
 ---
 /*
 !/*/
+/WORKSPACE/
 /focus/
 /mandatory_y/
 !/mandatory_y/*/
