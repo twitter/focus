@@ -6,6 +6,7 @@ use std::{
     convert::TryFrom,
     path::{Path, PathBuf},
     sync::Arc,
+    thread,
     time::Instant,
 };
 
@@ -33,7 +34,7 @@ use strum::VariantNames;
 use termion::{color, style};
 use tracing::{debug, debug_span, error, info};
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 struct NewArgs {
     /// Path to the repository to clone.
     #[clap(long, default_value = "~/workspace/source")]
@@ -62,7 +63,7 @@ struct NewArgs {
     template: Option<ClonedRepoTemplate>,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum Subcommand {
     /// Create a sparse clone from named layers or ad-hoc build targets
     New(NewArgs),
@@ -271,7 +272,7 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
     }
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum MaintenanceSubcommand {
     /// Runs global (i.e. system-wide) git maintenance tasks on repositories listed in
     /// the $HOME/.gitconfig's `maintenance.repo` multi-value config key. This command
@@ -333,7 +334,7 @@ enum MaintenanceSubcommand {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum MaintenanceScheduleSubcommand {
     /// Set up a system-appropriate periodic job (launchctl, systemd, etc.) for running
     /// maintenance tasks on hourly, daily, and weekly bases
@@ -378,7 +379,7 @@ enum MaintenanceScheduleSubcommand {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum RepoSubcommand {
     /// List registered repositories
     List {},
@@ -393,7 +394,7 @@ enum RepoSubcommand {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum BranchSubcommand {
     /// List branches in repo
     List {},
@@ -417,7 +418,7 @@ enum BranchSubcommand {
     Add { name: String },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum ProjectSubcommand {
     /// List all available layers
     Available {},
@@ -445,7 +446,7 @@ enum ProjectSubcommand {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum RefsSubcommand {
     /// Expires refs that are outside the window of "current refs"
     Delete {
@@ -486,7 +487,7 @@ enum RefsSubcommand {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum IndexSubcommand {
     /// Clear the on-disk cache.
     Clear {
@@ -579,7 +580,7 @@ enum IndexSubcommand {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 #[allow(clippy::enum_variant_names)]
 enum EventSubcommand {
     PostCheckout,
@@ -587,7 +588,7 @@ enum EventSubcommand {
     PostMerge,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 enum BackgroundSubcommand {
     /// Enable preemptive background synchronization
     Enable {
@@ -615,7 +616,7 @@ enum BackgroundSubcommand {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Clone, Debug)]
 #[clap(about = "Focused Development Tools")]
 struct FocusOpts {
     /// Number of threads to use when performing parallel resolution (where possible).
@@ -1250,7 +1251,12 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     info!(path = ?sandbox_dir, "Created sandbox");
 
     ensure_directories_exist(&tracker).context("Failed to create necessary directories")?;
-    setup_maintenance_scheduler(&options).context("Failed to setup maintenance scheduler")?;
+    let setup_maintenance_task = thread::spawn({
+        let options = options.clone();
+        move || -> anyhow::Result<()> {
+            setup_maintenance_scheduler(&options).context("Failed to setup maintenance scheduler")
+        }
+    });
 
     let exit_code = match run_subcommand(app.clone(), &tracker, options) {
         Ok(exit_code) => {
@@ -1268,6 +1274,7 @@ fn main_and_drop_locals() -> Result<ExitCode> {
     };
 
     sandbox::cleanup::run_with_default()?;
+    setup_maintenance_task.join().unwrap()?;
 
     let total_runtime = started_at.elapsed();
     debug!(
