@@ -4,6 +4,7 @@ expression: original_profile_contents
 ---
 /*
 !/*/
+/WORKSPACE/
 /focus/
 /mandatory_y/
 !/mandatory_y/*/

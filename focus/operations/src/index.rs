@@ -489,6 +489,9 @@ mod tests {
                     BazelBuildFile(
                         Label("//tools/build_rules:prelude_bazel"),
                     ),
+                    Path(
+                        "WORKSPACE",
+                    ),
                 },
             }
             "###);
@@ -523,8 +526,12 @@ mod tests {
                     BazelBuildFile(
                         Label("//tools/build_rules:prelude_bazel"),
                     ),
+                    Path(
+                        "WORKSPACE",
+                    ),
                 },
                 paths: {
+                    "WORKSPACE",
                     "library_a",
                     "project_a/src/main/java/com/example/cmdline",
                     "tools/build_rules",

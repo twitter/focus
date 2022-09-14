@@ -173,11 +173,52 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
         }
     }
 
-    enum KeyOrPath<'a> {
-        Key(DependencyKey),
-        Path(&'a Path),
+    let (kind, maybe_label, values_to_hash) = get_dependencies(ctx, &key)?;
+
+    let mut buf = String::new();
+    write!(&mut buf, "DependencyKeyV{VERSION}::{kind}(")?;
+    if let Some(label) = maybe_label {
+        write!(&mut buf, "{label}, ")?;
     }
-    let (kind, maybe_label, values_to_hash) = match &key {
+    let hashes = values_to_hash
+        .into_iter()
+        .map(|key_or_hash| match key_or_hash {
+            KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, dep_key),
+            KeyOrPath::Path(path) => content_hash_tree_path(ctx, path),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    for hash in hashes {
+        write!(&mut buf, "{hash}, ")?;
+    }
+    write!(&mut buf, ")")?;
+    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())
+        .map_err(Error::HashObject)?;
+    let hash = ContentHash(hash);
+
+    if let Some(old_value) = ctx
+        .caches
+        .borrow_mut()
+        .dependency_key_cache
+        .insert(key.to_owned(), hash.clone())
+    {
+        if old_value != hash {
+            error!(?key, ?old_value, new_value = ?hash, "Non-deterministic content hashing for dependency key");
+        }
+    }
+    Ok(hash)
+}
+
+#[derive(Debug)]
+enum KeyOrPath<'a> {
+    Key(DependencyKey),
+    Path(&'a Path),
+}
+
+fn get_dependencies<'a>(
+    ctx: &HashContext,
+    dep_key: &'a DependencyKey,
+) -> Result<(&'static str, Option<&'a Label>, Vec<KeyOrPath<'a>>)> {
+    match dep_key {
         DependencyKey::BazelPackage(
             label @ Label {
                 external_repository,
@@ -212,11 +253,11 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
                 target_name: TargetName::Name("WORKSPACE".to_string()),
             }));
 
-            (
+            Ok((
                 "BazelPackage",
                 Some(label),
                 dep_keys.into_iter().map(KeyOrPath::Key).collect(),
-            )
+            ))
         }
 
         DependencyKey::BazelBuildFile(
@@ -259,7 +300,7 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
                         loaded_deps
                             .into_iter()
                             .map(DependencyKey::BazelBuildFile)
-                            .filter(|dep_key| &key != dep_key),
+                            .filter(|key| dep_key != key),
                     );
 
                     dep_keys
@@ -273,53 +314,37 @@ fn content_hash_dependency_key(ctx: &HashContext, key: DependencyKey) -> Result<
             // here.
             dep_keys.push(DependencyKey::Path("WORKSPACE".into()));
 
-            (
+            Ok((
                 "BazelBuildFile",
                 Some(label),
                 dep_keys.into_iter().map(KeyOrPath::Key).collect(),
-            )
+            ))
         }
 
-        DependencyKey::Path(path) => ("Path", None, vec![KeyOrPath::Path(path)]),
+        DependencyKey::Path(path) => Ok(("Path", None, vec![KeyOrPath::Path(path)])),
 
-        DependencyKey::DummyForTesting(inner_dep_key) => (
+        DependencyKey::DummyForTesting(inner_dep_key) => Ok((
             "DummyForTesting",
             None,
             vec![KeyOrPath::Key(inner_dep_key.as_ref().clone())],
-        ),
-    };
-
-    let mut buf = String::new();
-    write!(&mut buf, "DependencyKeyV{VERSION}::{kind}(")?;
-    if let Some(label) = maybe_label {
-        write!(&mut buf, "{label}, ")?;
+        )),
     }
-    let hashes = values_to_hash
+}
+
+pub fn get_workspace_deps(ctx: &HashContext) -> Result<BTreeSet<DependencyKey>> {
+    let workspace_key = DependencyKey::BazelBuildFile(Label {
+        external_repository: None,
+        path_components: Vec::new(),
+        target_name: TargetName::Name("WORKSPACE".to_string()),
+    });
+    let (_, _, deps) = get_dependencies(ctx, &workspace_key)?;
+    Ok(deps
         .into_iter()
-        .map(|key_or_hash| match key_or_hash {
-            KeyOrPath::Key(dep_key) => content_hash_dependency_key(ctx, dep_key),
-            KeyOrPath::Path(path) => content_hash_tree_path(ctx, path),
+        .filter_map(|dep_key| match dep_key {
+            KeyOrPath::Key(key) => Some(key),
+            KeyOrPath::Path(_) => None,
         })
-        .collect::<Result<Vec<_>>>()?;
-    for hash in hashes {
-        write!(&mut buf, "{hash}, ")?;
-    }
-    write!(&mut buf, ")")?;
-    let hash = git2::Oid::hash_object(git2::ObjectType::Blob, buf.as_bytes())
-        .map_err(Error::HashObject)?;
-    let hash = ContentHash(hash);
-
-    if let Some(old_value) = ctx
-        .caches
-        .borrow_mut()
-        .dependency_key_cache
-        .insert(key.to_owned(), hash.clone())
-    {
-        if old_value != hash {
-            error!(?key, ?old_value, new_value = ?hash, "Non-deterministic content hashing for dependency key");
-        }
-    }
-    Ok(hash)
+        .collect())
 }
 
 /// Get the dependencies induced by the special
