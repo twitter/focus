@@ -31,6 +31,8 @@ If you are the repository administrator, first configure `focus` for your repo u
 
 For end-users, see [Usage](focus/doc/usage.md) for instructions on how to use `focus` to manage your sparse checkouts.
 
+For new or curious users, see [Bazel Tutorial](focus/doc/bazel_tutorial.md) for instructions on how to try `focus` on [bazel](https://github.com/bazelbuild/bazel)
+
 # Design
 
 See various design documents at https://github.com/twitter/focus/tree/main/focus/doc. Focus will also be presented at [Git Merge 2022](https://git-merge.com/).
