@@ -35,4 +35,4 @@ For new or curious users, see [Bazel Tutorial](focus/doc/bazel_tutorial.md) for 
 
 # Design
 
-See various design documents at https://github.com/twitter/focus/tree/main/focus/doc. Focus will also be presented at [Git Merge 2022](https://git-merge.com/).
+See various design documents at https://github.com/twitter/focus/tree/main/focus/doc. Focus was presented at [Git Merge 2022](https://git-merge.com/); [see the slides here](https://docs.google.com/presentation/d/12RVWPIms-rFKfteqYa5bpSWElIiJ1oCAYobLb5DihQo/edit?usp=sharing).
