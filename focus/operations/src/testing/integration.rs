@@ -60,8 +60,7 @@ impl RepoPairFixture {
         let projects_and_targets: Vec<String> = vec![];
         let tracker = Tracker::for_testing()?;
         tracker.ensure_directories_exist()?;
-
-        Ok(Self {
+        let fixture = Self {
             dir,
             dense_repo_path,
             sparse_repo_path,
@@ -71,7 +70,11 @@ impl RepoPairFixture {
             app,
             tracker,
             preserve: false,
-        })
+        };
+
+        set_extra_config_on_dense_repo(&fixture)?;
+
+        Ok(fixture)
     }
 
     fn preserve_dirs(&mut self) -> Result<()> {
@@ -251,5 +254,62 @@ impl Drop for RepoPairFixture {
             // Ignore return value.
             self.preserve_dirs().ok();
         }
+    }
+}
+
+pub fn set_extra_config_on_dense_repo(fixture: &RepoPairFixture) -> Result<()> {
+    if cfg!(not(feature = "twttr")) {
+        return Ok(());
+    }
+
+    let binary = fixture.app.git_binary();
+
+    binary
+        .command()
+        .arg("config")
+        .arg("--add")
+        .arg("--local")
+        .arg("ci.alt.remote")
+        .arg("https://git.twitter.biz/focus-test-repo-ci")
+        .current_dir(&fixture.dense_repo_path)
+        .assert()
+        .try_success()?;
+
+    binary
+        .command()
+        .arg("config")
+        .arg("--add")
+        .arg("--local")
+        .arg("--bool")
+        .arg("ci.alt.enabled")
+        .arg("true")
+        .current_dir(&fixture.dense_repo_path)
+        .assert()
+        .try_success()?;
+
+    Ok(())
+}
+
+#[cfg(feature = "twttr")]
+#[cfg(test)]
+mod twttr_test {
+    use super::RepoPairFixture;
+    use anyhow::Result;
+    use focus_testing::init_logging;
+
+    #[test]
+    fn test_ci_config_is_set_in_dense_repo() -> Result<()> {
+        init_logging();
+        let fixture = RepoPairFixture::new()?;
+
+        let repo = fixture.dense_repo.repo()?;
+
+        assert!(
+            repo.config()?.get_string("ci.alt.remote")?
+                == "https://git.twitter.biz/focus-test-repo-ci"
+        );
+        assert!(repo.config()?.get_bool("ci.alt.enabled")?);
+
+        Ok(())
     }
 }
