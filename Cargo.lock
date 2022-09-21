@@ -491,7 +491,7 @@ checksum = "fbdcdcb6d86f71c5e97409ad45898af11cbc995b4ee8112d59095a28d376c935"
 
 [[package]]
 name = "content-addressed-cache"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "ciborium",
@@ -931,7 +931,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "focus-commands"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -966,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "focus-internals"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1002,7 +1002,7 @@ dependencies = [
 
 [[package]]
 name = "focus-migrations"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "focus-internals",
@@ -1023,7 +1023,7 @@ dependencies = [
 
 [[package]]
 name = "focus-operations"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1068,7 +1068,7 @@ dependencies = [
 
 [[package]]
 name = "focus-platform"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "chrono",
  "serde",
@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "focus-repo-management"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "focus-internals",
@@ -1094,7 +1094,7 @@ dependencies = [
 
 [[package]]
 name = "focus-testing"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1111,7 +1111,7 @@ dependencies = [
 
 [[package]]
 name = "focus-tracing"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "focus-util"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2953,7 +2953,7 @@ dependencies = [
 
 [[package]]
 name = "tool-insights-client"
-version = "0.5.6"
+version = "0.5.7"
 dependencies = [
  "anyhow",
  "libc",
