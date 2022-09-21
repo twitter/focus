@@ -506,6 +506,9 @@ fn clone_local(
     set_up_remotes(&dense_repo, &sparse_repo, branch, app)
         .context("Failed to set up the remotes")?;
 
+    copy_dense_config(&dense_repo, &sparse_repo)
+        .context("failed to copy config from dense repo")?;
+
     Ok(())
 }
 
@@ -795,6 +798,40 @@ fn set_up_remotes(
                 )
             })?;
     }
+    Ok(())
+}
+
+fn copy_dense_config(dense_repo: &Repository, sparse_repo: &Repository) -> Result<()> {
+    if cfg!(not(feature = "twttr")) {
+        return Ok(());
+    }
+
+    let dense_cfg = dense_repo
+        .config()
+        .context("failed to get dense repo config")?
+        .open_level(git2::ConfigLevel::Local)
+        .context("failed to open level Local in dense repo config")?;
+
+    let mut sparse_cfg = sparse_repo
+        .config()
+        .context("failed to get sparse repo config")?
+        .open_level(git2::ConfigLevel::Local)
+        .context("failed to open level Local in sparse repo config")?;
+
+    for k in ["ci.alt.remote", "ci.alt.enabled"] {
+        let v = dense_cfg
+            .get_string(k)
+            .with_context(|| format!("failed to get value for key {:#?} from dense repo", k))?;
+        if !v.is_empty() {
+            sparse_cfg.set_str(k, &v).with_context(|| {
+                format!(
+                    "failed to set key {:#?} value {:#?} from dense repo in sparse repo",
+                    k, &v
+                )
+            })?;
+        }
+    }
+
     Ok(())
 }
 
