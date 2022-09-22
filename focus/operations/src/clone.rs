@@ -363,13 +363,7 @@ pub fn run(
                     app.clone(),
                 )?;
 
-                if template.is_some() {
-                    warn!(
-                        ?template,
-                        "Repo template is ignored since this is a local clone"
-                    );
-                }
-                None
+                template
             }
             Origin::Remote(url) => {
                 clone_remote(
