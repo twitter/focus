@@ -189,6 +189,7 @@ impl<'processor> SelectionOperationProcessor<'processor> {
 }
 
 /// SelectionManager maintains the current selection within a repository. It also provides access to projects defined in the repository via the `project_catalog()` method and associated structure.
+#[derive(Debug)]
 pub struct SelectionManager {
     /// The path where the selection is stored.
     selection_path: PathBuf,

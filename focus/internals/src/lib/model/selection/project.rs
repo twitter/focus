@@ -232,6 +232,7 @@ impl TryFrom<&ProjectIndex> for TargetSet {
 }
 
 /// ProjectCatalog maintains indices of optional and mandatory projects defined in a repository.
+#[derive(Debug)]
 pub struct ProjectCatalog {
     pub optional_projects: ProjectIndex,
     pub mandatory_projects: ProjectIndex,
