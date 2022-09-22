@@ -7,7 +7,10 @@ edition = "2021"
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 focus-internals = { path = "../internals" }
 focus-operations = { path = "../operations" }
-git2 = "0.14.2"
+git2 = { version = "0.14.2", features = [
+  "vendored-libgit2",
+  "vendored-openssl",
+] }
 lazy_static = "1.4.0"
 serde = "1.0.130"
 serde_derive = "1.0.130"
