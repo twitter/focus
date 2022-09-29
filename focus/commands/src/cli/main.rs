@@ -28,6 +28,7 @@ use focus_internals::tracker::Tracker;
 use focus_operations::{
     clone::{CloneArgs, ClonedRepoTemplate},
     maintenance::{self, ScheduleOpts},
+    project::lint,
     sync::SyncMode,
 };
 use strum::VariantNames;
@@ -112,6 +113,12 @@ enum Subcommand {
 
     /// List available projects.
     Projects {},
+
+    /// Interact with project definitions
+    Project {
+        #[clap(subcommand)]
+        subcommand: ProjectSubcommand,
+    },
 
     /// Detect whether there are changes to the build graph (used internally)
     DetectBuildGraphChanges {
@@ -223,6 +230,9 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Remove { .. } => "remove".to_string(),
         Subcommand::Status { .. } => "status".to_string(),
         Subcommand::Projects { .. } => "projects".to_string(),
+        Subcommand::Project { subcommand } => match subcommand {
+            ProjectSubcommand::Lint { .. } => "project-lint".to_string(),
+        },
         Subcommand::DetectBuildGraphChanges { .. } => "detect-build-graph-changes".to_string(),
         Subcommand::Refs { subcommand, .. } => match subcommand {
             RefsSubcommand::Delete { .. } => "refs-delete".to_string(),
@@ -430,30 +440,8 @@ enum BranchSubcommand {
 
 #[derive(Parser, Clone, Debug)]
 enum ProjectSubcommand {
-    /// List all available layers
-    Available {},
-
-    /// List currently selected layers
-    List {},
-
-    /// Push a project onto the top of the stack of currently selected layers
-    Push {
-        /// Names of layers to push.
-        names: Vec<String>,
-    },
-
-    /// Pop one or more project(s) from the top of the stack of current selected layers
-    Pop {
-        /// The number of layers to pop.
-        #[clap(long, default_value = "1")]
-        count: usize,
-    },
-
-    /// Filter out one or more project(s) from the stack of currently selected layers
-    Remove {
-        /// Names of the layers to be removed.
-        names: Vec<String>,
-    },
+    /// Load projects and then try to parse targets
+    Lint {},
 }
 
 #[derive(Parser, Clone, Debug)]
@@ -1171,6 +1159,14 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                     shard_count,
                 )?;
                 Ok(exit_code)
+            }
+        },
+
+        Subcommand::Project { subcommand } => match subcommand {
+            ProjectSubcommand::Lint {} => {
+                let repo = git_helper::find_top_level(app.clone(), std::env::current_dir()?)
+                    .context("Finding the top level of the repo")?;
+                lint(&repo, app)
             }
         },
 

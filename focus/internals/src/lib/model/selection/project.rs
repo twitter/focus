@@ -4,6 +4,7 @@
 use anyhow::{bail, Context, Result};
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
+    convert::TryFrom,
     ffi::OsString,
     fmt::Display,
     path::Path,
@@ -85,6 +86,18 @@ impl Project {
         debug!(seen_projects = ?seen_projects, "Saw these projects while resolving top-level project");
 
         Ok(target_set)
+    }
+
+    pub fn lint(&self) -> Result<()> {
+        for target in &self.targets {
+            Target::try_from(target.as_str()).with_context(|| {
+                format!(
+                    "Validation of \"{}\"'s target \"{target}\" failed",
+                    self.name
+                )
+            })?;
+        }
+        Ok(())
     }
 }
 
@@ -289,6 +302,24 @@ mod testing {
         }
     }
 
+    fn non_compliant_project() -> Project {
+        Project {
+            name: "non_compliant_project".to_string(),
+            description: String::from("This project is non-compliant"),
+            mandatory: false,
+            targets: btreeset!["non-compliant-scheme:thisdoesntmatter".to_string()],
+        }
+    }
+
+    fn compliant_project() -> Project {
+        Project {
+            name: "compliant_project".to_string(),
+            description: String::from("This project is compliant"),
+            mandatory: false,
+            targets: btreeset!["bazel://something".to_string()],
+        }
+    }
+
     fn target() -> Target {
         Target::try_from(TARGET_STR).unwrap()
     }
@@ -313,6 +344,22 @@ mod testing {
         let target_set = project().resolve_targets_for_project(&available_projects);
         assert!(target_set.is_err());
 
+        Ok(())
+    }
+
+    #[test]
+    fn lint_compliant_project() -> Result<()> {
+        let good_project = compliant_project();
+        let result = good_project.lint();
+        assert!(result.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn lint_noncompliant_project() -> Result<()> {
+        let bad_project = non_compliant_project();
+        let result = bad_project.lint();
+        assert!(result.is_err());
         Ok(())
     }
 }
