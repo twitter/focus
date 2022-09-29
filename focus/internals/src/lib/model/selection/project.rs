@@ -29,7 +29,12 @@ pub struct Project {
     pub mandatory: bool,
 
     /// The targets associated with this project.
+    #[serde(default)]
     pub targets: BTreeSet<String>,
+
+    // The projects included in this one.
+    #[serde(default)]
+    pub projects: BTreeSet<String>,
 }
 
 impl Project {
@@ -61,25 +66,18 @@ impl Project {
             }
 
             for target in &project.targets {
-                let (prefix, rest) = match target.split_once(':') {
-                    Some((prefix, rest)) => (prefix, rest),
+                target_set.insert(Target::try_from(target.as_str())?);
+            }
+
+            for project in &project.projects {
+                match available_subprojects.get(project) {
+                    Some(subproject) => {
+                        resolvable_projects.push(subproject);
+                    }
                     None => {
-                        bail!(TargetError::NoSchemeProvidedError);
+                        bail!("Invalid project target: {}", project.as_str())
                     }
                 };
-                let rest = rest.to_owned();
-                if prefix.eq_ignore_ascii_case("project") {
-                    match available_subprojects.get(&rest) {
-                        Some(subproject) => {
-                            resolvable_projects.push(subproject);
-                        }
-                        None => {
-                            bail!("Invalid project target: {}", target.as_str())
-                        }
-                    };
-                } else {
-                    target_set.insert(Target::try_from(target.as_str())?);
-                }
             }
         }
 
@@ -178,16 +176,39 @@ impl Display for ProjectIndex {
                     .cycle()
                     .take(longest_project_name - project.name.len()),
             );
+            let mut stats = vec![];
+            if !project.targets.is_empty() {
+                stats.push(format!(
+                    "{} {}",
+                    project.targets.len(),
+                    if project.targets.len() == 1 {
+                        "target"
+                    } else {
+                        "targets"
+                    }
+                ))
+            }
+            if !project.projects.is_empty() {
+                stats.push(format!(
+                    "{} {}",
+                    project.projects.len(),
+                    if project.projects.len() == 1 {
+                        "project"
+                    } else {
+                        "projects"
+                    }
+                ))
+            }
+            let stats = stats.join(", ");
             writeln!(
                 f,
-                "{}   {} ({} {})",
+                "{}   {}{}",
                 padded_project_name,
                 project.description,
-                project.targets.len(),
-                if project.targets.len() == 1 {
-                    "target"
+                if stats.is_empty() {
+                    "".to_string()
                 } else {
-                    "targets"
+                    format!(" ({})", stats)
                 }
             )?;
         }
@@ -282,10 +303,8 @@ mod testing {
             name: PROJECT_NAME_STR.to_owned(),
             description: String::from("This is a description"),
             mandatory: false,
-            targets: btreeset![
-                String::from(TARGET_STR),
-                format!("project:{}", PROJECT_NAME_STR_2)
-            ],
+            targets: btreeset![String::from(TARGET_STR),],
+            projects: btreeset![String::from(PROJECT_NAME_STR_2)],
         }
     }
 
@@ -294,10 +313,10 @@ mod testing {
             name: PROJECT_NAME_STR_2.to_owned(),
             description: String::from("This is a description"),
             mandatory: false,
-            targets: btreeset![
-                String::from(TARGET_STR_2),
-                format!("project:{}", PROJECT_NAME_STR_2),
-                format!("project:{}", PROJECT_NAME_STR)
+            targets: btreeset![String::from(TARGET_STR_2),],
+            projects: btreeset![
+                String::from(PROJECT_NAME_STR_2),
+                String::from(PROJECT_NAME_STR)
             ],
         }
     }
@@ -308,6 +327,7 @@ mod testing {
             description: String::from("This project is non-compliant"),
             mandatory: false,
             targets: btreeset!["non-compliant-scheme:thisdoesntmatter".to_string()],
+            projects: btreeset![],
         }
     }
 
@@ -317,6 +337,7 @@ mod testing {
             description: String::from("This project is compliant"),
             mandatory: false,
             targets: btreeset!["bazel://something".to_string()],
+            projects: btreeset![],
         }
     }
 

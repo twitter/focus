@@ -398,10 +398,8 @@ mod testing {
             name: PROJECT_NAME_STR.to_owned(),
             description: String::from("This is a description"),
             mandatory: false,
-            targets: btreeset![
-                String::from("bazel://a:b"),
-                String::from(PROJECT_NAME_STR_2)
-            ],
+            targets: btreeset![String::from("bazel://a:b"),],
+            projects: btreeset![String::from(PROJECT_NAME_STR_2)],
         }
     }
 
