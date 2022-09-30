@@ -13,8 +13,11 @@ use std::{
 
 use crate::{
     index::{content_hash, ContentHash, DependencyKey, HashContext},
-    model::{repo::Repo, selection::Project},
-    target::{Target, TargetSet},
+    model::{
+        repo::Repo,
+        selection::{resolve_targets_for_project, Project},
+    },
+    target::Target,
 };
 use focus_util::{app::App, git_helper};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -97,18 +100,10 @@ pub fn print_churn_stats(
         )
         .map(|(name, project)| (name.clone(), project.clone()))
         .collect();
-    let all_targets: TargetSet = all_projects
-        .iter()
-        .map(|(_name, project)| project)
-        .flat_map(|project| {
-            project
-                .resolve_targets_for_project(
-                    &selections.project_catalog().optional_projects.underlying,
-                )
-                .unwrap()
-        })
-        .collect();
-
+    let all_targets = resolve_targets_for_project(
+        all_projects.values().cloned().collect(),
+        &selections.project_catalog().optional_projects.underlying,
+    )?;
     let repo = git2::Repository::open(sparse_repo_path.clone())?;
     let commits = {
         eprintln!("Loading {num_commits} commits...");
@@ -216,16 +211,18 @@ pub fn print_churn_stats(
 
         for commit_oid in &commits {
             for (project, hash_change_infos) in project_stats.iter_mut() {
-                let target_hashes: HashMap<Target, ContentHash> = project
-                    .resolve_targets_for_project(
-                        &selections.project_catalog().optional_projects.underlying,
-                    )?
+                let targets = resolve_targets_for_project(
+                    vec![project.to_owned().to_owned()],
+                    &selections.project_catalog().optional_projects.underlying,
+                )?;
+                let target_hashes: HashMap<Target, ContentHash> = targets
                     .into_iter()
                     .map(|target| {
                         let target_hash = hashes[&(*commit_oid, &target)].clone();
                         (target, target_hash)
                     })
                     .collect();
+
                 match hash_change_infos.last_mut() {
                     Some(hash_change_info) if hash_change_info.current_hashes == target_hashes => {
                         hash_change_info.commits_since_last_hash_change += 1;
@@ -255,10 +252,11 @@ pub fn print_churn_stats(
         println!("Most churning projects:");
         for (project, value) in &averages[..10] {
             let most_churning_targets = {
-                let mut result: Vec<(Target, f64)> = project
-                    .resolve_targets_for_project(
-                        &selections.project_catalog().optional_projects.underlying,
-                    )?
+                let targets = resolve_targets_for_project(
+                    vec![project.to_owned().to_owned().to_owned()],
+                    &selections.project_catalog().optional_projects.underlying,
+                )?;
+                let mut result: Vec<(Target, f64)> = targets
                     .iter()
                     .map(|target| (target.clone(), target_average_churns[target]))
                     .collect();

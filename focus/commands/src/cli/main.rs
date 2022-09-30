@@ -24,7 +24,7 @@ use focus_util::{
     time::FocusTime,
 };
 
-use focus_internals::tracker::Tracker;
+use focus_internals::{target::TargetTypes, tracker::Tracker};
 use focus_operations::{
     clone::{CloneArgs, ClonedRepoTemplate},
     maintenance::{self, ScheduleOpts},
@@ -109,7 +109,15 @@ enum Subcommand {
     },
 
     /// Display which projects and targets are selected.
-    Status {},
+    Status {
+        ///Unwrap all projects until only targets are displayed
+        #[clap(long = "targets")]
+        targets: bool,
+
+        //Include only the types of targets specified
+        #[clap(short = 't', long = "types", arg_enum)]
+        target_types: Vec<TargetTypes>,
+    },
 
     /// List available projects.
     Projects {},
@@ -932,9 +940,12 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             Ok(ExitCode(0))
         }
 
-        Subcommand::Status {} => {
+        Subcommand::Status {
+            targets,
+            target_types,
+        } => {
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
-            focus_operations::status::run(&sparse_repo, app)
+            focus_operations::status::run(&sparse_repo, app, targets, target_types)
         }
 
         Subcommand::Projects {} => {

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod project;
+pub use project::resolve_targets_for_project;
 pub use project::Project;
 pub(crate) use project::ProjectCatalog;
 use project::ProjectIndex;
