@@ -1027,6 +1027,7 @@ version = "0.5.7"
 dependencies = [
  "anyhow",
  "chrono",
+ "clap 3.2.20",
  "content-addressed-cache",
  "criterion",
  "crossbeam",

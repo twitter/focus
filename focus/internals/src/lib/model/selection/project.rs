@@ -37,6 +37,43 @@ pub struct Project {
     pub projects: BTreeSet<String>,
 }
 
+/// Resolves all targets for a set of projects, including sub-project definitions.
+///
+/// If the project includes another project, the available projects are checked to find the include list for the sub-project.
+pub fn resolve_targets_for_project(
+    projects: Vec<Project>,
+    available_subprojects: &HashMap<String, Project>,
+) -> Result<TargetSet> {
+    let mut resolvable_projects = projects;
+    let mut target_set = TargetSet::new();
+    let mut seen_projects: HashSet<String> = HashSet::new();
+
+    while let Some(project) = resolvable_projects.pop() {
+        if !seen_projects.insert(project.name.clone()) {
+            continue;
+        }
+
+        for target in &project.targets {
+            target_set.insert(Target::try_from(target.as_str())?);
+        }
+
+        for project in &project.projects {
+            match available_subprojects.get(project) {
+                Some(subproject) => {
+                    resolvable_projects.push(subproject.clone());
+                }
+                None => {
+                    bail!("Invalid project target: {}", project.as_str())
+                }
+            };
+        }
+    }
+
+    debug!(seen_projects = ?seen_projects, "Saw these projects while resolving top-level project");
+
+    Ok(target_set)
+}
+
 impl Project {
     /// Returns whether this project is mandatory, meaning it is always present in the sparse outline and is not presented to users as being selectable.
     pub fn is_mandatory(&self) -> bool {
@@ -46,44 +83,6 @@ impl Project {
     /// Returns whether this project should be available to select by users.
     pub fn is_selectable(&self) -> bool {
         !self.is_mandatory()
-    }
-
-    /// Resolves all targets for a project, including sub-project definitions.
-    ///
-    /// If the project includes another project, the available projects are checked to find the include list for the sub-project.
-    pub fn resolve_targets_for_project(
-        &self,
-        available_subprojects: &HashMap<String, Project>,
-    ) -> Result<TargetSet> {
-        let mut target_set = TargetSet::new();
-
-        let mut resolvable_projects = vec![self];
-        let mut seen_projects: HashSet<String> = HashSet::new();
-
-        while let Some(project) = resolvable_projects.pop() {
-            if !seen_projects.insert(project.name.clone()) {
-                continue;
-            }
-
-            for target in &project.targets {
-                target_set.insert(Target::try_from(target.as_str())?);
-            }
-
-            for project in &project.projects {
-                match available_subprojects.get(project) {
-                    Some(subproject) => {
-                        resolvable_projects.push(subproject);
-                    }
-                    None => {
-                        bail!("Invalid project target: {}", project.as_str())
-                    }
-                };
-            }
-        }
-
-        debug!(seen_projects = ?seen_projects, "Saw these projects while resolving top-level project");
-
-        Ok(target_set)
     }
 
     pub fn lint(&self) -> Result<()> {
@@ -353,7 +352,7 @@ mod testing {
     fn test_get_all_targets_for_project() -> Result<()> {
         let available_projects =
             hashmap! { project2().name => project2(), project().name => project() };
-        let target_set = project().resolve_targets_for_project(&available_projects)?;
+        let target_set = resolve_targets_for_project(vec![project()], &available_projects)?;
         assert_eq!(hashset![target(), target2()], target_set);
 
         Ok(())
@@ -362,7 +361,7 @@ mod testing {
     #[test]
     fn test_get_all_targets_for_project_fails_with_invalid_subproject_name() -> Result<()> {
         let available_projects = hashmap! { project().name => project() };
-        let target_set = project().resolve_targets_for_project(&available_projects);
+        let target_set = resolve_targets_for_project(vec![project()], &available_projects);
         assert!(target_set.is_err());
 
         Ok(())

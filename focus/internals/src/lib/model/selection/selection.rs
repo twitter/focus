@@ -279,9 +279,11 @@ impl SelectionManager {
         let optional_projects = &self.project_catalog().optional_projects.underlying;
         let mut target_set = selection.targets.clone();
         let projects = selection.projects;
-        for project in projects {
-            target_set.extend(project.resolve_targets_for_project(optional_projects)?);
-        }
+
+        target_set.extend(resolve_targets_for_project(
+            projects.into_iter().collect(),
+            optional_projects,
+        )?);
 
         Ok(target_set)
     }

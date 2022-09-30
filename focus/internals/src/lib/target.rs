@@ -11,6 +11,13 @@ use thiserror::Error;
 
 pub type TargetSet = HashSet<Target>;
 
+#[derive(clap::ArgEnum, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum TargetTypes {
+    Bazel,
+    Directory,
+    Pants,
+}
+
 #[derive(Serialize, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone)]
 pub enum Target {
     /// A Bazel package like `//foo/bar:baz`.
