@@ -382,4 +382,41 @@ mod testing {
         assert!(result.is_err());
         Ok(())
     }
+
+    #[test]
+    fn deserialize_empty_project() -> Result<()> {
+        let project: Project = serde_json::from_str(
+            r#"
+            {
+                "name": "example_project",
+                "description": "an example description"
+            }
+            "#,
+        )?;
+        assert_eq!(project.name, "example_project");
+        assert_eq!(project.description, "an example description");
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_project() -> Result<()> {
+        let project: Project = serde_json::from_str(
+            r#"
+            {
+                "name": "example_project",
+                "description": "an example description",
+                "targets": ["bazel://example_target"],
+                "projects": ["another_project"]
+            }
+            "#,
+        )?;
+        assert_eq!(project.name, "example_project");
+        assert_eq!(project.description, "an example description");
+        assert_eq!(
+            project.targets,
+            btreeset!["bazel://example_target".to_string()]
+        );
+        assert_eq!(project.projects, btreeset!["another_project".to_string()]);
+        Ok(())
+    }
 }
