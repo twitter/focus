@@ -113,7 +113,7 @@ impl Display for Key {
             Key::ImportReceipt { build_graph_hash } => {
                 write!(
                     f,
-                    "import_reciept:build-graph-hash={}",
+                    "import-reciept:build-graph-hash={}",
                     hex::encode(build_graph_hash),
                 )
             }
