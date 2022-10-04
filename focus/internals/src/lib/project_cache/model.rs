@@ -79,6 +79,10 @@ pub enum Key {
         #[serde(with = "hex::serde")]
         commit_id: Vec<u8>,
     },
+    MandatoryProjectPatternSet {
+        #[serde(with = "hex::serde")]
+        build_graph_hash: Vec<u8>,
+    },
     OptionalProjectPatternSet {
         #[serde(with = "hex::serde")]
         build_graph_hash: Vec<u8>,
@@ -99,6 +103,13 @@ impl Display for Key {
                     hex::encode(commit_id)
                 )
             }
+            Key::MandatoryProjectPatternSet { build_graph_hash } => {
+                write!(
+                    f,
+                    "mandatory-project-pattern-set:build-graph-hash={}",
+                    hex::encode(build_graph_hash),
+                )
+            },
             Key::OptionalProjectPatternSet {
                 build_graph_hash,
                 project_name,
