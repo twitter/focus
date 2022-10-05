@@ -83,6 +83,7 @@ fn sync_upstream_changes() -> Result<()> {
         &fixture.sparse_repo_path,
         true,
         vec![String::from("bazel://x/...")],
+        false,
         fixture.app.clone(),
     )?;
 
@@ -164,6 +165,7 @@ fn sync_layer_manipulation() -> Result<()> {
         &path,
         true,
         vec![project_b_label.clone()],
+        false,
         fixture.app.clone(),
     )?;
     {
@@ -181,6 +183,7 @@ fn sync_layer_manipulation() -> Result<()> {
         &path,
         true,
         vec![project_a_label.clone()],
+        false,
         fixture.app.clone(),
     )?;
     {
@@ -231,6 +234,7 @@ fn sync_adhoc_manipulation() -> Result<()> {
         &fixture.sparse_repo_path,
         true,
         targets.clone(),
+        false,
         fixture.app.clone(),
     )?;
     assert!(library_b_dir.is_dir());
@@ -260,6 +264,7 @@ fn failed_selection_mutations_are_reverted() -> Result<()> {
         &fixture.sparse_repo_path,
         true,
         targets,
+        false,
         fixture.app.clone()
     )
     .is_err());
@@ -317,6 +322,7 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
         &fixture.sparse_repo_path,
         false, // Note: Manual sync
         targets,
+        false,
         fixture.app.clone(),
     )?;
     // First sync performs a checkout.
@@ -350,6 +356,7 @@ fn sync_sets_ti_client_correctly() -> Result<()> {
         &fixture.sparse_repo_path,
         true,
         targets.clone(),
+        false,
         fixture.app.clone(),
     )?;
 
@@ -453,6 +460,7 @@ fn regression_adding_directory_targets_present_in_mandatory_sets() -> Result<()>
         &fixture.sparse_repo_path,
         true,
         targets,
+        false,
         fixture.app.clone(),
     )?;
     assert!(swedish_txt_file.is_file());
@@ -488,6 +496,7 @@ fn regression_adding_deep_directory_target_materializes_correctly() -> Result<()
         &fixture.sparse_repo_path,
         true,
         targets,
+        false,
         fixture.app.clone(),
     )?;
 

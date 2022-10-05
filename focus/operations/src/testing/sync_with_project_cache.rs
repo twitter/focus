@@ -93,6 +93,7 @@ fn project_cache_falls_back_with_non_project_targets_selected() -> Result<()> {
             String::from("team_banzai/project_a"),
             String::from("directory:w_dir"),
         ],
+        false,
         app.clone(),
     )?;
 
@@ -126,6 +127,7 @@ fn project_cache_answers_with_only_projects_selected() -> Result<()> {
         &fixture.underlying.sparse_repo_path,
         true,
         vec![String::from("team_banzai/project_a")],
+        false,
         app.clone(),
     )?;
 

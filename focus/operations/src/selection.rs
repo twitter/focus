@@ -21,15 +21,20 @@ use git2::{FileMode, TreeWalkMode, TreeWalkResult};
 use skim::{
     prelude::SkimOptionsBuilder, AnsiString, Skim, SkimItem, SkimItemReceiver, SkimItemSender,
 };
+
 use tracing::info;
 
-use focus_internals::model::{repo::Repo, selection::*};
+use focus_internals::{
+    model::{repo::Repo, selection::*},
+    target::Target,
+};
 
 fn mutate(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     action: OperationAction,
     projects_and_targets: Vec<String>,
+    unroll: bool,
     app: Arc<focus_util::app::App>,
 ) -> Result<bool> {
     let mut synced = false;
@@ -38,6 +43,41 @@ fn mutate(
     let backup = selections
         .create_backup()
         .context("Creating a backup of the current selection")?;
+
+    let mut projects_and_targets = projects_and_targets;
+    if unroll {
+        let mut projects = vec![];
+        let mut targets = vec![];
+        for i in projects_and_targets.clone() {
+            if Target::try_from(i.as_str()).is_ok() {
+                targets.push(i);
+            } else {
+                projects.extend(
+                    selections
+                        .project_catalog()
+                        .optional_projects
+                        .underlying
+                        .get(&i)
+                        .with_context(|| format!("Couldn't find project definition for {}.", i))?
+                        .projects
+                        .clone(),
+                );
+                targets.extend(
+                    selections
+                        .project_catalog()
+                        .optional_projects
+                        .underlying
+                        .get(&i)
+                        .with_context(|| format!("Couldn't find project definition for {}.", i))?
+                        .targets
+                        .clone(),
+                );
+            };
+        }
+        projects_and_targets = targets;
+        projects_and_targets.extend(projects);
+    }
+
     if selections
         .mutate(action, &projects_and_targets)
         .context("Updating the selection")?
@@ -59,6 +99,7 @@ pub fn add(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
+    unroll: bool,
     app: Arc<App>,
 ) -> Result<bool> {
     mutate(
@@ -66,6 +107,7 @@ pub fn add(
         sync_if_changed,
         OperationAction::Add,
         projects_and_targets,
+        unroll,
         app,
     )
 }
@@ -81,6 +123,7 @@ pub fn remove(
         sync_if_changed,
         OperationAction::Remove,
         projects_and_targets,
+        false,
         app,
     )
 }
@@ -460,6 +503,7 @@ pub fn add_interactive(
     sparse_repo: impl AsRef<Path>,
     app: Arc<App>,
     search_all_targets: bool,
+    unroll: bool,
 ) -> Result<()> {
     let sparse_repo_path = sparse_repo.as_ref();
     let repo = Repo::open(sparse_repo_path, app.clone())?;
@@ -524,8 +568,58 @@ pub fn add_interactive(
                 } => format!("bazel://{name}/..."),
             })
             .collect();
-        add(sparse_repo, true, selected_projects, app)?;
+        add(sparse_repo, true, selected_projects, unroll, app)?;
     }
 
     Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use anyhow::Result;
+
+    use crate::testing::integration::RepoPairFixture;
+
+    #[test]
+    fn selection_add_unroll() -> Result<()> {
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let projects = vec![String::from("team_zissou/project_c")];
+
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            projects,
+            true,
+            fixture.app.clone(),
+        )?;
+        let project_names: HashSet<String> = fixture
+            .sparse_repo()?
+            .selection_manager()?
+            .selection()?
+            .projects
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(
+            project_names,
+            HashSet::from(["team_banzai/project_a".to_string()])
+        );
+        let project_names: HashSet<String> = fixture
+            .sparse_repo()?
+            .selection_manager()?
+            .selection()?
+            .targets
+            .into_iter()
+            .map(|t| t.to_string())
+            .collect();
+        assert_eq!(
+            project_names,
+            HashSet::from(["bazel://project_b/...".to_string()])
+        );
+
+        Ok(())
+    }
 }
