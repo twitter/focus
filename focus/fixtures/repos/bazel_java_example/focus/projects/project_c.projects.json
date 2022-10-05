@@ -1,0 +1,14 @@
+{
+    "projects": [
+        {
+            "name": "team_zissou/project_c",
+            "description": "Stuff relating to project C",
+            "targets": [
+                "bazel://project_b/..."
+            ],
+            "projects": [
+                "team_banzai/project_a"
+            ]
+        }
+    ]
+}

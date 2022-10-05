@@ -99,6 +99,10 @@ enum Subcommand {
         /// search results.
         #[clap(short = 'a', long = "all", requires("interactive"))]
         search_all_targets: bool,
+
+        /// Add the immediate targets and projects of projects to the selection, not the projects themselves.
+        #[clap(long = "unroll")]
+        unroll: bool,
     },
 
     /// Remove projects and targets from the selection.
@@ -910,6 +914,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             projects_and_targets,
             interactive,
             search_all_targets,
+            unroll,
         } => {
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             paths::assert_focused_repo(&sparse_repo)?;
@@ -922,9 +927,16 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                     &sparse_repo,
                     app,
                     search_all_targets,
+                    unroll,
                 )?;
             } else {
-                focus_operations::selection::add(&sparse_repo, true, projects_and_targets, app)?;
+                focus_operations::selection::add(
+                    &sparse_repo,
+                    true,
+                    projects_and_targets,
+                    unroll,
+                    app,
+                )?;
             }
             Ok(ExitCode(0))
         }
