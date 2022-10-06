@@ -517,7 +517,7 @@ impl<'cache> ProjectCache<'cache> {
         if endpoint.scheme().eq_ignore_ascii_case("file") {
             Ok(Box::new(LocalCacheBackend::new(endpoint.clone())?))
         } else {
-            Ok(Box::new(HttpCacheBackend::new(endpoint.clone())))
+            Ok(Box::new(HttpCacheBackend::new(endpoint.clone())?))
         }
     }
 }

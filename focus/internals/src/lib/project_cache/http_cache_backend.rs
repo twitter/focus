@@ -1,6 +1,8 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::io::Read;
+
 use anyhow::{Context, Result};
 use reqwest::blocking::Client;
 use url::Url;
@@ -10,19 +12,22 @@ use super::*;
 /// A cache backend that uses HTTP GET to retrieve models and HTTP PUT to store them.
 pub struct HttpCacheBackend {
     endpoint: Url,
+    client: Client,
 }
 
 impl HttpCacheBackend {
-    pub fn new(endpoint: Url) -> Self {
-        Self { endpoint }
+    pub fn new(endpoint: Url) -> Result<Self> {
+        let client = Self::blocking_client().context("Creating HTTP client failed")?;
+        Ok(Self { endpoint, client })
     }
 
-    fn blocking_client(&self) -> Result<Client> {
+    fn blocking_client() -> Result<Client> {
         // TODO: use vergen to get the SHA, cargo features, ...
         static APP_USER_AGENT: &str = concat!("focus", "/", env!("CARGO_PKG_VERSION"));
         Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent(APP_USER_AGENT)
+            .gzip(true)
             .build()
             .map_err(anyhow::Error::new)
     }
@@ -38,17 +43,20 @@ impl ProjectCacheBackend for HttpCacheBackend {
         let span = tracing::info_span!("Fetching");
         let _guard = span.enter();
         tracing::debug!(url = ?url.as_str(), "GET");
-        let response = self
-            .blocking_client()?
-            .get(url)
-            .send()
-            .context("GET failed")?
-            .error_for_status()?;
-        tracing::debug!(status = ?response.status(), "OK");
-        Ok(response
-            .bytes()
-            .context("Reading response failed")?
-            .to_vec())
+        let mut buf = Vec::<u8>::new();
+        {
+            let mut response = self
+                .client
+                .get(url)
+                .send()
+                .context("GET failed")?
+                .error_for_status()?;
+            tracing::debug!(status = ?response.status(), "OK");
+            response
+                .read_to_end(&mut buf)
+                .context("Reading response failed")?;
+        }
+        Ok(buf)
     }
 
     // Encode the given model as JSON and upload it using HTTP PUT to the given URL.
@@ -58,7 +66,7 @@ impl ProjectCacheBackend for HttpCacheBackend {
         let _guard = span.enter();
         tracing::debug!(url = ?url.as_str(), "PUT");
         let response = self
-            .blocking_client()?
+            .client
             .put(url)
             .body(value)
             .send()
