@@ -62,8 +62,7 @@ const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
 const LAST: usize = usize::MAX;
 
 pub const PROJECT_CACHE_ENDPOINT_CONFIG_KEY: &str = "focus.project-cache-endpoint";
-pub const PROJECT_CACHE_IGNORED_PATH_FRAGMENT_REGEX_KEY: &str =
-    "focus.project-cache-ignored-path-fragment-regex";
+
 /// Models a Git working tree.
 pub struct WorkingTree {
     repo: git2::Repository,
