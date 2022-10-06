@@ -74,7 +74,7 @@ where
 pub fn fetch_exports(
     backend: &dyn ProjectCacheBackend,
     build_graph_hash: &Vec<u8>,
-) -> Result<Vec<Export>> {
+) -> Result<(ExportManifest, Vec<Export>)> {
     let span = tracing::info_span!("Fetching project cache data");
     let _guard = span.enter();
     // Fetch the manifest to determine how many shards there are.
@@ -96,7 +96,7 @@ pub fn fetch_exports(
         exports.push(export);
     }
 
-    Ok(exports)
+    Ok((manifest, exports))
 }
 
 /// Store an export to the given backend, writing a manifest explaining how many shards were produced if one has not been written. Fails if the shard count does not agree.
