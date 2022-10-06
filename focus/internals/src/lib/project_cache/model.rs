@@ -4,7 +4,7 @@
 use anyhow::Context;
 
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, collections::BTreeMap};
+use std::{collections::BTreeMap, fmt::Display};
 use url::Url;
 
 use crate::model::outlining::PatternSet;
@@ -22,7 +22,8 @@ impl RepoIdentifier {
             .find_remote("origin")
             .context("Resolving origin remote")?;
         let url = remote
-            .url()
+            .pushurl()
+            .or_else(|| remote.url())
             .ok_or_else(|| anyhow::anyhow!("Origin remote has no URL"))?;
         let url = Url::parse(url)
             .with_context(|| format!("Could not parse origin URL from '{}'", url))?;
@@ -63,7 +64,7 @@ impl Display for RepoIdentifier {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExportManifest {
     pub(crate) shard_count: usize,
-    pub(crate) mandatory_items: BTreeMap<NamespacedKey, Value>,
+    pub(crate) mandatory_items: BTreeMap<String, Value>,
 }
 
 /// Container for keys and values,
@@ -71,7 +72,7 @@ pub struct ExportManifest {
 pub struct Export {
     pub(crate) shard_index: usize,
     pub(crate) shard_count: usize,
-    pub(crate) items: BTreeMap<NamespacedKey, Value>,
+    pub(crate) items: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -110,7 +111,7 @@ impl Display for Key {
                     "mandatory-project-pattern-set:build-graph-hash={}",
                     hex::encode(build_graph_hash),
                 )
-            },
+            }
             Key::OptionalProjectPatternSet {
                 build_graph_hash,
                 project_name,
