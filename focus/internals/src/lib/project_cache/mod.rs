@@ -79,6 +79,7 @@ impl<'cache> ProjectCache<'cache> {
             let span = info_span!("Opening project cache");
             let _guard = span.enter();
             let database_path = data_paths.project_cache_dir.as_path();
+            info!(?database_path, "Opening database");
             let result = storage::open_database(database_path, PROJECT_CACHE_TTL)
                 .context("Opening project cache database")?;
             debug!(?database_path, "Database is open");
@@ -404,11 +405,12 @@ impl<'cache> ProjectCache<'cache> {
         shard_count: usize,
     ) -> anyhow::Result<()> {
         let mandatory_items = {
-            let mut mandatory_items = BTreeMap::<NamespacedKey, Value>::new();
+            let mut mandatory_items = BTreeMap::<String, Value>::new();
             let key = generation_result.mandatory_project_key.underlying.clone();
             let (key, value) = self
                 .read_or_fault(&key, None)
                 .with_context(|| format!("Reading key {:?} failed", key))?;
+            let key = key.try_into()?;
             let value = value.ok_or_else(|| anyhow::anyhow!("Key {:?} not found", key))?;
             mandatory_items.insert(key, value);
             mandatory_items
@@ -420,12 +422,13 @@ impl<'cache> ProjectCache<'cache> {
         };
 
         let optional_project_items = {
-            let mut export_items = BTreeMap::<NamespacedKey, Value>::new();
+            let mut export_items = BTreeMap::<String, Value>::new();
             for key in generation_result.optional_project_keys.iter() {
                 let (key, value) = self
                     .read_or_fault(&key.underlying, None)
                     .with_context(|| format!("Reading key {:?} failed", key))?;
                 let value = value.ok_or_else(|| anyhow::anyhow!("Key {:?} not found", key))?;
+                let key: String = key.try_into()?;
                 if export_items.insert(key.clone(), value).is_some() {
                     bail!("Unexpected existing value for key {:?}", key);
                 }
@@ -458,27 +461,21 @@ impl<'cache> ProjectCache<'cache> {
 
         // Write mandatory items into the batch
         for (key, value) in manifest.mandatory_items {
-            let key_str: String = key.try_into()?;
             let serialized_value = serde_json::to_vec(&value).with_context(|| {
-                format!(
-                    "Serializing value {:?} for key '{}' failed",
-                    &value, &key_str
-                )
+                format!("Serializing value {:?} for key '{}' failed", &value, &key)
             })?;
-            batch.put(key_str.as_bytes(), serialized_value);
+            tracing::info!(?key, "Mandatory patterns");
+            batch.put(key.as_bytes(), serialized_value);
         }
 
         // Write items from exports into the batch
         for export in exports.into_iter() {
             for (key, value) in export.items {
-                let key_str: String = key.try_into()?;
                 let serialized_value = serde_json::to_vec(&value).with_context(|| {
-                    format!(
-                        "Serializing value {:?} for key '{}' failed",
-                        &value, &key_str
-                    )
+                    format!("Serializing value {:?} for key '{}' failed", &value, &key)
                 })?;
-                batch.put(key_str.as_bytes(), serialized_value);
+                tracing::info!(?key, "Project patterns");
+                batch.put(key.as_bytes(), serialized_value);
             }
         }
 
@@ -490,6 +487,8 @@ impl<'cache> ProjectCache<'cache> {
         self.database
             .put(receipt_key, IMPORT_RECEIPT_IOTA_SERIALIZED.as_slice())
             .map_err(anyhow::Error::new)?;
+
+        tracing::info!(items = batch.len(), "Imported project cache data");
 
         // Write the batch
         self.database.write(batch).with_context(|| {
