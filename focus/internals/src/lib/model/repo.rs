@@ -928,7 +928,8 @@ impl Repo {
                 .context("git worktree add failed")?;
         }
 
-        let working_tree = WorkingTree::new(git2::Repository::open(self.outlining_tree_git_dir())?)?;
+        let working_tree =
+            WorkingTree::new(git2::Repository::open(self.outlining_tree_git_dir())?)?;
         let outlining_tree = OutliningTree::new(Arc::new(working_tree));
         let commit_id = self.get_head_commit()?.id();
         outlining_tree.apply_configured_outlining_patterns(commit_id, self.app.clone())?;

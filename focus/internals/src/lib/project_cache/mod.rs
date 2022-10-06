@@ -25,7 +25,6 @@ use std::{
 };
 
 use crate::model::{
-    data_paths::DataPaths,
     outlining::PatternSet,
     repo::Repo,
     selection::{Target, TargetSet},
@@ -75,7 +74,8 @@ impl<'cache> ProjectCache<'cache> {
             let span = info_span!("Opening project cache");
             let _guard = span.enter();
             let database_path = repo.project_cache_dir();
-            std::fs::create_dir_all(&database_path).context("Creating project cache database directory failed")?;
+            std::fs::create_dir_all(&database_path)
+                .context("Creating project cache database directory failed")?;
             let result = storage::open_database(&database_path, PROJECT_CACHE_TTL)
                 .context("Opening project cache database")?;
             debug!(?database_path, "Database is open");
