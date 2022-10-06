@@ -283,7 +283,7 @@ impl<'cache> ProjectCache<'cache> {
         if mandatory_project_patterns.is_empty() {
             tracing::warn!("Mandatory projects generated no patterns!");
         } else {
-            tracing::info!(
+            tracing::debug!(
                 count = mandatory_project_patterns.len(),
                 "Mandatory patterns"
             );
@@ -464,7 +464,7 @@ impl<'cache> ProjectCache<'cache> {
             let serialized_value = serde_json::to_vec(&value).with_context(|| {
                 format!("Serializing value {:?} for key '{}' failed", &value, &key)
             })?;
-            tracing::info!(?key, "Mandatory patterns");
+            tracing::debug!(?key, "Mandatory patterns");
             batch.put(key.as_bytes(), serialized_value);
         }
 
@@ -474,7 +474,7 @@ impl<'cache> ProjectCache<'cache> {
                 let serialized_value = serde_json::to_vec(&value).with_context(|| {
                     format!("Serializing value {:?} for key '{}' failed", &value, &key)
                 })?;
-                tracing::info!(?key, "Project patterns");
+                tracing::debug!(?key, "Project patterns");
                 batch.put(key.as_bytes(), serialized_value);
             }
         }
@@ -488,7 +488,7 @@ impl<'cache> ProjectCache<'cache> {
             .put(receipt_key, IMPORT_RECEIPT_IOTA_SERIALIZED.as_slice())
             .map_err(anyhow::Error::new)?;
 
-        tracing::info!(items = batch.len(), "Imported project cache data");
+        tracing::debug!(items = batch.len(), "Imported project cache data");
 
         // Write the batch
         self.database.write(batch).with_context(|| {
