@@ -853,7 +853,7 @@ impl Repo {
         let mut missing_projects = Vec::<&String>::new();
 
         for project_name in project_names {
-            match cache.get_project(commit_id, &build_graph_hash, project_name, false)? {
+            match cache.get_optional_project_patterns(commit_id, &build_graph_hash, project_name, false)? {
                 (_key, Some(Value::OptionalProjectPatternSet(patterns))) => {
                     outline_patterns.extend(patterns);
                 }
