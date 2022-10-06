@@ -14,7 +14,6 @@ pub struct DataPaths {
     pub data_dir: PathBuf,
     pub project_dir: PathBuf,
     pub selection_file: PathBuf,
-    pub project_cache_dir: PathBuf,
 }
 
 impl DataPaths {
@@ -24,7 +23,6 @@ impl DataPaths {
         let data_dir = dot_focus_dir.join("focus");
         let project_dir = focus_dir.join("projects");
         let selection_file = dot_focus_dir.join("user.selection.json");
-        let project_cache_dir = data_dir.join("project-cache");
 
         let instance = Self {
             dot_focus_dir,
@@ -32,7 +30,6 @@ impl DataPaths {
             data_dir,
             project_dir,
             selection_file,
-            project_cache_dir,
         };
         instance
             .ensure_directories_are_set_up_correctly()
@@ -53,7 +50,7 @@ impl DataPaths {
             );
         }
 
-        let dirs_to_create = vec![self.data_dir.as_path(), self.project_cache_dir.as_path()];
+        let dirs_to_create = vec![self.data_dir.as_path()];
         for dir in dirs_to_create {
             std::fs::create_dir_all(dir).with_context(|| {
                 format!("Failed to create directory hierarchy '{}'", &dir.display())
