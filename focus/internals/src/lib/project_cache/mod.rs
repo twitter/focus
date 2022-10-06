@@ -24,7 +24,12 @@ use std::{
     time::Duration,
 };
 
-use crate::model::{data_paths::DataPaths, outlining::PatternSet, repo::Repo, selection::Target};
+use crate::model::{
+    data_paths::DataPaths,
+    outlining::PatternSet,
+    repo::Repo,
+    selection::{Target, TargetSet},
+};
 use anyhow::{bail, Context};
 use focus_util::{app::App, paths::is_relevant_to_build_graph};
 use git2::{ObjectType, Oid, TreeWalkMode, TreeWalkResult};
@@ -266,7 +271,7 @@ impl<'cache> ProjectCache<'cache> {
         );
         for project_name in project_names {
             let (key, value) = self
-                .get_project(commit_id, &build_graph_hash, project_name, true)
+                .get_optional_project_patterns(commit_id, &build_graph_hash, project_name, true)
                 .with_context(|| {
                     format!("Generating cache content for project {}", project_name)
                 })?;
@@ -282,8 +287,38 @@ impl<'cache> ProjectCache<'cache> {
         Ok(keys)
     }
 
+    pub fn get_mandatory_project_patterns(
+        &self,
+        commit_id: Oid,
+        build_graph_hash: &[u8],
+        fault: bool,
+    ) -> anyhow::Result<(NamespacedKey, Option<Value>)> {
+        let calculate = move |_key: &Key, repo: &Repo| -> anyhow::Result<Option<Value>> {
+            let selection_manager = repo.selection_manager()?;
+            let catalog = selection_manager.project_catalog();
+            let span = info_span!("Resolving mandatory projects");
+            let _guard = span.enter();
+
+            let mut targets = TargetSet::new();
+            for project in catalog.mandatory_projects.underlying.values() {
+                targets.extend(TargetSet::try_from(project)?);
+            }
+
+            if let Ok(patterns) = self.outline(commit_id, &targets) {
+                Ok(Some(Value::MandatoryProjectPatternSet(patterns)))
+            } else {
+                Ok(None)
+            }
+        };
+
+        let key = Key::MandatoryProjectPatternSet {
+            build_graph_hash: build_graph_hash.to_vec(),
+        };
+        self.read_or_fault(&key, if fault { Some(&calculate) } else { None })
+    }
+
     /// Get (possibly fault) a project from the cache.
-    pub fn get_project(
+    pub fn get_optional_project_patterns(
         &self,
         commit_id: Oid,
         build_graph_hash: &[u8],
@@ -294,7 +329,7 @@ impl<'cache> ProjectCache<'cache> {
             if let Key::OptionalProjectPatternSet { project_name, .. } = key {
                 let selection_manager = repo.selection_manager()?;
                 let catalog = selection_manager.project_catalog();
-                let span = info_span!("Resolving");
+                let span = info_span!("Resolving optional project");
                 let _guard = span.enter();
 
                 let project = catalog
@@ -304,14 +339,8 @@ impl<'cache> ProjectCache<'cache> {
                     .ok_or_else(|| {
                         anyhow::anyhow!(format!("No such project '{}'", &project_name))
                     })?;
-                let targets = {
-                    let mut targets = HashSet::<Target>::new();
-                    for repr in &project.targets {
-                        let target = Target::try_from(repr.as_str())?;
-                        targets.insert(target);
-                    }
-                    targets
-                };
+                let targets = TargetSet::try_from(project)?;
+
                 info!(project = ?project_name, "Outlining");
                 if let Ok(patterns) = self.outline(commit_id, &targets) {
                     Ok(Some(Value::OptionalProjectPatternSet(patterns)))
