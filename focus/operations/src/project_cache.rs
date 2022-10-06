@@ -32,13 +32,13 @@ pub fn push(
         .ok_or_else(|| anyhow::anyhow!("Project cache remote endpoint not configured"))?;
 
     let cache = ProjectCache::new(&repo, endpoint, app)?;
-    let keys = cache
+    let result = cache
         .generate_all(commit.id(), shard_index, shard_count)
         .context("Generating project cache data failed")?;
     let (_, build_graph_hash) = cache.get_build_graph_hash(commit.id(), true)?;
 
     cache
-        .generate_and_push(&keys, &build_graph_hash, shard_index, shard_count)
+        .generate_and_push(&result, &build_graph_hash, shard_index, shard_count)
         .context("Export failed")?;
 
     Ok(ExitCode(0))

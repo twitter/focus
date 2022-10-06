@@ -812,12 +812,6 @@ impl Repo {
             .collect();
         debug!(?selection, ?project_names, "Selection");
 
-        if project_names.is_empty() {
-            warn!("Falling back to regular sync because no projects are selected");
-            return Ok(None);
-            // TODO: Remove this after baseline mandatory sets are available in project cache. Things may not work in the repo correctly without a regular sync in this case.
-        }
-
         let endpoint = self.get_project_cache_remote_endpoint()?;
         if endpoint.is_none() {
             tracing::warn!(
@@ -852,8 +846,30 @@ impl Repo {
         let mut outline_patterns = working_tree.default_working_tree_patterns()?;
         let mut missing_projects = Vec::<&String>::new();
 
+        // Add mandatory project patterns
+        {
+            let (_key, mandatory_project_patterns) =
+                cache.get_mandatory_project_patterns(commit_id, &build_graph_hash, false)?;
+            let mandatory_project_patterns = mandatory_project_patterns
+                .ok_or_else(|| anyhow::anyhow!("Missing mandatory project patterns"))?;
+            match mandatory_project_patterns {
+                Value::MandatoryProjectPatternSet(patterns) => {
+                    tracing::info!(count = patterns.len(), "Adding mandatory patterns");
+                    outline_patterns.extend(patterns)
+                }
+                _ => unreachable!("Unexpected value type"),
+            };
+        }
+
+        // Add optional project patterns
         for project_name in project_names {
-            match cache.get_optional_project_patterns(commit_id, &build_graph_hash, project_name, false)? {
+            match cache.get_optional_project_patterns(
+                commit_id,
+                &build_graph_hash,
+                project_name,
+                false,
+                &PatternSet::new(),
+            )? {
                 (_key, Some(Value::OptionalProjectPatternSet(patterns))) => {
                     outline_patterns.extend(patterns);
                 }

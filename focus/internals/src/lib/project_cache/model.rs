@@ -4,12 +4,12 @@
 use anyhow::Context;
 
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{fmt::Display, collections::BTreeMap};
 use url::Url;
 
 use crate::model::outlining::PatternSet;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord)]
 pub struct RepoIdentifier {
     pub(crate) host: String,
     pub(crate) name: String,
@@ -63,17 +63,18 @@ impl Display for RepoIdentifier {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExportManifest {
     pub(crate) shard_count: usize,
+    pub(crate) mandatory_items: BTreeMap<NamespacedKey, Value>,
 }
 
 /// Container for keys and values,
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Export {
     pub(crate) shard_index: usize,
     pub(crate) shard_count: usize,
-    pub(crate) items: Vec<(NamespacedKey, Value)>,
+    pub(crate) items: BTreeMap<NamespacedKey, Value>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Key {
     CommitToBuildGraphHash {
         #[serde(with = "hex::serde")]
@@ -132,7 +133,7 @@ impl Display for Key {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     BuildGraphHash {
         #[serde(with = "hex::serde")]
@@ -144,7 +145,7 @@ pub enum Value {
 }
 
 /// Namespaced project cache keys act as an envelope identifying the repository cached content corresponds to.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord)]
 pub struct NamespacedKey {
     pub(crate) repository: RepoIdentifier,
     pub(crate) underlying: Key,

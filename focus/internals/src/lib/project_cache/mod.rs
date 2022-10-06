@@ -14,7 +14,7 @@ pub(crate) use model::{Export, ExportManifest, Key, RepoIdentifier, Value};
 use tracing::{debug, info, info_span, warn};
 
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::{TryFrom, TryInto},
     ffi::OsStr,
     iter::FromIterator,
@@ -235,45 +235,73 @@ impl<'cache> ProjectCache<'cache> {
         }
     }
 
-    /// Generate all projects in the given shard.
+    /// Generate all projects in the given shard. Returns a tuple of all generated mandatory project keys and others keys (for optional ).
     pub fn generate_all(
         &self,
         commit_id: Oid,
         shard_index: usize,
         shard_count: usize,
-    ) -> anyhow::Result<Vec<NamespacedKey>> {
+    ) -> anyhow::Result<GenerationResult> {
         let selection_manager = self.repo.selection_manager()?;
         let catalog = selection_manager.project_catalog();
-        let project_names = catalog
+        let optional_project_names = catalog
             .optional_projects
             .underlying
             .iter()
             .map(|(name, _project)| name.clone())
             .collect::<BTreeSet<String>>();
-        let project_names = Vec::from_iter(project_names.into_iter());
+        let optional_project_names = Vec::from_iter(optional_project_names.into_iter());
         let (build_graph_hash_key, build_graph_hash) =
             self.get_build_graph_hash(commit_id, true)?;
-        let mut keys = vec![build_graph_hash_key];
-        let shard_size = project_names.len() / shard_count;
-        let mut shards = project_names.chunks(shard_size).skip(shard_index);
+        let mut optional_project_keys = vec![];
+        let shard_size = optional_project_names.len() / shard_count;
+        let mut shards = optional_project_names.chunks(shard_size).skip(shard_index);
         let build_graph_hash_str = hex::encode(&build_graph_hash);
         let commit_id_str = hex::encode(commit_id.as_bytes());
-        let project_names = shards
+        let optional_project_names = shards
             .next()
             .ok_or_else(|| anyhow::anyhow!("No such shard"))?;
         info!(
             ?shard_index,
             ?shard_count,
-            ?project_names,
+            ?optional_project_names,
             commit_id = ?commit_id_str,
             build_graph_hash = ?build_graph_hash_str,
             "Generating project pattern cache"
         );
-        for project_name in project_names {
+
+        let (mandatory_project_key, mandatory_project_patterns) = self
+            .get_mandatory_project_patterns(commit_id, &build_graph_hash, true)
+            .context("Generating cache content for mandatory projects")?;
+        let mandatory_project_patterns = mandatory_project_patterns
+            .map(|val| match val {
+                Value::MandatoryProjectPatternSet(patterns) => patterns,
+                _ => unreachable!("Unexpected value type"),
+            })
+            .unwrap_or_default();
+        if mandatory_project_patterns.is_empty() {
+            tracing::warn!("Mandatory projects generated no patterns!");
+        } else {
+            tracing::info!(
+                count = mandatory_project_patterns.len(),
+                "Mandatory patterns"
+            );
+        }
+
+        for project_name in optional_project_names {
             let (key, value) = self
-                .get_optional_project_patterns(commit_id, &build_graph_hash, project_name, true)
+                .get_optional_project_patterns(
+                    commit_id,
+                    &build_graph_hash,
+                    project_name,
+                    true,
+                    &mandatory_project_patterns,
+                )
                 .with_context(|| {
-                    format!("Generating cache content for project {}", project_name)
+                    format!(
+                        "Generating cache content for optional project {}",
+                        project_name
+                    )
                 })?;
             let _value = value.ok_or_else(|| {
                 anyhow::anyhow!(
@@ -281,10 +309,14 @@ impl<'cache> ProjectCache<'cache> {
                     project_name
                 )
             })?;
-            keys.push(key);
+            optional_project_keys.push(key);
         }
 
-        Ok(keys)
+        Ok(GenerationResult {
+            build_graph_hash_key,
+            mandatory_project_key,
+            optional_project_keys,
+        })
     }
 
     pub fn get_mandatory_project_patterns(
@@ -324,6 +356,7 @@ impl<'cache> ProjectCache<'cache> {
         build_graph_hash: &[u8],
         project_name: &str,
         fault: bool,
+        ignored_patterns: &PatternSet,
     ) -> anyhow::Result<(NamespacedKey, Option<Value>)> {
         let calculate = move |key: &Key, repo: &Repo| -> anyhow::Result<Option<Value>> {
             if let Key::OptionalProjectPatternSet { project_name, .. } = key {
@@ -343,6 +376,9 @@ impl<'cache> ProjectCache<'cache> {
 
                 info!(project = ?project_name, "Outlining");
                 if let Ok(patterns) = self.outline(commit_id, &targets) {
+                    // Remove ignored patterns.
+                    let patterns: PatternSet =
+                        patterns.difference(ignored_patterns).cloned().collect();
                     Ok(Some(Value::OptionalProjectPatternSet(patterns)))
                 } else {
                     Ok(None)
@@ -362,27 +398,46 @@ impl<'cache> ProjectCache<'cache> {
     /// Generate and push sharded project cache data.
     pub fn generate_and_push(
         &self,
-        keys: &Vec<NamespacedKey>,
+        generation_result: &GenerationResult,
         build_graph_hash: &Vec<u8>,
         shard_index: usize,
         shard_count: usize,
     ) -> anyhow::Result<()> {
-        let mut items = Vec::<(NamespacedKey, Value)>::new();
-        for key in keys {
+        let mandatory_items = {
+            let mut mandatory_items = BTreeMap::<NamespacedKey, Value>::new();
+            let key = generation_result.mandatory_project_key.underlying.clone();
             let (key, value) = self
-                .read_or_fault(&key.underlying, None)
+                .read_or_fault(&key, None)
                 .with_context(|| format!("Reading key {:?} failed", key))?;
             let value = value.ok_or_else(|| anyhow::anyhow!("Key {:?} not found", key))?;
-            items.push((key, value));
-        }
+            mandatory_items.insert(key, value);
+            mandatory_items
+        };
+
+        let manifest = ExportManifest {
+            shard_count,
+            mandatory_items,
+        };
+
+        let optional_project_items = {
+            let mut export_items = BTreeMap::<NamespacedKey, Value>::new();
+            for key in generation_result.optional_project_keys.iter() {
+                let (key, value) = self
+                    .read_or_fault(&key.underlying, None)
+                    .with_context(|| format!("Reading key {:?} failed", key))?;
+                let value = value.ok_or_else(|| anyhow::anyhow!("Key {:?} not found", key))?;
+                if export_items.insert(key.clone(), value).is_some() {
+                    bail!("Unexpected existing value for key {:?}", key);
+                }
+            }
+            export_items
+        };
 
         let export = Export {
             shard_index,
             shard_count,
-            items,
+            items: optional_project_items,
         };
-
-        let manifest = ExportManifest { shard_count };
 
         store_export(self.backend.as_ref(), build_graph_hash, &manifest, &export)
             .context("Failed to upload the project cache export")
@@ -391,8 +446,8 @@ impl<'cache> ProjectCache<'cache> {
     pub fn fetch(&self, build_graph_hash: &Vec<u8>) -> anyhow::Result<()> {
         // TODO: Expensive in terms of memory consumed. Figure out a better transaction / streaming strategy later.
         // TODO: We decode something to just encode it, which is wasteful. Fix that.
-        let exports =
-            fetch_exports(self.backend.as_ref(), build_graph_hash).with_context(|| {
+        let (manifest, exports) = fetch_exports(self.backend.as_ref(), build_graph_hash)
+            .with_context(|| {
                 anyhow::anyhow!(
                     "Fetching project cache data for build graph @ {} failed",
                     hex::encode(build_graph_hash)
@@ -400,20 +455,34 @@ impl<'cache> ProjectCache<'cache> {
             })?;
 
         let mut batch = WriteBatch::default();
-        // Write exports into the batch
+
+        // Write mandatory items into the batch
+        for (key, value) in manifest.mandatory_items {
+            let key_str: String = key.try_into()?;
+            let serialized_value = serde_json::to_vec(&value).with_context(|| {
+                format!(
+                    "Serializing value {:?} for key '{}' failed",
+                    &value, &key_str
+                )
+            })?;
+            batch.put(key_str.as_bytes(), serialized_value);
+        }
+
+        // Write items from exports into the batch
         for export in exports.into_iter() {
             for (key, value) in export.items {
                 let key_str: String = key.try_into()?;
                 let serialized_value = serde_json::to_vec(&value).with_context(|| {
                     format!(
-                        "Serializing  value {:?} for key '{}' failed",
+                        "Serializing value {:?} for key '{}' failed",
                         &value, &key_str
                     )
                 })?;
                 batch.put(key_str.as_bytes(), serialized_value);
             }
         }
-        // Add receipt
+
+        // Write receipt into the batch
         let receipt_key: String = {
             let key = self.import_receipt_key(build_graph_hash);
             key.try_into()?
@@ -456,4 +525,10 @@ impl<'cache> ProjectCache<'cache> {
             Ok(Box::new(HttpCacheBackend::new(endpoint.clone())))
         }
     }
+}
+
+pub struct GenerationResult {
+    pub build_graph_hash_key: NamespacedKey,
+    pub mandatory_project_key: NamespacedKey,
+    pub optional_project_keys: Vec<NamespacedKey>,
 }
