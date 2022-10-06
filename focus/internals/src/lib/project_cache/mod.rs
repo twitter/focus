@@ -71,16 +71,12 @@ impl<'cache> ProjectCache<'cache> {
     /// Create a new project cache instance for the provided Repo.
     pub fn new(repo: &'cache Repo, endpoint: Url, app: Arc<App>) -> anyhow::Result<Self> {
         let identifier = RepoIdentifier::from(repo.underlying())?;
-        let working_tree = repo
-            .working_tree()
-            .ok_or_else(|| anyhow::anyhow!("Missing working tree"))?;
-        let data_paths = DataPaths::from_working_tree(working_tree)?;
         let database = {
             let span = info_span!("Opening project cache");
             let _guard = span.enter();
-            let database_path = data_paths.project_cache_dir.as_path();
-            info!(?database_path, "Opening database");
-            let result = storage::open_database(database_path, PROJECT_CACHE_TTL)
+            let database_path = repo.project_cache_dir();
+            std::fs::create_dir_all(&database_path).context("Creating project cache database directory failed")?;
+            let result = storage::open_database(&database_path, PROJECT_CACHE_TTL)
                 .context("Opening project cache database")?;
             debug!(?database_path, "Database is open");
             result

@@ -978,6 +978,16 @@ impl Repo {
         &self.git_dir
     }
 
+    /// Returns $GIT_DIR/focus
+    pub fn git_focus_dir(&self) -> PathBuf {
+        self.git_dir().join("focus")
+    }
+
+    /// Returns $GIT_DIR/focus
+    pub fn project_cache_dir(&self) -> PathBuf {
+        self.git_focus_dir().join("project-cache")
+    }
+
     /// Write git config to support gitstats instrumentation.
     /// This sets `focus.version` and `twitter.statsenabled`
     pub fn write_git_config_to_support_instrumentation(&self) -> Result<()> {
