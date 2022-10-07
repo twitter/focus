@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use tracing::{debug, debug_span};
+use tracing::{debug, debug_span, info};
 
 /// Load value from the specified path, decoding it from a JSON representation.
 pub fn load_model<T>(path: impl AsRef<Path>) -> Result<T>
@@ -47,10 +47,14 @@ where
         )
     })?;
     let writer = BufWriter::new(file);
-    Ok(serde_json::to_writer_pretty(writer, value)?)
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
+    let mut ser = serde_json::Serializer::with_formatter(writer, formatter);
+    value.serialize(&mut ser)?;
+    Ok(())
 }
 
 /// A collection for working with FileBackedModels serialized to a single directory, indexed by name.
+#[derive(Debug)]
 pub struct FileBackedCollection<T> {
     directory: PathBuf,
     extension: OsString,
@@ -180,6 +184,22 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
         }
 
         Ok(())
+    }
+
+    /// Save one cached entity to disk.
+    pub fn save_one_entity(&self, name: &String) -> Result<()>
+    where
+        T: Default + DeserializeOwned,
+    {
+        let entity = self.underlying.get(name).unwrap();
+        let path = self.make_path(name);
+        info!(
+            "Storing {} to {}",
+            serde_json::to_string(entity)?,
+            path.display()
+        );
+        store_model(&path.as_path(), entity)
+            .with_context(|| format!("Storing entity to {}", path.display()))
     }
 }
 

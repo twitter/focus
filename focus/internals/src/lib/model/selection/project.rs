@@ -11,9 +11,13 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use super::*;
+
+fn is_false(b: impl std::borrow::Borrow<bool>) -> bool {
+    !b.borrow()
+}
 
 /// A project is a collection of targets.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -25,14 +29,17 @@ pub struct Project {
     pub description: String,
 
     /// Whether this project is mandatory. All mandatory projects defined in a repository are always in the selection.
+    #[serde(skip_serializing_if = "is_false")]
     #[serde(default)]
     pub mandatory: bool,
 
     /// The targets associated with this project.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     #[serde(default)]
     pub targets: BTreeSet<String>,
 
     // The projects included in this one.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     #[serde(default)]
     pub projects: BTreeSet<String>,
 }
@@ -129,10 +136,36 @@ impl TryFrom<&Project> for TargetSet {
 /// ProjectSet is a file-level container for projects.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 struct ProjectSet {
-    pub projects: HashSet<Project>,
+    pub projects: Vec<Project>,
+}
+impl ProjectSet {
+    #[allow(dead_code)]
+    pub(crate) fn remove_project(&mut self, project_name: String) -> Result<()> {
+        self.projects = self
+            .projects
+            .clone()
+            .into_iter()
+            .filter(|p| p.name != project_name)
+            .collect();
+        Ok(())
+    }
+
+    /// Replaces a project in place if it exists, and psuhes to the end if it does not.
+    pub(crate) fn set_project(&mut self, project_name: String, project: Project) -> Result<()> {
+        match self.projects.iter().position(|r| r.name == project_name) {
+            Some(i) => {
+                self.projects.splice(i..i + 1, vec![project]);
+            }
+            None => {
+                self.projects.push(project);
+            }
+        };
+        Ok(())
+    }
 }
 
 /// ProjectSetStore loads project sets from files defined in the repository.
+#[derive(Debug)]
 struct ProjectSetStore(FileBackedCollection<ProjectSet>);
 
 impl ProjectSetStore {
@@ -143,8 +176,26 @@ impl ProjectSetStore {
         )?))
     }
 
+    pub fn underlying_mut(&mut self) -> &mut HashMap<String, ProjectSet> {
+        &mut self.0.underlying
+    }
+
     pub fn underlying(&self) -> &HashMap<String, ProjectSet> {
         &self.0.underlying
+    }
+
+    pub fn save_project_set(&self, project_set_name: &String) -> Result<()> {
+        for i in self
+            .0
+            .underlying
+            .get(project_set_name)
+            .unwrap()
+            .clone()
+            .projects
+        {
+            println!("{:?}: {:?}", i.name, i.projects);
+        }
+        self.0.save_one_entity(project_set_name)
     }
 }
 
@@ -217,7 +268,7 @@ impl Display for ProjectIndex {
 // TODO(wilhelm): Reduce duplication of the keys of these tables by introducing an intermediate token table.
 
 impl ProjectIndex {
-    fn new(manager: ProjectSetStore) -> Result<Self> {
+    fn new(manager: &ProjectSetStore) -> Result<Self> {
         let mut projects = Self::default();
         for (project_set_name, project_set) in manager.underlying().iter() {
             projects.extend(project_set_name.as_str(), project_set)?;
@@ -269,20 +320,107 @@ impl TryFrom<&ProjectIndex> for TargetSet {
 pub struct ProjectCatalog {
     pub optional_projects: ProjectIndex,
     pub mandatory_projects: ProjectIndex,
+    optional_project_set_store: ProjectSetStore,
+}
+
+#[derive(Debug, Clone)]
+pub enum ProjectCatalogError {
+    ProjectNotFound,
+    ProjectExistsElsewhere,
 }
 
 impl ProjectCatalog {
     pub(crate) fn new(paths: &DataPaths) -> Result<Self> {
-        let optional_projects = ProjectIndex::new(
-            ProjectSetStore::new(&paths.project_dir).context("Loading optional projects")?,
-        )?;
-        let mandatory_projects = ProjectIndex::new(
-            ProjectSetStore::new(&paths.focus_dir).context("Loading mandatory projects")?,
-        )?;
+        let optional_project_set_store =
+            ProjectSetStore::new(&paths.project_dir).context("Loading optional projects")?;
+        let mandatory_project_set_store =
+            ProjectSetStore::new(&paths.focus_dir).context("Loading mandatory projects")?;
+        let optional_projects = ProjectIndex::new(&optional_project_set_store)?;
+        let mandatory_projects = ProjectIndex::new(&mandatory_project_set_store)?;
         Ok(Self {
             optional_projects,
             mandatory_projects,
+            optional_project_set_store,
         })
+    }
+
+    pub fn save(&mut self) -> Result<()> {
+        self.optional_project_set_store.0.save()
+    }
+
+    pub fn set_project(
+        &mut self,
+        project_name: String,
+        project: Project,
+        maybe_project_file: Option<String>,
+    ) -> Result<(), ProjectCatalogError> {
+        let project_found = self.optional_projects.sources.get(&project_name);
+
+        let new_project_case = project_found.is_none() && maybe_project_file.is_some();
+        let no_file_case = project_found.is_none() && maybe_project_file.is_none();
+        let existing_project_case = project_found.is_some() && maybe_project_file.is_none();
+        let file_matches_case = project_found.is_some()
+            && maybe_project_file.is_some()
+            && *project_found.unwrap() == maybe_project_file.clone().unwrap();
+        let file_conflicts_case = project_found.is_some()
+            && maybe_project_file.is_some()
+            && *project_found.unwrap() != maybe_project_file.clone().unwrap();
+
+        if new_project_case || file_matches_case || existing_project_case {
+            let project_file =
+                maybe_project_file.unwrap_or_else(|| project_found.unwrap().to_string());
+
+            info!(
+                "Saving {}project {} to file {}.",
+                if new_project_case { "new " } else { "" },
+                project_name,
+                project_file
+            );
+            self.optional_projects
+                .sources
+                .insert(project_name.clone(), project_file.clone());
+            self.optional_projects
+                .underlying
+                .insert(project_name.clone(), project.clone());
+            match self
+                .optional_project_set_store
+                .underlying_mut()
+                .get_mut(&project_file)
+            {
+                Some(project_set) => {
+                    project_set.set_project(project_name, project).unwrap();
+                }
+                None => {
+                    let new_project_set = ProjectSet {
+                        projects: vec![project],
+                    };
+                    self.optional_project_set_store
+                        .0
+                        .insert(project_file.as_str(), &new_project_set)
+                        .unwrap();
+                }
+            }
+            self.optional_project_set_store
+                .save_project_set(&project_file)
+                .unwrap();
+        } else if no_file_case {
+            error!(
+                "Project {} was not found, please specifiy a file to save to.",
+                project_name
+            );
+            return Err(ProjectCatalogError::ProjectExistsElsewhere);
+        } else if file_conflicts_case {
+            error!(
+                "Project {} was found in file {} which conflicts with your selection of {}. Aborting!",
+                project_name,
+                project_found.unwrap(),
+                maybe_project_file.unwrap()
+            );
+            return Err(ProjectCatalogError::ProjectNotFound);
+        } else {
+            panic!("Unhandled argument configuration!");
+        }
+        Ok(())
     }
 }
 
