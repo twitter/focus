@@ -29,6 +29,55 @@ use focus_internals::{
     target::Target,
 };
 
+pub fn save(
+    sparse_repo: impl AsRef<Path>,
+    project_name: String,
+    project_file: Option<String>,
+    project_description: Option<String>,
+    app: Arc<focus_util::app::App>,
+) -> Result<bool> {
+    let repo = Repo::open(sparse_repo.as_ref(), app)?;
+    let mut selection_manager = repo.selection_manager().context("Loading the selection")?;
+    let project_found = selection_manager
+        .project_catalog()
+        .optional_projects
+        .underlying
+        .get(&project_name);
+    let project_description = match project_found {
+        Some(p) => Some(p.description.clone()),
+        None => match project_description {
+            Some(..) => project_description,
+            None => None,
+        },
+    };
+    if project_description.is_none() {
+        panic!("Project {} not found and no project description provided. Please provide a project description.", project_name);
+    }
+    let project = Project {
+        name: project_name.clone(),
+        description: project_description.unwrap(),
+        mandatory: false,
+        targets: selection_manager
+            .selection()?
+            .targets
+            .into_iter()
+            .map(|t| t.to_string())
+            .collect(),
+        projects: selection_manager
+            .selection()?
+            .projects
+            .into_iter()
+            .map(|p| p.name)
+            .collect(),
+    };
+    selection_manager
+        .mut_project_catalog()
+        .set_project(project_name, project, project_file)
+        .unwrap();
+
+    Ok(true)
+}
+
 fn mutate(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
@@ -576,6 +625,7 @@ pub fn add_interactive(
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::fs;
 
     use anyhow::Result;
 
@@ -620,6 +670,211 @@ mod tests {
             HashSet::from(["bazel://project_b/...".to_string()])
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn selection_save_new() -> Result<()> {
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let projects = vec![String::from("team_zissou/project_c")];
+
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            projects,
+            true,
+            fixture.app.clone(),
+        )?;
+        let project_names: HashSet<String> = fixture
+            .sparse_repo()?
+            .selection_manager()?
+            .selection()?
+            .projects
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(
+            project_names,
+            HashSet::from(["team_banzai/project_a".to_string()])
+        );
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            vec!["bazel://project_a/...".to_string()],
+            true,
+            fixture.app.clone(),
+        )?;
+        crate::selection::save(
+            &fixture.sparse_repo_path,
+            "team_zissou/project_c_2".to_string(),
+            Some("project_c".to_string()),
+            Some("project c2".to_string()),
+            fixture.app.clone(),
+        )?;
+        assert_eq!(
+            fs::read_to_string(
+                &fixture
+                    .sparse_repo_path
+                    .join("focus/projects/project_c.projects.json")
+            )?,
+            r#"{
+    "projects": [
+        {
+            "name": "team_zissou/project_c",
+            "description": "Stuff relating to project C",
+            "targets": [
+                "bazel://project_b/..."
+            ],
+            "projects": [
+                "team_banzai/project_a"
+            ]
+        },
+        {
+            "name": "team_zissou/project_c_2",
+            "description": "project c2",
+            "targets": [
+                "bazel://project_a/...",
+                "bazel://project_b/..."
+            ],
+            "projects": [
+                "team_banzai/project_a"
+            ]
+        }
+    ]
+}"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn selection_save_new_file() -> Result<()> {
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let projects = vec![String::from("team_zissou/project_c")];
+
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            projects,
+            true,
+            fixture.app.clone(),
+        )?;
+        let project_names: HashSet<String> = fixture
+            .sparse_repo()?
+            .selection_manager()?
+            .selection()?
+            .projects
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(
+            project_names,
+            HashSet::from(["team_banzai/project_a".to_string()])
+        );
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            vec!["bazel://project_a/...".to_string()],
+            true,
+            fixture.app.clone(),
+        )?;
+        crate::selection::save(
+            &fixture.sparse_repo_path,
+            "team_zissou/project_d".to_string(),
+            Some("project_d".to_string()),
+            Some("project d".to_string()),
+            fixture.app.clone(),
+        )?;
+        assert_eq!(
+            fs::read_to_string(
+                &fixture
+                    .sparse_repo_path
+                    .join("focus/projects/project_d.projects.json")
+            )?,
+            r#"{
+    "projects": [
+        {
+            "name": "team_zissou/project_d",
+            "description": "project d",
+            "targets": [
+                "bazel://project_a/...",
+                "bazel://project_b/..."
+            ],
+            "projects": [
+                "team_banzai/project_a"
+            ]
+        }
+    ]
+}"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn selection_save_existing() -> Result<()> {
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let projects = vec![String::from("team_zissou/project_c")];
+
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            projects,
+            true,
+            fixture.app.clone(),
+        )?;
+        let project_names: HashSet<String> = fixture
+            .sparse_repo()?
+            .selection_manager()?
+            .selection()?
+            .projects
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(
+            project_names,
+            HashSet::from(["team_banzai/project_a".to_string()])
+        );
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            vec!["bazel://project_a/...".to_string()],
+            true,
+            fixture.app.clone(),
+        )?;
+        crate::selection::save(
+            &fixture.sparse_repo_path,
+            "team_zissou/project_c".to_string(),
+            None,
+            None,
+            fixture.app.clone(),
+        )?;
+        assert_eq!(
+            fs::read_to_string(
+                &fixture
+                    .sparse_repo_path
+                    .join("focus/projects/project_c.projects.json")
+            )?,
+            r#"{
+    "projects": [
+        {
+            "name": "team_zissou/project_c",
+            "description": "Stuff relating to project C",
+            "targets": [
+                "bazel://project_a/...",
+                "bazel://project_b/..."
+            ],
+            "projects": [
+                "team_banzai/project_a"
+            ]
+        }
+    ]
+}"#
+        );
         Ok(())
     }
 }

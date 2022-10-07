@@ -29,6 +29,7 @@ use focus_operations::{
     clone::{CloneArgs, ClonedRepoTemplate},
     maintenance::{self, ScheduleOpts},
     project::lint,
+    selection::save,
     sync::SyncMode,
 };
 use strum::VariantNames;
@@ -225,6 +226,11 @@ enum Subcommand {
 
     /// Incorporate changes from `prefetch` into the current branch.
     Pull,
+
+    Selection {
+        #[clap(subcommand)]
+        subcommand: SelectionSubcommand,
+    },
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -301,6 +307,9 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
             BackgroundSubcommand::Sync { .. } => "background-sync".to_string(),
         },
         Subcommand::Pull => "pull".to_string(),
+        Subcommand::Selection { subcommand } => match subcommand {
+            SelectionSubcommand::Save { .. } => "selection-save".to_string(),
+        },
     }
 }
 
@@ -454,6 +463,22 @@ enum BranchSubcommand {
 enum ProjectSubcommand {
     /// Load projects and then try to parse targets
     Lint {},
+}
+
+#[derive(Parser, Clone, Debug)]
+enum SelectionSubcommand {
+    /// Save your selection to a project
+    Save {
+        /// Name of project to create or update
+        project_name: String,
+
+        /// file root to save new project under: $REPO_ROOT/focus/projects/<project_file>.projects.json
+        project_file: Option<String>,
+
+        /// Description of project
+        #[clap(long, short = 'd')]
+        project_description: Option<String>,
+    },
 }
 
 #[derive(Parser, Clone, Debug)]
@@ -1231,6 +1256,24 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             focus_operations::pull::run(app, sparse_repo)
         }
+        Subcommand::Selection { subcommand } => match subcommand {
+            SelectionSubcommand::Save {
+                project_name,
+                project_file,
+                project_description,
+            } => {
+                let sparse_repo =
+                    paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
+                save(
+                    &sparse_repo,
+                    project_name,
+                    project_file,
+                    project_description,
+                    app,
+                )?;
+                Ok(ExitCode(0))
+            }
+        },
     }
 }
 

@@ -325,6 +325,9 @@ impl SelectionManager {
     pub fn project_catalog(&self) -> &ProjectCatalog {
         &self.project_catalog
     }
+    pub fn mut_project_catalog(&mut self) -> &mut ProjectCatalog {
+        &mut self.project_catalog
+    }
 }
 
 /// A structure to store the names of selected projects and targets. Converted from the fully-featured in-memory representation Selection.
