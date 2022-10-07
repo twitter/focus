@@ -102,35 +102,64 @@ fn mutate(
     };
 
     let mut projects_and_targets = projects_and_targets;
+    
     if unroll {
         let mut projects = vec![];
         let mut targets = vec![];
-        for i in projects_and_targets.clone() {
-            if Target::try_from(i.as_str()).is_ok() {
-                targets.push(i);
-            } else {
-                projects.extend(
-                    selections
-                        .project_catalog()
-                        .optional_projects
-                        .underlying
-                        .get(&i)
-                        .with_context(|| format!("Couldn't find project definition for {}.", i))?
-                        .projects
-                        .clone(),
-                );
-                targets.extend(
-                    selections
-                        .project_catalog()
-                        .optional_projects
-                        .underlying
-                        .get(&i)
-                        .with_context(|| format!("Couldn't find project definition for {}.", i))?
-                        .targets
-                        .clone(),
-                );
-            };
+
+        match action {
+            OperationAction::Add => {
+                for i in projects_and_targets.clone() {
+                    if Target::try_from(i.as_str()).is_ok() {
+                        targets.push(i);
+                    } else {
+                        projects.extend(
+                            selections
+                                .project_catalog()
+                                .optional_projects
+                                .underlying
+                                .get(&i)
+                                .with_context(|| {
+                                    format!("Couldn't find project definition for {}.", i)
+                                })?
+                                .projects
+                                .clone(),
+                        );
+                        targets.extend(
+                            selections
+                                .project_catalog()
+                                .optional_projects
+                                .underlying
+                                .get(&i)
+                                .with_context(|| {
+                                    format!("Couldn't find project definition for {}.", i)
+                                })?
+                                .targets
+                                .clone(),
+                        );
+                    };
+                }
+            }
+            OperationAction::Remove => {
+                projects = selections
+                    .selection()?
+                    .projects
+                    .into_iter()
+                    .map(|x| x.name)
+                    .collect();
+                targets = selections
+                    .selection()?
+                    .targets
+                    .into_iter()
+                    .map(|x| match x {
+                        Target::Bazel(c) => format!("bazel:{}", c),
+                        Target::Directory(c) => format!("bazel:{}", c),
+                        Target::Pants(c) => format!("bazel:{}", c),
+                    })
+                    .collect();
+            }
         }
+
         projects_and_targets = targets;
         projects_and_targets.extend(projects);
     }
@@ -174,6 +203,7 @@ pub fn remove(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
     projects_and_targets: Vec<String>,
+    all: bool,
     app: Arc<App>,
 ) -> Result<bool> {
     mutate(
@@ -181,7 +211,7 @@ pub fn remove(
         sync_if_changed,
         OperationAction::Remove,
         projects_and_targets,
-        false,
+        all,
         app,
     )
 }
@@ -666,7 +696,7 @@ mod tests {
             project_names,
             HashSet::from(["team_banzai/project_a".to_string()])
         );
-        let project_names: HashSet<String> = fixture
+        let target_names: HashSet<String> = fixture
             .sparse_repo()?
             .selection_manager()?
             .selection()?
@@ -675,10 +705,55 @@ mod tests {
             .map(|t| t.to_string())
             .collect();
         assert_eq!(
-            project_names,
+            target_names,
             HashSet::from(["bazel://project_b/...".to_string()])
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn selection_remove_all() -> Result<()> {
+        let fixture = RepoPairFixture::new()?;
+        fixture.perform_clone()?;
+
+        let projects = vec![String::from("team_zissou/project_c")];
+
+        crate::selection::add(
+            &fixture.sparse_repo_path,
+            true,
+            projects.clone(),
+            true,
+            fixture.app.clone(),
+        )?;
+
+        crate::selection::remove(
+            &fixture.sparse_repo_path,
+            true,
+            Vec::new(),
+            true,
+            fixture.app.clone(),
+        )?;
+
+        let project_names: HashSet<String> = fixture
+            .sparse_repo()?
+            .selection_manager()?
+            .selection()?
+            .projects
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(project_names, HashSet::new());
+
+        let target_names: HashSet<String> = fixture
+            .sparse_repo()?
+            .selection_manager()?
+            .selection()?
+            .targets
+            .into_iter()
+            .map(|t| t.to_string())
+            .collect();
+        assert_eq!(target_names, HashSet::new());
         Ok(())
     }
 

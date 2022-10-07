@@ -13,6 +13,7 @@ use tracing::{debug, error, warn};
 
 use super::*;
 
+// TODO:(carolinac) Get all of these in focus/operations/src/selection.rs:952 and pass to the call of remove.
 /// A structure representing the current selection in memory. Instead of serializing this structure, a PersistedSelection is stored to disk. In addition to that structure being simpler to serialize, the indirection allows for updates to the underlying project definitions.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Selection {
