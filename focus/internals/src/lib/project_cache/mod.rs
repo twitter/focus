@@ -17,7 +17,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     convert::{TryFrom, TryInto},
     ffi::OsStr,
-    iter::FromIterator,
     os::unix::prelude::OsStrExt,
     path::Path,
     sync::Arc,
@@ -232,6 +231,18 @@ impl<'cache> ProjectCache<'cache> {
         }
     }
 
+    fn shard(from: &BTreeSet<String>, shard_count: usize) -> Vec<Vec<String>> {
+        let mut outer = Vec::<Vec<String>>::with_capacity(shard_count);
+        let mut bucket = 0;
+        outer.resize(shard_count, Vec::<String>::new());
+
+        for i in from {
+            outer[bucket].push(i.clone());
+            bucket = (bucket + 1) % shard_count;
+        }
+        outer
+    }
+
     /// Generate all projects in the given shard. Returns a tuple of all generated mandatory project keys and others keys (for optional ).
     pub fn generate_all(
         &self,
@@ -247,21 +258,18 @@ impl<'cache> ProjectCache<'cache> {
             .iter()
             .map(|(name, _project)| name.clone())
             .collect::<BTreeSet<String>>();
-        let optional_project_names = Vec::from_iter(optional_project_names.into_iter());
         let (build_graph_hash_key, build_graph_hash) =
             self.get_build_graph_hash(commit_id, true)?;
         let mut optional_project_keys = vec![];
-        let shard_size = optional_project_names.len() / shard_count;
-        let mut shards = optional_project_names.chunks(shard_size).skip(shard_index);
+        let shards = Self::shard(&optional_project_names, shard_count);
+        let shard = &shards[shard_index];
         let build_graph_hash_str = hex::encode(&build_graph_hash);
         let commit_id_str = hex::encode(commit_id.as_bytes());
-        let optional_project_names = shards
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No such shard"))?;
         info!(
             ?shard_index,
             ?shard_count,
-            ?optional_project_names,
+            ?shards,
+            ?shard,
             commit_id = ?commit_id_str,
             build_graph_hash = ?build_graph_hash_str,
             "Generating project pattern cache"
@@ -285,12 +293,12 @@ impl<'cache> ProjectCache<'cache> {
             );
         }
 
-        for project_name in optional_project_names {
+        for project_name in shard {
             let (key, value) = self
                 .get_optional_project_patterns(
                     commit_id,
                     &build_graph_hash,
-                    project_name,
+                    project_name.as_str(),
                     true,
                     &mandatory_project_patterns,
                 )
