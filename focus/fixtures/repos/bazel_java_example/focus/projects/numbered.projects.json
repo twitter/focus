@@ -1,0 +1,96 @@
+{
+    "projects": [
+        {
+            "name": "numbered/libs_1_to_5",
+            "description": "Stuff relating to library_{1-5}",
+            "targets": [
+                "bazel://library_1/...",
+                "bazel://library_2/...",
+                "bazel://library_3/...",
+                "bazel://library_4/...",
+                "bazel://library_5/..."
+            ]
+        },
+        {
+            "name": "numbered/libs_5_to_10",
+            "description": "Stuff relating to library_{6-10}",
+            "targets": [
+                "bazel://library_6/...",
+                "bazel://library_7/...",
+                "bazel://library_8/...",
+                "bazel://library_9/...",
+                "bazel://library_10/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/1",
+            "description": "Stuff relating to library_1",
+            "targets": [
+                "bazel://library_1/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/2",
+            "description": "Stuff relating to library_2",
+            "targets": [
+                "bazel://library_2/..."
+            ]
+        },        
+        {
+            "name": "numbered/lib/3",
+            "description": "Stuff relating to library_3",
+            "targets": [
+                "bazel://library_3/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/4",
+            "description": "Stuff relating to library_4",
+            "targets": [
+                "bazel://library_4/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/5",
+            "description": "Stuff relating to library_5",
+            "targets": [
+                "bazel://library_5/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/6",
+            "description": "Stuff relating to library_6",
+            "targets": [
+                "bazel://library_6/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/7",
+            "description": "Stuff relating to library_7",
+            "targets": [
+                "bazel://library_7/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/8",
+            "description": "Stuff relating to library_8",
+            "targets": [
+                "bazel://library_8/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/9",
+            "description": "Stuff relating to library_9",
+            "targets": [
+                "bazel://library_9/..."
+            ]
+        },
+        {
+            "name": "numbered/lib/10",
+            "description": "Stuff relating to library_10",
+            "targets": [
+                "bazel://library_10/..."
+            ]
+        }
+    ]
+}
