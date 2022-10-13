@@ -115,6 +115,10 @@ enum Subcommand {
     Remove {
         /// Project and targets to remove from the selection
         projects_and_targets: Vec<String>,
+
+        /// Remove all targets and projects from the selection
+        #[clap(long = "all")]
+        all: bool,
     },
 
     /// Display which projects and targets are selected.
@@ -980,6 +984,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
 
         Subcommand::Remove {
             projects_and_targets,
+            all,
         } => {
             
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
@@ -987,7 +992,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
             // TODO:(carolinac) unroll the selection to strings and pass in to remove as projects_and_targets
-            focus_operations::selection::remove(&sparse_repo, true, projects_and_targets, app)?;
+            focus_operations::selection::remove(&sparse_repo, true, projects_and_targets, all, app)?;            
             Ok(ExitCode(0))
         }
 
