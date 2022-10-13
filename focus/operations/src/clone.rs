@@ -669,6 +669,32 @@ fn clone_shallow(
     let shallow_since_datestamp =
         focus_util::time::formatted_datestamp_at_day_in_past(days_of_history)?;
 
+    // Check if local dense repo has a main branch that's out of date
+    if source_url.scheme().eq_ignore_ascii_case("file") {
+        let source_path = Path::new(source_url.path());
+        let repo = Repo::open(source_path, app.clone()).with_context(|| {
+            format!("Could not open the dense repo to check date of {}", branch)
+        })?;
+        let main_branch = repo
+            .underlying()
+            .find_branch(branch, git2::BranchType::Local)
+            .context("Failed to find main branch")?;
+        let main_branch_commit_id = main_branch
+            .get()
+            .peel_to_commit()
+            .context("Failed to peel to commit of main branch")?;
+        let main_branch_tip_date = DateTime::from_utc(
+            NaiveDateTime::from_timestamp(main_branch_commit_id.time().seconds(), 0),
+            Utc,
+        )
+        .date();
+
+        let shallow_since_date = focus_util::time::date_at_day_in_past(days_of_history)?;
+        if main_branch_tip_date < shallow_since_date {
+            bail!("Your main branch {} is older than the specified shallow date: {}. Run a `git pull` in your dense repo to update it!", branch, shallow_since_datestamp)
+        }
+    }
+
     let mut builder = CloneBuilder::new(destination_path.into());
     builder
         .fetch_url(source_url.as_str().into())
