@@ -253,7 +253,13 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
     assert!(library_a_dir.is_dir());
     assert!(project_a_dir.is_dir());
 
-    crate::selection::remove(&path, true, vec![project_a_label], false, fixture.app.clone())?;
+    crate::selection::remove(
+        &path,
+        true,
+        vec![project_a_label],
+        false,
+        fixture.app.clone(),
+    )?;
     {
         let selected_names = selected_project_names()?;
         assert_eq!(selected_names, hashset! { project_b_label.clone() })
@@ -265,7 +271,13 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
     assert!(!library_a_dir.is_dir());
     assert!(!project_a_dir.is_dir());
 
-    crate::selection::remove(&path, true, vec![project_b_label], false, fixture.app.clone())?;
+    crate::selection::remove(
+        &path,
+        true,
+        vec![project_b_label],
+        false,
+        fixture.app.clone(),
+    )?;
     {
         let selected_names = selected_project_names()?;
         assert_eq!(selected_names, hashset! {});
