@@ -117,7 +117,7 @@ enum Subcommand {
         projects_and_targets: Vec<String>,
 
         /// Remove all targets and projects from the selection
-        #[clap(long = "all")]
+        #[clap(short = 'a', long = "all")]
         all: bool,
     },
 
@@ -991,7 +991,6 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             let _lock_file = hold_lock_file(&sparse_repo)?;
             focus_operations::ensure_clean::run(&sparse_repo, app.clone())
                 .context("Ensuring working trees are clean failed")?;
-            // TODO:(carolinac) unroll the selection to strings and pass in to remove as projects_and_targets
             focus_operations::selection::remove(&sparse_repo, true, projects_and_targets, all, app)?;            
             Ok(ExitCode(0))
         }
