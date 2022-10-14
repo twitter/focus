@@ -727,6 +727,7 @@ mod tests {
             fixture.app.clone(),
         )?;
 
+        // Running remove all
         crate::selection::remove(
             &fixture.sparse_repo_path,
             true,
