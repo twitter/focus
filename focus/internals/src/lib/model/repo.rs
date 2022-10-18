@@ -11,7 +11,7 @@ use focus_util::{
 
 use std::{
     collections::HashSet,
-    fs::self,
+    fs,
     io::BufWriter,
     io::Write,
     path::{Path, PathBuf},
@@ -36,12 +36,12 @@ use crate::{
 };
 
 use super::{
-    configuration::{Configuration, IndexConfig},
+    configuration::Configuration,
     outlining::{
         pattern_default_precedence, PatternContainer, PatternSet, PatternSetWriter,
         DEFAULT_OUTLINING_PATTERNS,
     },
-    selection::{Selection, SelectionManager},
+    selection::{Selection, SelectionManager, Target},
 };
 
 use anyhow::{bail, Context, Result};
@@ -673,17 +673,9 @@ impl Repo {
         commit_id: git2::Oid,
         targets: &TargetSet,
         skip_pattern_application: bool,
-        index_config: &IndexConfig,
         app: Arc<App>,
         cache: &RocksDBCache,
     ) -> Result<(usize, bool)> {
-        let commit = self
-            .underlying()
-            .find_commit(commit_id)
-            .with_context(|| format!("Resolving commit {}", commit_id))?;
-        let tree = commit.tree().context("Resolving tree")?;
-        let hash_context = HashContext::new(&self.repo, &tree)?;
-
         let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
             (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),
             _ => {
@@ -701,99 +693,8 @@ impl Repo {
             .configure(app.clone())
             .context("Configuring the outlining tree")?;
 
-        let ti_client = app.tool_insights_client();
-        let mut outline_patterns = {
-            let dependency_keys: HashSet<DependencyKey> =
-                targets.iter().cloned().map(DependencyKey::from).collect();
-
-            info!("Checking cache for sparse checkout patterns");
-            let mut paths_to_materialize =
-                get_files_to_materialize(&hash_context, cache, dependency_keys.clone())?;
-
-            if index_config.enabled {
-                if let PathsToMaterializeResult::MissingKeys { .. } = paths_to_materialize {
-                    info!(
-                        "Cache miss for sparse checkout patterns; fetching from the remote index"
-                    );
-                    // TODO: Re-enable after the index is moved into its own crate.
-                    // let _: Result<ExitCode> = index::fetch_internal(
-                    //     app.clone(),
-                    //     cache,
-                    //     working_tree.work_dir().to_path_buf(),
-                    //     index_config,
-                    // );
-                    // Query again now that the index is populated.
-                    paths_to_materialize =
-                        get_files_to_materialize(&hash_context, cache, dependency_keys)?;
-                }
-            }
-
-            match paths_to_materialize {
-                PathsToMaterializeResult::Ok { seen_keys, paths } => {
-                    info!(
-                        num_seen_keys = seen_keys.len(),
-                        "Cache hit for sparse checkout patterns"
-                    );
-                    ti_client
-                        .get_context()
-                        .add_to_custom_map("index_miss_count", "0");
-                    ti_client
-                        .get_context()
-                        .add_to_custom_map("index_hit_count", seen_keys.len().to_string());
-                    paths
-                        .into_iter()
-                        .map(|path| Pattern::Directory {
-                            precedence: LAST,
-                            path,
-                            recursive: true,
-                        })
-                        .collect()
-                }
-
-                PathsToMaterializeResult::MissingKeys {
-                    seen_keys,
-                    missing_keys,
-                } => {
-                    info!(
-                        num_missing_keys = ?missing_keys.len(),
-                        "Cache miss for sparse checkout patterns; querying Bazel"
-                    );
-
-                    // Write a file listing missing DependencyKeys.
-                    {
-                        let (file, _, _) = self.app.sandbox().create_file(
-                            Some("missing-keys"),
-                            Some("txt"),
-                            None,
-                        )?;
-                        let mut writer = BufWriter::new(file);
-                        for (dependency_key, _) in missing_keys.iter() {
-                            writeln!(&mut writer, "{:?}", dependency_key)?;
-                        }
-                    }
-
-                    ti_client
-                        .get_context()
-                        .add_to_custom_map("index_miss_count", missing_keys.len().to_string());
-                    ti_client
-                        .get_context()
-                        .add_to_custom_map("index_hit_count", seen_keys.len().to_string());
-
-                    debug!(?missing_keys, "These are the missing keys");
-                    let (outline_patterns, resolution_result) = outlining_tree
-                        .outline(commit_id, targets, app.clone())
-                        .context("Failed to outline")?;
-
-                    debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
-                    update_object_database_from_resolution(
-                        &hash_context,
-                        cache,
-                        &resolution_result,
-                    )?;
-                    outline_patterns
-                }
-            }
-        };
+        let mut outline_patterns =
+            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), cache)?;
 
         trace!(?outline_patterns);
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
@@ -806,6 +707,105 @@ impl Repo {
                 .context("Failed to apply outlined patterns to working tree")?
         };
         Ok((pattern_count, checked_out))
+    }
+
+    /// Sync using the cache, outlining when necessary recursively on dependencies.
+    fn sync_using_cache(
+        &self,
+        commit_id: Oid,
+        targets: &HashSet<Target>,
+        outlining_tree: &OutliningTree,
+        app: Arc<App>,
+        cache: &RocksDBCache,
+    ) -> Result<PatternSet> {
+        let index_config = &self.config().index;
+        let commit = self
+            .underlying()
+            .find_commit(commit_id)
+            .with_context(|| format!("Resolving commit {}", commit_id))?;
+        let tree = commit.tree().context("Resolving tree")?;
+        let hash_context = HashContext::new(&self.repo, &tree)?;
+        let ti_client = app.tool_insights_client();
+        let dependency_keys: HashSet<DependencyKey> =
+            targets.iter().cloned().map(DependencyKey::from).collect();
+        info!("Checking cache for sparse checkout patterns");
+        let mut paths_to_materialize =
+            get_files_to_materialize(&hash_context, cache, dependency_keys.clone())?;
+        if index_config.enabled {
+            if let PathsToMaterializeResult::MissingKeys { .. } = paths_to_materialize {
+                info!("Cache miss for sparse checkout patterns; fetching from the remote index");
+                // TODO: Re-enable after the index is moved into its own crate.
+                // let _: Result<ExitCode> = index::fetch_internal(
+                //     app.clone(),
+                //     cache,
+                //     working_tree.work_dir().to_path_buf(),
+                //     index_config,
+                // );
+                // Query again now that the index is populated.
+                paths_to_materialize =
+                    get_files_to_materialize(&hash_context, cache, dependency_keys)?;
+            }
+        }
+        Ok(match paths_to_materialize {
+            PathsToMaterializeResult::Ok { seen_keys, paths } => {
+                info!(
+                    num_seen_keys = seen_keys.len(),
+                    "Cache hit for sparse checkout patterns"
+                );
+                ti_client
+                    .get_context()
+                    .add_to_custom_map("index_miss_count", "0");
+                ti_client
+                    .get_context()
+                    .add_to_custom_map("index_hit_count", seen_keys.len().to_string());
+                paths
+                    .into_iter()
+                    .map(|path| Pattern::Directory {
+                        precedence: LAST,
+                        path,
+                        recursive: true,
+                    })
+                    .collect()
+            }
+
+            PathsToMaterializeResult::MissingKeys {
+                seen_keys,
+                missing_keys,
+            } => {
+                info!(
+                    num_missing_keys = ?missing_keys.len(),
+                    "Cache miss for sparse checkout patterns; querying Bazel"
+                );
+
+                // Write a file listing missing DependencyKeys.
+                {
+                    let (file, _, _) =
+                        self.app
+                            .sandbox()
+                            .create_file(Some("missing-keys"), Some("txt"), None)?;
+                    let mut writer = BufWriter::new(file);
+                    for (dependency_key, _) in missing_keys.iter() {
+                        writeln!(&mut writer, "{:?}", dependency_key)?;
+                    }
+                }
+
+                ti_client
+                    .get_context()
+                    .add_to_custom_map("index_miss_count", missing_keys.len().to_string());
+                ti_client
+                    .get_context()
+                    .add_to_custom_map("index_hit_count", seen_keys.len().to_string());
+
+                debug!(?missing_keys, "These are the missing keys");
+                let (outline_patterns, resolution_result) = outlining_tree
+                    .outline(commit_id, targets, app.clone())
+                    .context("Failed to outline")?;
+
+                debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
+                update_object_database_from_resolution(&hash_context, cache, &resolution_result)?;
+                outline_patterns
+            }
+        })
     }
 
     /// Sync using the project cache returning an optional value of the number of patterns and whether a checkout occured. None is returned if the project cache could not be used.
