@@ -73,7 +73,7 @@ fn sync_upstream_changes() -> Result<()> {
         SyncMode::Normal,
         fixture.app.clone(),
     )?;
-    assert_eq!(sync_result.mechanism, SyncMechanism::Outline);
+    assert_eq!(sync_result.mechanism, SyncMechanism::CachedOutline);
 
     let x_dir = fixture.sparse_repo_path.join("x");
     assert!(!x_dir.is_dir());
@@ -336,7 +336,7 @@ fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
     assert_snapshot!(original_profile_contents);
     assert_eq!(&original_profile_contents, &updated_profile_contents);
     assert!(!sync_result.checked_out);
-    assert_eq!(sync_result.mechanism, SyncMechanism::Outline);
+    assert_eq!(sync_result.mechanism, SyncMechanism::CachedOutline);
 
     Ok(())
 }

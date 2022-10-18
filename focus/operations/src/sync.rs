@@ -53,6 +53,9 @@ pub enum SyncMode {
         force: bool,
     },
 
+    // Peform a one-shot sync, not using the cache
+    OneShot,
+
     /// Perform a sync using only data from the project cache
     RequireProjectCache,
 }
@@ -80,7 +83,10 @@ pub enum SyncStatus {
 #[derive(Debug, PartialEq, Eq)]
 pub enum SyncMechanism {
     /// The sync was performed via outlining, incorporating data from the content addressed cache where possible.
-    Outline,
+    CachedOutline,
+
+    /// The sync was performed via outlining in one shot, without using the content addressed cache.
+    OneShotOutline,
 
     /// The sync was peformed by consulting the project cache.
     ProjectCache,
@@ -89,7 +95,8 @@ pub enum SyncMechanism {
 impl fmt::Display for SyncMechanism {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SyncMechanism::Outline => write!(f, "outline"),
+            SyncMechanism::CachedOutline => write!(f, "outline"),
+            SyncMechanism::OneShotOutline => write!(f, "one-shot-outline"),
             SyncMechanism::ProjectCache => write!(f, "project-cache"),
         }
     }
@@ -125,7 +132,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 checked_out: false,
                 commit_id: None,
                 status: SyncStatus::SkippedPreemptiveSyncDisabled,
-                mechanism: SyncMechanism::Outline,
+                mechanism: SyncMechanism::CachedOutline,
             });
         }
 
@@ -152,7 +159,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 checked_out: false,
                 commit_id: None,
                 status: SyncStatus::SkippedPreemptiveSyncCancelledByActivity,
-                mechanism: SyncMechanism::Outline,
+                mechanism: SyncMechanism::CachedOutline,
             });
         }
     }
@@ -169,7 +176,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
     let selection = selections.computed_selection()?;
     let targets = selections.compute_complete_target_set()?;
 
-    let mut mechanism = SyncMechanism::Outline;
+    let mut mechanism = SyncMechanism::CachedOutline;
 
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
