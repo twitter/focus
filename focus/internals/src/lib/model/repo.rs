@@ -984,7 +984,7 @@ impl Repo {
         self.git_dir().join("focus")
     }
 
-    /// Returns $GIT_DIR/focus
+    /// Returns $GIT_DIR/focus/project-cache
     pub fn project_cache_dir(&self) -> PathBuf {
         self.git_focus_dir().join("project-cache")
     }
