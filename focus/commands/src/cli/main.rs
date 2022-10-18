@@ -79,6 +79,10 @@ enum Subcommand {
         /// Path to the sparse repository.
         #[clap(parse(from_os_str), default_value = ".")]
         sparse_repo: PathBuf,
+
+        /// Sync in one-shot, skipping the cache and invoking the underlying resolver once.
+        #[clap(long = "one-shot")]
+        one_shot: bool,
     },
 
     /// Interact with repos configured on this system. Run `focus repo help` for more information.
@@ -813,14 +817,22 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
 
             Ok(ExitCode(0))
         }
-        Subcommand::Sync { sparse_repo } => {
+        Subcommand::Sync {
+            sparse_repo,
+            one_shot,
+        } => {
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo =
                 paths::find_repo_root_from(app.clone(), paths::expand_tilde(sparse_repo)?)?;
             ensure_repo_compatibility(&sparse_repo)?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            focus_operations::sync::run(&sparse_repo, SyncMode::Normal, app)?;
+            let mode = if one_shot {
+                SyncMode::OneShot
+            } else {
+                SyncMode::Normal
+            };
+            focus_operations::sync::run(&sparse_repo, mode, app)?;
             Ok(ExitCode(0))
         }
 
