@@ -727,8 +727,7 @@ mod tests {
             fixture.app.clone(),
         )?;
 
-        // Running remove all
-        crate::selection::remove(
+        crate::selection::add(
             &fixture.sparse_repo_path,
             true,
             Vec::new(),
