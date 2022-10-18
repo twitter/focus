@@ -722,7 +722,7 @@ mod tests {
         crate::selection::add(
             &fixture.sparse_repo_path,
             true,
-            projects.clone(),
+            projects,
             true,
             fixture.app.clone(),
         )?;
