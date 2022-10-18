@@ -40,11 +40,6 @@ pub fn run(
                         println!("{}", target);
                     }
                 }
-                focus_internals::target::Target::Pants(_) => {
-                    if target_types.contains(&TargetTypes::Pants) {
-                        println!("{}", target);
-                    }
-                }
             }
         }
     }
