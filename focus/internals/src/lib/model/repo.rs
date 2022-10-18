@@ -11,7 +11,9 @@ use focus_util::{
 
 use std::{
     collections::HashSet,
-    fs,
+    fs::{self, File, OpenOptions},
+    io::BufWriter,
+    io::Write,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -756,6 +758,20 @@ impl Repo {
                         num_missing_keys = ?missing_keys.len(),
                         "Cache miss for sparse checkout patterns; querying Bazel"
                     );
+
+                    // Write a file listing missing DependencyKeys.
+                    {
+                        let (file, _, _) = self.app.sandbox().create_file(
+                            Some("missing-keys"),
+                            Some("txt"),
+                            None,
+                        )?;
+                        let mut writer = BufWriter::new(file);
+                        for (dependency_key, _) in missing_keys.iter() {
+                            writeln!(&mut writer, "{:?}", dependency_key)?;
+                        }
+                    }
+
                     ti_client
                         .get_context()
                         .add_to_custom_map("index_miss_count", missing_keys.len().to_string());
