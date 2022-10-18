@@ -102,7 +102,7 @@ fn mutate(
     };
 
     let mut projects_and_targets = projects_and_targets;
-    
+
     if unroll {
         let mut projects = vec![];
         let mut targets = vec![];
@@ -727,7 +727,7 @@ mod tests {
             fixture.app.clone(),
         )?;
 
-        crate::selection::add(
+        crate::selection::remove(
             &fixture.sparse_repo_path,
             true,
             Vec::new(),
