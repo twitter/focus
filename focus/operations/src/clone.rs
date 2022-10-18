@@ -580,7 +580,7 @@ fn set_up_sparse_repo(
     debug!(target_set = ?target_set, "Complete target set");
 
     let odb = RocksDBCache::new(repo.underlying());
-    repo.sync(head_commit.id(), &target_set, false, app, &odb)
+    repo.sync(head_commit.id(), &target_set, false, app, Some(&odb))
         .context("Sync failed")?;
 
     repo.working_tree().unwrap().write_sync_point_ref()?;

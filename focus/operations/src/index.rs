@@ -95,8 +95,13 @@ fn resolve_targets(
             }
 
             let repo = Repo::open(repo.path(), app.clone())?;
-            let (pattern_count, _checked_out) =
-                repo.sync(head_commit.id(), &targets, true, app.clone(), borrowed_odb)?;
+            let (pattern_count, _checked_out) = repo.sync(
+                head_commit.id(),
+                &targets,
+                true,
+                app.clone(),
+                Some(borrowed_odb),
+            )?;
             println!("Pattern count: {}", pattern_count);
 
             match get_files_to_materialize(&ctx, borrowed_odb, dep_keys)? {
