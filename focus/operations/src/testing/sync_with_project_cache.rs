@@ -151,7 +151,6 @@ fn project_cache_generates_all_projects() -> Result<()> {
     fixture.configure_endpoint()?;
     fixture.generate_content(10)?;
 
-    // Add a project and a directory target to the selection
     let selection_manager = fixture.underlying.sparse_repo()?.selection_manager()?;
     let project_names: Vec<String> = selection_manager
         .project_catalog()
@@ -170,7 +169,6 @@ fn project_cache_generates_all_projects() -> Result<()> {
         app.clone(),
     )?;
 
-    // Verify that syncing with the project cache fails
     let result = crate::sync::run(
         &fixture.underlying.sparse_repo_path,
         crate::sync::SyncMode::RequireProjectCache,
