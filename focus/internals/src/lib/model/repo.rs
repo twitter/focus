@@ -674,7 +674,7 @@ impl Repo {
         targets: &TargetSet,
         skip_pattern_application: bool,
         app: Arc<App>,
-        cache: &RocksDBCache,
+        cache: Option<&RocksDBCache>,
     ) -> Result<(usize, bool)> {
         let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
             (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),
@@ -693,8 +693,11 @@ impl Repo {
             .configure(app.clone())
             .context("Configuring the outlining tree")?;
 
-        let mut outline_patterns =
-            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), cache)?;
+        let mut outline_patterns = if let Some(cache) = cache {
+            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), cache)
+        } else {
+            self.sync_without_cache(commit_id, targets, outlining_tree, app.clone())
+        }?;
 
         trace!(?outline_patterns);
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
@@ -707,6 +710,20 @@ impl Repo {
                 .context("Failed to apply outlined patterns to working tree")?
         };
         Ok((pattern_count, checked_out))
+    }
+
+    /// Sync in one shot, not using the cache.
+    fn sync_without_cache(
+        &self,
+        commit_id: Oid,
+        targets: &HashSet<Target>,
+        outlining_tree: &OutliningTree,
+        app: Arc<App>,
+    ) -> Result<PatternSet> {
+        let (outline_patterns, _resolution_result) = outlining_tree
+            .outline(commit_id, targets, app.clone())
+            .context("Failed to outline")?;
+        Ok(outline_patterns)
     }
 
     /// Sync using the cache, outlining when necessary recursively on dependencies.
