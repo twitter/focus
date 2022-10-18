@@ -80,10 +80,8 @@ mod testing {
     #[test]
     fn reading_notification_config() {
         let dir = tempdir().unwrap();
-        let remote_dir = dir.path().join("index_remote");
         let repo_dir = dir.path().join("repo");
         let config_dir = Configuration::config_dir(&repo_dir);
-        std::fs::create_dir_all(&remote_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
         let index_config_path = config_dir.join(NOTIFICATION_CONFIG_FILENAME);
         let in_memory_config = NotificationConfig {
