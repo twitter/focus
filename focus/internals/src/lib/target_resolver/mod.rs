@@ -4,7 +4,6 @@
 mod bazel_de;
 mod bazel_resolver;
 mod directory_resolver;
-mod pants_resolver;
 
 use focus_util::app::App;
 
@@ -19,10 +18,7 @@ use std::{
     sync::Arc,
 };
 
-pub(crate) use self::{
-    bazel_resolver::BazelResolver, directory_resolver::DirectoryResolver,
-    pants_resolver::PantsResolver,
-};
+pub(crate) use self::{bazel_resolver::BazelResolver, directory_resolver::DirectoryResolver};
 
 /// A request to resolve targets in a particular repository.
 #[derive(Clone, Debug)]
@@ -106,7 +102,6 @@ pub trait Resolver {
 pub struct RoutingResolver {
     bazel_resolver: BazelResolver,
     directory_resolver: DirectoryResolver,
-    pants_resolver: PantsResolver,
 }
 
 impl Resolver for RoutingResolver {
@@ -114,7 +109,6 @@ impl Resolver for RoutingResolver {
         Self {
             bazel_resolver: BazelResolver::new(cache_root),
             directory_resolver: DirectoryResolver::new(cache_root),
-            pants_resolver: PantsResolver::new(cache_root),
         }
     }
 
@@ -129,7 +123,6 @@ impl Resolver for RoutingResolver {
         let subrequests = {
             let mut bazel_targets = HashSet::new();
             let mut directory_targets = HashSet::new();
-            let mut pants_targets = HashSet::new();
             for target in request.targets.iter().cloned() {
                 match target {
                     target @ Target::Bazel(_) => {
@@ -137,9 +130,6 @@ impl Resolver for RoutingResolver {
                     }
                     target @ Target::Directory(_) => {
                         directory_targets.insert(target);
-                    }
-                    target @ Target::Pants(_) => {
-                        pants_targets.insert(target);
                     }
                 }
             }
@@ -152,11 +142,7 @@ impl Resolver for RoutingResolver {
                 targets: directory_targets,
                 ..request.clone()
             };
-            let pants_subrequest = ResolutionRequest {
-                targets: pants_targets,
-                ..request.clone()
-            };
-            vec![bazel_subrequest, directory_subrequest, pants_subrequest]
+            vec![bazel_subrequest, directory_subrequest]
         };
 
         subrequests
@@ -171,10 +157,6 @@ impl Resolver for RoutingResolver {
                     }
                     Some(Target::Directory(_)) => {
                         self.directory_resolver
-                            .resolve(subrequest, cache_options, app_clone)
-                    }
-                    Some(Target::Pants(_)) => {
-                        self.pants_resolver
                             .resolve(subrequest, cache_options, app_clone)
                     }
                     None => Ok(Default::default()),

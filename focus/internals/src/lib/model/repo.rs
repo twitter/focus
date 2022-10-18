@@ -11,7 +11,7 @@ use focus_util::{
 
 use std::{
     collections::HashSet,
-    fs::{self, File, OpenOptions},
+    fs::self,
     io::BufWriter,
     io::Write,
     path::{Path, PathBuf},

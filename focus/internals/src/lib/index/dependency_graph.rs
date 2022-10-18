@@ -85,10 +85,6 @@ impl From<Target> for DependencyKey {
         match target {
             Target::Bazel(label) => Self::BazelPackage(label),
             Target::Directory(path) => Self::Path(PathBuf::from(path)),
-            Target::Pants(label) => unimplemented!(
-                "DependencyKey from Pants label not supported (label: {})",
-                label
-            ),
         }
     }
 }

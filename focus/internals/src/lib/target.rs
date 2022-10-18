@@ -25,9 +25,6 @@ pub enum Target {
 
     /// A specific directory within the repository.
     Directory(String),
-
-    /// A Pants package like `foo/bar:baz`.
-    Pants(String),
 }
 
 impl Display for Target {
@@ -35,7 +32,6 @@ impl Display for Target {
         match self {
             Target::Bazel(c) => write!(f, "bazel:{}", c),
             Target::Directory(c) => write!(f, "directory:{}", c),
-            Target::Pants(c) => write!(f, "pants:{}", c),
         }
     }
 }
@@ -64,8 +60,6 @@ impl TryFrom<&str> for Target {
                     Ok(Target::Bazel(label))
                 } else if prefix.eq_ignore_ascii_case("directory") {
                     Ok(Target::Directory(rest))
-                } else if prefix.eq_ignore_ascii_case("pants") {
-                    Ok(Target::Pants(rest))
                 } else {
                     Err(TargetError::UnsupportedScheme(prefix.to_owned()))
                 }
@@ -80,7 +74,6 @@ impl From<&Target> for String {
         match val {
             Target::Bazel(spec) => format!("bazel:{}", spec),
             Target::Directory(spec) => format!("directory:{}", spec),
-            Target::Pants(spec) => format!("pants:{}", spec),
         }
     }
 }
