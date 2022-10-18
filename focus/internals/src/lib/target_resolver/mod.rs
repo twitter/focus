@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod bazel_de;
-mod bazel_resolver;
+mod incremental_bazel_resolver;
 mod directory_resolver;
 
 use focus_util::app::App;
@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-pub(crate) use self::{bazel_resolver::BazelResolver, directory_resolver::DirectoryResolver};
+pub(crate) use self::{incremental_bazel_resolver::IncrementalBazelResolver, directory_resolver::DirectoryResolver};
 
 /// A request to resolve targets in a particular repository.
 #[derive(Clone, Debug)]
@@ -100,14 +100,14 @@ pub trait Resolver {
 }
 
 pub struct RoutingResolver {
-    bazel_resolver: BazelResolver,
+    bazel_resolver: IncrementalBazelResolver,
     directory_resolver: DirectoryResolver,
 }
 
 impl Resolver for RoutingResolver {
     fn new(cache_root: &Path) -> Self {
         Self {
-            bazel_resolver: BazelResolver::new(cache_root),
+            bazel_resolver: IncrementalBazelResolver::new(cache_root),
             directory_resolver: DirectoryResolver::new(cache_root),
         }
     }
