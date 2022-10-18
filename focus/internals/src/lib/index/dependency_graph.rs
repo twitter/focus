@@ -346,7 +346,7 @@ mod tests {
     use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
     use crate::target::Target;
-    use crate::target_resolver::{BazelResolver, CacheOptions, ResolutionRequest, Resolver};
+    use crate::target_resolver::{IncrementalBazelResolver, CacheOptions, ResolutionRequest, Resolver};
     use focus_testing::init_logging;
     use focus_testing::ScratchGitRepo;
     use focus_util::app::App;
@@ -443,7 +443,7 @@ sh_binary(
 
         let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
+        let resolver = IncrementalBazelResolver::new(cache_dir.path());
         let target_set =
             hashset! {"bazel://package1:foo".try_into()?, "bazel://package2:bar".try_into()?};
         let request = ResolutionRequest {
@@ -582,7 +582,7 @@ New contents
 
         let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
+        let resolver = IncrementalBazelResolver::new(cache_dir.path());
         let target_set = hashset! {"bazel://package1:foo".try_into()? };
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
@@ -747,7 +747,7 @@ def some_macro():
 
         let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
+        let resolver = IncrementalBazelResolver::new(cache_dir.path());
         let target_set = hashset! {"bazel://package1:foo".try_into()?};
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
@@ -872,7 +872,7 @@ macro("foo")
 
         let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
+        let resolver = IncrementalBazelResolver::new(cache_dir.path());
         let cache_options = CacheOptions::default();
 
         let odb = HashMapOdb::new();
@@ -1047,7 +1047,7 @@ def some_macro():
 
         let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
+        let resolver = IncrementalBazelResolver::new(cache_dir.path());
         let target_set = hashset! {"bazel://package1:foo".try_into()?};
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
@@ -1127,7 +1127,7 @@ foo(
 
         let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
+        let resolver = IncrementalBazelResolver::new(cache_dir.path());
         let target_set = hashset! {
             // Note that `//package1` itself is not a package, but
             // `//package1/...` expands to some number of subpackages anyways.
@@ -1351,7 +1351,7 @@ sh_binary(
 
         let app = Arc::new(App::new_for_testing()?);
         let cache_dir = tempfile::tempdir()?;
-        let resolver = BazelResolver::new(cache_dir.path());
+        let resolver = IncrementalBazelResolver::new(cache_dir.path());
         let target_set = hashset! {
             "bazel://package1:foo".try_into()?,
         };
