@@ -126,7 +126,7 @@ impl OneShotBazelResolver {
             initial_bazel_args.push(format!("--bazelrc={}", OUTLINING_BAZELRC_PATH));
         }
         let (mut cmd, scmd) = SandboxCommand::new(Self::locate_bazel_binary(request), app)?;
-        scmd.ensure_success_or_log(
+        scmd.ensure_exit_with_status_or_log(
             cmd.args(initial_bazel_args)
                 .arg("query")
                 .arg("--output=package")
@@ -134,10 +134,15 @@ impl OneShotBazelResolver {
                 .arg("--noimplicit_deps")
                 .arg("--nofetch")
                 .arg("--experimental_repository_disable_download=true")
+                .arg("--keep_going")
                 .arg("--query_file")
                 .arg(query_file_path)
                 .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
+            &[0, 3],
+            // Allow Bazel PARTIAL_ANALYSIS_FAILURE because of --nofetch.
+            //
+            // See https://github.com/bazelbuild/bazel/blob/master/src/main/java/com/google/devtools/build/lib/util/ExitCode.java.
         )?;
 
         // Read to string so that we can print it if we need to debug.
@@ -148,6 +153,15 @@ impl OneShotBazelResolver {
         };
 
         debug!(?query, ?raw_result, "Query returned with result");
-        Ok(raw_result.lines().map(|s| s.to_owned()).collect())
+        Ok(raw_result
+            .lines()
+            .filter_map(|s| {
+                if !s.starts_with("@") {
+                    Some(s.to_owned())
+                } else {
+                    None
+                }
+            })
+            .collect())
     }
 }

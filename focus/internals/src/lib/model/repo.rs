@@ -31,7 +31,8 @@ use crate::{
     project_cache::{ProjectCache, Value},
     target::TargetSet,
     target_resolver::{
-        CacheOptions, ResolutionRequest, ResolutionResult, Resolver, RoutingResolver,
+        BazelResolutionStrategy, CacheOptions, ResolutionOptions, ResolutionRequest,
+        ResolutionResult, Resolver, RoutingResolver,
     },
 };
 
@@ -497,6 +498,7 @@ impl OutliningTree {
         &self,
         commit_id: git2::Oid,
         target_set: &TargetSet,
+        resolution_options: &ResolutionOptions,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)> {
         self.apply_configured_outlining_patterns(commit_id, app.clone())
@@ -512,6 +514,7 @@ impl OutliningTree {
         let request = ResolutionRequest {
             repo: repo_path.clone(),
             targets: target_set.clone(),
+            options: resolution_options.clone(),
         };
         let resolver = self.resolver().context("Failed to create resolver")?;
         let result = resolver.resolve(&request, &cache_options, app)?;
@@ -720,8 +723,12 @@ impl Repo {
         outlining_tree: &OutliningTree,
         app: Arc<App>,
     ) -> Result<PatternSet> {
+        info!("Running sync without cache");
+        let resolution_options = ResolutionOptions {
+            bazel_resolution_strategy: BazelResolutionStrategy::OneShot,
+        };
         let (outline_patterns, _resolution_result) = outlining_tree
-            .outline(commit_id, targets, app.clone())
+            .outline(commit_id, targets, &resolution_options, app.clone())
             .context("Failed to outline")?;
         Ok(outline_patterns)
     }
@@ -814,8 +821,11 @@ impl Repo {
                     .add_to_custom_map("index_hit_count", seen_keys.len().to_string());
 
                 debug!(?missing_keys, "These are the missing keys");
+                let resolution_options = ResolutionOptions {
+                    bazel_resolution_strategy: BazelResolutionStrategy::Incremental,
+                };
                 let (outline_patterns, resolution_result) = outlining_tree
-                    .outline(commit_id, targets, app.clone())
+                    .outline(commit_id, targets, &resolution_options, app.clone())
                     .context("Failed to outline")?;
 
                 debug!(?resolution_result, ?outline_patterns, "Resolved patterns");

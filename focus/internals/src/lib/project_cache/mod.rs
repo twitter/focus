@@ -23,11 +23,11 @@ use std::{
     time::Duration,
 };
 
-use crate::model::{
+use crate::{model::{
     outlining::PatternSet,
     repo::Repo,
     selection::{Target, TargetSet},
-};
+}, target_resolver::ResolutionOptions};
 use anyhow::{bail, Context};
 use focus_util::{app::App, paths::is_relevant_to_build_graph};
 use git2::{ObjectType, Oid, TreeWalkMode, TreeWalkResult};
@@ -197,13 +197,18 @@ impl<'cache> ProjectCache<'cache> {
     }
 
     /// Outling the given targets at a specific commit.
-    fn outline(&self, commit_id: Oid, targets: &HashSet<Target>) -> anyhow::Result<PatternSet> {
+    fn outline(
+        &self,
+        commit_id: Oid,
+        targets: &HashSet<Target>,
+        resolution_options: &ResolutionOptions,
+    ) -> anyhow::Result<PatternSet> {
         let outlining_tree = self
             .repo
             .outlining_tree()
             .ok_or_else(|| anyhow::anyhow!("Missing outlining tree"))?;
         let (patterns, _resolution_result) = outlining_tree
-            .outline(commit_id, targets, self.app.clone())
+            .outline(commit_id, targets, &resolution_options, self.app.clone())
             .with_context(|| {
                 format!(
                     "Outlining targets ({:?}) at commit {} failed",
@@ -341,7 +346,8 @@ impl<'cache> ProjectCache<'cache> {
                 targets.extend(TargetSet::try_from(project)?);
             }
 
-            if let Ok(patterns) = self.outline(commit_id, &targets) {
+            let resolution_options = ResolutionOptions::default();
+            if let Ok(patterns) = self.outline(commit_id, &targets, &resolution_options) {
                 Ok(Some(Value::MandatoryProjectPatternSet(patterns)))
             } else {
                 Ok(None)
@@ -380,7 +386,8 @@ impl<'cache> ProjectCache<'cache> {
                 let targets = TargetSet::try_from(project)?;
 
                 info!(project = ?project_name, "Outlining");
-                if let Ok(patterns) = self.outline(commit_id, &targets) {
+                let resolution_options = ResolutionOptions::default();
+                if let Ok(patterns) = self.outline(commit_id, &targets, &resolution_options) {
                     // Remove ignored patterns.
                     let patterns: PatternSet =
                         patterns.difference(ignored_patterns).cloned().collect();

@@ -299,7 +299,11 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
 
                 // Fall back to normal syncing
                 let odb = RocksDBCache::new(repo.underlying());
-                repo.sync(commit.id(), &targets, preemptive, app.clone(), Some(&odb))
+                let cache = match mode {
+                    SyncMode::OneShot => None,
+                    _ => Some(&odb),
+                };
+                repo.sync(commit.id(), &targets, preemptive, app.clone(), cache)
                     .context("Sync failed")
             }
         }
