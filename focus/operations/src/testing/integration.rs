@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
+    cell::Cell,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -17,7 +18,7 @@ use tempfile::TempDir;
 use tracing::{info, warn};
 
 use focus_testing::ScratchGitRepo;
-use focus_util::app::App;
+use focus_util::{app::App, git_helper};
 
 use focus_internals::{model::repo::Repo, tracker::Tracker};
 
@@ -42,6 +43,7 @@ pub struct RepoPairFixture {
     pub tracker: Tracker,
     pub app: Arc<App>,
     pub preserve: bool,
+    pub sync_mode: Cell<SyncMode>,
 }
 
 impl RepoPairFixture {
@@ -70,11 +72,21 @@ impl RepoPairFixture {
             app,
             tracker,
             preserve: false,
+            sync_mode: Cell::new(SyncMode::Normal),
         };
 
         set_extra_config_on_dense_repo(&fixture)?;
 
         Ok(fixture)
+    }
+
+    pub fn with_sync_mode(mode: SyncMode) -> Result<Self> {
+        let instance = Self::new()?;
+        instance.sync_mode.replace(mode);
+        instance
+            .sparse_repo()?
+            .set_bazel_oneshot_resolution(mode == SyncMode::OneShot)?;
+        Ok(instance)
     }
 
     fn preserve_dirs(&mut self) -> Result<()> {
@@ -112,8 +124,12 @@ impl RepoPairFixture {
 
     #[allow(dead_code)]
     pub fn perform_sync(&self) -> Result<bool> {
-        crate::sync::run(&self.sparse_repo_path, SyncMode::Normal, self.app.clone())
-            .map(|result| result.checked_out)
+        crate::sync::run(
+            &self.sparse_repo_path,
+            self.sync_mode.get(),
+            self.app.clone(),
+        )
+        .map(|result| result.checked_out)
     }
 
     #[allow(dead_code)]
