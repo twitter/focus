@@ -4,11 +4,12 @@
 use crate::app::App;
 use anyhow::{bail, Context, Result};
 use std::{
+    collections::HashSet,
     ffi::OsStr,
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    process::{Command, ExitStatus, Stdio},
+    process::{exit, Command, ExitStatus, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc,
@@ -220,6 +221,15 @@ impl SandboxCommand {
         cmd: &mut Command,
         output: SandboxCommandOutput,
     ) -> Result<ExitStatus> {
+        self.ensure_exit_with_status_or_log(cmd, output, &[0])
+    }
+
+    pub fn ensure_exit_with_status_or_log(
+        &self,
+        cmd: &mut Command,
+        output: SandboxCommandOutput,
+        successful_status_codes: &[i32],
+    ) -> Result<ExitStatus> {
         let command_description = Self::pretty_print_command(cmd);
         let span = debug_span!("Running command", description = %command_description);
         let _guard = span.enter();
@@ -243,7 +253,15 @@ impl SandboxCommand {
             tailer.stop();
         }
         debug!(command = %command_description, %status, "Command exited");
-        if !status.success() {
+
+        let exit_code = status
+            .code()
+            .ok_or_else(|| anyhow::anyhow!("No exit status for terminated process"))?;
+        let success = successful_status_codes
+            .iter()
+            .find(|&s| *s == exit_code)
+            .is_some();
+        if !success {
             self.log(output, &command_description)
                 .context("logging output")?;
             bail!("Command failed: {}", command_description);

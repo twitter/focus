@@ -346,7 +346,9 @@ mod tests {
     use crate::index::object_database::{testing::HashMapOdb, RocksDBCache};
     use crate::index::RocksDBMemoizationCacheExt;
     use crate::target::Target;
-    use crate::target_resolver::{IncrementalBazelResolver, CacheOptions, ResolutionRequest, Resolver};
+    use crate::target_resolver::{
+        CacheOptions, IncrementalBazelResolver, ResolutionRequest, Resolver,
+    };
     use focus_testing::init_logging;
     use focus_testing::ScratchGitRepo;
     use focus_util::app::App;
@@ -449,6 +451,7 @@ sh_binary(
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: target_set,
+            options: Default::default(),
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
@@ -587,6 +590,7 @@ New contents
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: target_set,
+            ..Default::default()
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
@@ -752,6 +756,7 @@ def some_macro():
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: target_set,
+            ..Default::default()
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
@@ -885,6 +890,7 @@ macro("foo")
             let request = ResolutionRequest {
                 repo: fix.path().to_path_buf(),
                 targets: target_set,
+                ..Default::default()
             };
             let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
             update_object_database_from_resolution(&ctx, &odb, &resolve_result)?;
@@ -948,6 +954,7 @@ def macro2(name):
                 let request = ResolutionRequest {
                     repo: fix.path().to_path_buf(),
                     targets: target_set,
+                    ..Default::default()
                 };
                 resolver.resolve(&request, &cache_options, app)?
             };
@@ -1052,6 +1059,7 @@ def some_macro():
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: target_set,
+            ..Default::default()
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
@@ -1136,6 +1144,7 @@ foo(
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: target_set,
+            ..Default::default()
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app.clone())?;
@@ -1359,6 +1368,7 @@ sh_binary(
         let request = ResolutionRequest {
             repo: fix.path().to_path_buf(),
             targets: target_set,
+            ..Default::default()
         };
         let cache_options = CacheOptions::default();
         let resolve_result = resolver.resolve(&request, &cache_options, app)?;
