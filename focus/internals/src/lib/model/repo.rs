@@ -1196,4 +1196,13 @@ impl Repo {
             .get_bool(BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY)
             .map_err(anyhow::Error::new)
     }
+
+    pub fn set_bazel_oneshot_resolution(&self, value: bool) -> Result<()> {
+        git_helper::write_config(
+            &self.path,
+            BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY,
+            value.to_string().as_str(),
+            self.app.clone(),
+        )
+    }
 }

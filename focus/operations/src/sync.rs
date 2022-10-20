@@ -42,7 +42,7 @@ pub fn test_only_set_preemptive_sync_machine_is_active(new_value: bool) {
 }
 
 /// An enumeration indicating which kind of sync should be performed.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SyncMode {
     /// Perform a normal sync
     Normal,

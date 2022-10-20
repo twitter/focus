@@ -44,11 +44,19 @@ fn add_updated_content(scratch_repo: &ScratchGitRepo) -> Result<git2::Oid> {
 }
 
 #[test]
-fn sync_upstream_changes() -> Result<()> {
+fn sync_upstream_changes_with_incremental_sync() -> Result<()> {
+    sync_upstream_changes_internal(SyncMode::Normal)
+}
+
+#[test]
+fn sync_upstream_changes_with_oneshot_sync() -> Result<()> {
+    sync_upstream_changes_internal(SyncMode::OneShot)
+}
+
+fn sync_upstream_changes_internal(sync_mode: SyncMode) -> Result<()> {
     init_logging();
 
-    let fixture = RepoPairFixture::new()?;
-
+    let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
     fixture.perform_clone()?;
 
     let _ = add_updated_content(&fixture.dense_repo)?;
@@ -120,10 +128,19 @@ fn sync_detect_graph_changes_advisory() -> Result<()> {
 }
 
 #[test]
-fn sync_layer_manipulation() -> Result<()> {
+fn sync_layer_manipulation_with_incremental_sync() -> Result<()> {
+    sync_layer_manipulation_internal(SyncMode::Normal)
+}
+
+#[test]
+fn sync_layer_manipulation_with_oneshot_sync() -> Result<()> {
+    sync_layer_manipulation_internal(SyncMode::OneShot)
+}
+
+fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
     init_logging();
 
-    let fixture = RepoPairFixture::new()?;
+    let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
     fixture.perform_clone()?;
 
     let selected_project_names = || -> Result<HashSet<String>> {
@@ -220,10 +237,19 @@ fn sync_layer_manipulation() -> Result<()> {
 }
 
 #[test]
-fn sync_adhoc_manipulation() -> Result<()> {
+fn sync_adhoc_manipulation_internal_with_incremental_sync() -> Result<()> {
+    sync_adhoc_manipulation_internal(SyncMode::Normal)
+}
+
+#[test]
+fn sync_adhoc_manipulation_internal_with_oneshot_sync() -> Result<()> {
+    sync_adhoc_manipulation_internal(SyncMode::OneShot)
+}
+
+fn sync_adhoc_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
     init_logging();
 
-    let fixture = RepoPairFixture::new()?;
+    let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
     fixture.perform_clone()?;
 
     let path = fixture.sparse_repo_path.clone();
@@ -275,10 +301,19 @@ fn failed_selection_mutations_are_reverted() -> Result<()> {
 }
 
 #[test]
-fn clone_contains_top_level() -> Result<()> {
+fn clone_contains_top_level_with_incremental_sync() -> Result<()> {
+    clone_contains_top_level_internal(SyncMode::Normal)
+}
+
+#[test]
+fn clone_contains_top_level_with_oneshot_sync() -> Result<()> {
+    clone_contains_top_level_internal(SyncMode::OneShot)
+}
+
+fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
     init_logging();
 
-    let fixture = RepoPairFixture::new()?;
+    let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
     fixture.perform_clone()?;
 
     let sparse_repo = fixture.sparse_repo()?;
@@ -303,10 +338,19 @@ fn clone_contains_top_level() -> Result<()> {
 }
 
 #[test]
-fn sync_skips_checkout_with_unchanged_profile() -> Result<()> {
+fn sync_skips_checkout_with_unchanged_profile_with_incremental_sync() -> Result<()> {
+    sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Normal)
+}
+
+#[test]
+fn sync_skips_checkout_with_unchanged_profile_with_oneshot_sync() -> Result<()> {
+    sync_skips_checkout_with_unchanged_profile_internal(SyncMode::OneShot)
+}
+
+fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> Result<()> {
     init_logging();
 
-    let fixture = RepoPairFixture::new()?;
+    let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
     fixture.perform_clone()?;
 
     let path = fixture.sparse_repo_path.clone();
