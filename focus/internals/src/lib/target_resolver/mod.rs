@@ -1,8 +1,10 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+mod bazel_common;
 mod bazel_de;
 mod incremental_bazel_resolver;
+mod oneshot_bazel_resolver;
 mod directory_resolver;
 
 use focus_util::app::App;
