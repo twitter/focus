@@ -4,12 +4,11 @@
 use crate::app::App;
 use anyhow::{bail, Context, Result};
 use std::{
-    collections::HashSet,
     ffi::OsStr,
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    process::{exit, Command, ExitStatus, Stdio},
+    process::{Command, ExitStatus, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc,
@@ -257,10 +256,7 @@ impl SandboxCommand {
         let exit_code = status
             .code()
             .ok_or_else(|| anyhow::anyhow!("No exit status for terminated process"))?;
-        let success = successful_status_codes
-            .iter()
-            .find(|&s| *s == exit_code)
-            .is_some();
+        let success = successful_status_codes.iter().any(|s| *s == exit_code);
         if !success {
             self.log(output, &command_description)
                 .context("logging output")?;

@@ -297,14 +297,28 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                     warn!(error = ?project_cache_result.unwrap_err(), "Project cache encounted an error");
                 }
 
-                // Fall back to normal syncing
-                let odb = RocksDBCache::new(repo.underlying());
-                let cache = match mode {
-                    SyncMode::OneShot => None,
-                    _ => Some(&odb),
+                // If one-shot Bazel resolution is explicitly requested, or is allowed by config, use it
+                let one_shot = match mode {
+                    SyncMode::Normal => repo.get_bazel_oneshot_resolution()?,
+                    SyncMode::Preemptive { .. } => false,
+                    SyncMode::OneShot => true,
+                    SyncMode::RequireProjectCache => unreachable!(),
                 };
-                repo.sync(commit.id(), &targets, preemptive, app.clone(), cache)
-                    .context("Sync failed")
+
+                let cache: Option<RocksDBCache> = if one_shot {
+                    None
+                } else {
+                    Some(RocksDBCache::new(repo.underlying()))
+                };
+
+                repo.sync(
+                    commit.id(),
+                    &targets,
+                    preemptive,
+                    app.clone(),
+                    cache.as_ref(),
+                )
+                .context("Sync failed")
             }
         }
     })?;

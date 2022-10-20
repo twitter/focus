@@ -23,11 +23,14 @@ use std::{
     time::Duration,
 };
 
-use crate::{model::{
-    outlining::PatternSet,
-    repo::Repo,
-    selection::{Target, TargetSet},
-}, target_resolver::ResolutionOptions};
+use crate::{
+    model::{
+        outlining::PatternSet,
+        repo::Repo,
+        selection::{Target, TargetSet},
+    },
+    target_resolver::ResolutionOptions,
+};
 use anyhow::{bail, Context};
 use focus_util::{app::App, paths::is_relevant_to_build_graph};
 use git2::{ObjectType, Oid, TreeWalkMode, TreeWalkResult};
@@ -208,7 +211,7 @@ impl<'cache> ProjectCache<'cache> {
             .outlining_tree()
             .ok_or_else(|| anyhow::anyhow!("Missing outlining tree"))?;
         let (patterns, _resolution_result) = outlining_tree
-            .outline(commit_id, targets, &resolution_options, self.app.clone())
+            .outline(commit_id, targets, resolution_options, self.app.clone())
             .with_context(|| {
                 format!(
                     "Outlining targets ({:?}) at commit {} failed",

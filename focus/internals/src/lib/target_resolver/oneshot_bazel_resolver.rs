@@ -90,7 +90,7 @@ impl Resolver for OneShotBazelResolver {
             bazel_common::make_set(labels.iter().copied())
         );
 
-        let result = Self::run_bazel_package_query(app.clone(), request, &query)?;
+        let result = Self::run_bazel_package_query(app, request, &query)?;
         for line in result {
             paths.insert(PathBuf::from_str(line.as_str())?);
         }
@@ -156,7 +156,7 @@ impl OneShotBazelResolver {
         Ok(raw_result
             .lines()
             .filter_map(|s| {
-                if !s.starts_with("@") {
+                if !s.starts_with('@') {
                     Some(s.to_owned())
                 } else {
                     None

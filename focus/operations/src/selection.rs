@@ -29,6 +29,8 @@ use focus_internals::{
     target::Target,
 };
 
+use crate::sync::SyncMode;
+
 pub fn save(
     sparse_repo: impl AsRef<Path>,
     project_name: String,
@@ -134,7 +136,7 @@ fn mutate(
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
-            let result = super::sync::run(sparse_repo.as_ref(), crate::sync::SyncMode::Normal, app)
+            let result = super::sync::run(sparse_repo.as_ref(), SyncMode::Normal, app)
                 .context("Synchronizing changes")?;
             synced = result.status == super::sync::SyncStatus::Success;
             backup.discard();
