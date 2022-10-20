@@ -1,8 +1,11 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::io::Write;
+
 use anyhow::{bail, Context, Result};
 
+use libflate::gzip::{Decoder, Encoder};
 use serde::{de::DeserializeOwned, Serialize};
 use url::Url;
 
@@ -22,7 +25,7 @@ pub trait ProjectCacheBackendInternal: Sync + Send {}
 fn manifest_path(backend: &dyn ProjectCacheBackend, build_graph_hash: &Vec<u8>) -> Url {
     let mut url = backend.endpoint();
     let path = format!(
-        "{}/{}.manifest_v{}.json",
+        "{}/{}.manifest_v{}.json.gz",
         url.path(),
         hex::encode(&build_graph_hash).as_str(),
         PROJECT_CACHE_VERSION,
@@ -39,7 +42,7 @@ fn export_path(
 ) -> Url {
     let mut url = backend.endpoint();
     let path = format!(
-        "{}/{}_{}_{}.export_v{}.json",
+        "{}/{}_{}_{}.export_v{}.json.gz",
         url.path(),
         hex::encode(&build_graph_hash).as_str(),
         shard_index + 1,
@@ -55,9 +58,9 @@ fn load_model<T>(backend: &dyn ProjectCacheBackend, url: Url) -> Result<T>
 where
     T: DeserializeOwned,
 {
-    backend
-        .load_model(url)
-        .and_then(|value| serde_json::from_slice(&value).map_err(anyhow::Error::new))
+    let zipped = backend.load_model(url)?;
+    let decoder = Decoder::new(zipped.as_slice())?;
+    serde_json::from_reader(decoder).map_err(anyhow::Error::new)
 }
 
 /// Serialize and store a model to the given backend.
@@ -65,9 +68,13 @@ fn store_model<T>(backend: &dyn ProjectCacheBackend, url: Url, value: &T) -> Res
 where
     T: Serialize,
 {
-    serde_json::to_vec(value)
-        .map_err(anyhow::Error::new)
-        .and_then(|v| backend.store(url, v))
+    let mut encoder = Encoder::new(Vec::new())?;
+    {
+        let json = serde_json::to_vec(value)?;
+        encoder.write_all(json.as_slice())?;
+    }
+    let zipped = encoder.finish().into_result().map_err(anyhow::Error::new)?;
+    backend.store(url, zipped)
 }
 
 /// Fetch all exports for the given build graph hash by reading the manifest and fetching each shard.
