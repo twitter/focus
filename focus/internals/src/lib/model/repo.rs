@@ -65,6 +65,7 @@ const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
 const LAST: usize = usize::MAX;
 
 pub const PROJECT_CACHE_ENDPOINT_CONFIG_KEY: &str = "focus.project-cache-endpoint";
+pub const BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY: &str = "focus.bazel.one-shot";
 
 /// Models a Git working tree.
 pub struct WorkingTree {
@@ -697,7 +698,7 @@ impl Repo {
             .context("Configuring the outlining tree")?;
 
         let mut outline_patterns = if let Some(cache) = cache {
-            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), cache)
+            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), &cache)
         } else {
             self.sync_without_cache(commit_id, targets, outlining_tree, app.clone())
         }?;
@@ -728,7 +729,7 @@ impl Repo {
             bazel_resolution_strategy: BazelResolutionStrategy::OneShot,
         };
         let (outline_patterns, _resolution_result) = outlining_tree
-            .outline(commit_id, targets, &resolution_options, app.clone())
+            .outline(commit_id, targets, &resolution_options, app)
             .context("Failed to outline")?;
         Ok(outline_patterns)
     }
@@ -1187,5 +1188,12 @@ impl Repo {
                 .map(Some),
             Err(_) => Ok(None),
         }
+    }
+
+    pub fn get_bazel_oneshot_resolution(&self) -> Result<bool> {
+        let config_snapshot = self.repo.config()?.snapshot()?;
+        config_snapshot
+            .get_bool(BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY)
+            .map_err(anyhow::Error::new)
     }
 }
