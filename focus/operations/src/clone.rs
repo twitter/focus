@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::event;
+use crate::sync::SyncMode;
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::model::selection::{Operation, OperationAction};
 
@@ -303,6 +304,7 @@ pub struct CloneArgs {
     pub copy_branches: bool,
     pub days_of_history: u64,
     pub do_post_clone_fetch: bool,
+    pub sync_mode: SyncMode,
 }
 
 impl Default for CloneArgs {
@@ -314,6 +316,7 @@ impl Default for CloneArgs {
             copy_branches: true,
             days_of_history: 90,
             do_post_clone_fetch: true,
+            sync_mode: SyncMode::Incremental,
         }
     }
 }
@@ -334,6 +337,7 @@ pub fn run(
         copy_branches,
         days_of_history,
         do_post_clone_fetch,
+        sync_mode,
     } = clone_args;
 
     let origin = match origin {
@@ -386,6 +390,7 @@ pub fn run(
             &tmp_sparse_repo_path,
             projects_and_targets,
             template,
+            sync_mode,
             app.clone(),
         )?;
 
@@ -559,6 +564,7 @@ fn set_up_sparse_repo(
     sparse_repo_path: &Path,
     projects_and_targets: Vec<String>,
     template: Option<ClonedRepoTemplate>,
+    sync_mode: SyncMode,
     app: Arc<App>,
 ) -> Result<()> {
     {
@@ -578,9 +584,14 @@ fn set_up_sparse_repo(
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets, template)?;
     debug!(target_set = ?target_set, "Complete target set");
+    repo.set_bazel_oneshot_resolution(sync_mode == SyncMode::OneShot)?;
 
-    let odb = RocksDBCache::new(repo.underlying());
-    repo.sync(head_commit.id(), &target_set, false, app, Some(&odb))
+    let odb = if repo.get_bazel_oneshot_resolution()? {
+        None
+    } else {
+        Some(RocksDBCache::new(repo.underlying()))
+    };
+    repo.sync(head_commit.id(), &target_set, false, app, odb.as_ref())
         .context("Sync failed")?;
 
     repo.working_tree().unwrap().write_sync_point_ref()?;

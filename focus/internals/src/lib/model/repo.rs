@@ -4,7 +4,7 @@
 use content_addressed_cache::RocksDBCache;
 use focus_util::{
     app::App,
-    git_helper::{self, get_head_commit},
+    git_helper::{self, get_head_commit, ConfigExt},
     paths::{self, is_build_definition},
     sandbox_command::SandboxCommandOutput,
 };
@@ -703,16 +703,22 @@ impl Repo {
             self.sync_without_cache(commit_id, targets, outlining_tree, app.clone())
         }?;
 
-        trace!(?outline_patterns);
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
         let pattern_count = outline_patterns.len();
         let checked_out = if skip_pattern_application {
             false
         } else {
+                // tracing::info!(
+                //     ?skip_pattern_application,
+                //     ?outline_patterns,
+                //     "Sync done, applying patterns"
+                // );
             working_tree
                 .apply_sparse_patterns(outline_patterns, true, app)
                 .context("Failed to apply outlined patterns to working tree")?
         };
+        // tracing::info!(?checked_out, "Applied patterns");
+
         Ok((pattern_count, checked_out))
     }
 
@@ -724,7 +730,7 @@ impl Repo {
         outlining_tree: &OutliningTree,
         app: Arc<App>,
     ) -> Result<PatternSet> {
-        info!("Running sync without cache");
+        info!("Running one-shot sync");
         let resolution_options = ResolutionOptions {
             bazel_resolution_strategy: BazelResolutionStrategy::OneShot,
         };
@@ -1191,10 +1197,9 @@ impl Repo {
     }
 
     pub fn get_bazel_oneshot_resolution(&self) -> Result<bool> {
-        let config_snapshot = self.repo.config()?.snapshot()?;
+        let mut config_snapshot = self.repo.config()?.snapshot()?;
         config_snapshot
-            .get_bool(BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY)
-            .map_err(anyhow::Error::new)
+            .get_bool_with_default(BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY, false)
     }
 
     pub fn set_bazel_oneshot_resolution(&self, value: bool) -> Result<()> {

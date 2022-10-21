@@ -114,6 +114,7 @@ impl RepoPairFixture {
             copy_branches: true,
             days_of_history: 90,
             do_post_clone_fetch: false,
+            sync_mode: self.sync_mode.get(),
         };
 
         crate::clone::run(
