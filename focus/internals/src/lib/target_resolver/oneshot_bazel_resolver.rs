@@ -84,7 +84,6 @@ impl Resolver for OneShotBazelResolver {
             paths.insert(PathBuf::from_str(line.as_str())?);
         }
 
-        info!(?query, result_paths = ?paths, "Ran Bazel query");
         info!("'{}' requires {} packages", &query, paths.len());
 
         Ok(ResolutionResult {
