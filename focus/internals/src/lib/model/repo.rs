@@ -698,9 +698,9 @@ impl Repo {
             .context("Configuring the outlining tree")?;
 
         let mut outline_patterns = if let Some(cache) = cache {
-            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), cache)
+            self.sync_incremental(commit_id, targets, outlining_tree, app.clone(), cache)
         } else {
-            self.sync_without_cache(commit_id, targets, outlining_tree, app.clone())
+            self.sync_one_shot(commit_id, targets, outlining_tree, app.clone())
         }?;
 
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
@@ -718,7 +718,7 @@ impl Repo {
     }
 
     /// Sync in one shot, not using the cache.
-    fn sync_without_cache(
+    fn sync_one_shot(
         &self,
         commit_id: Oid,
         targets: &HashSet<Target>,
@@ -736,7 +736,7 @@ impl Repo {
     }
 
     /// Sync using the cache, outlining when necessary recursively on dependencies.
-    fn sync_using_cache(
+    fn sync_incremental(
         &self,
         commit_id: Oid,
         targets: &HashSet<Target>,
