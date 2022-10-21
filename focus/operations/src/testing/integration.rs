@@ -72,7 +72,7 @@ impl RepoPairFixture {
             app,
             tracker,
             preserve: false,
-            sync_mode: Cell::new(SyncMode::Normal),
+            sync_mode: Cell::new(SyncMode::Incremental),
         };
 
         set_extra_config_on_dense_repo(&fixture)?;

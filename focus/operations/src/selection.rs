@@ -136,7 +136,7 @@ fn mutate(
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
-            let result = super::sync::run(sparse_repo.as_ref(), SyncMode::Normal, app)
+            let result = super::sync::run(sparse_repo.as_ref(), SyncMode::Incremental, app)
                 .context("Synchronizing changes")?;
             synced = result.status == super::sync::SyncStatus::Success;
             backup.discard();

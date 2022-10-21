@@ -830,7 +830,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             let mode = if one_shot {
                 SyncMode::OneShot
             } else {
-                SyncMode::Normal
+                SyncMode::Incremental
             };
             focus_operations::sync::run(&sparse_repo, mode, app)?;
             Ok(ExitCode(0))
