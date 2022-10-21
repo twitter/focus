@@ -566,10 +566,23 @@ fn regression_adding_directory_targets_present_in_mandatory_sets() -> Result<()>
 }
 
 #[test]
-fn regression_adding_deep_directory_target_materializes_correctly() -> Result<()> {
+fn regression_adding_deep_directory_target_materializes_correctly_with_incremental_sync(
+) -> Result<()> {
+    regression_adding_deep_directory_target_materializes_correctly_internal(SyncMode::Incremental)
+}
+
+#[test]
+fn regression_adding_deep_directory_target_materializes_correctly_with_oneshot_sync() -> Result<()>
+{
+    regression_adding_deep_directory_target_materializes_correctly_internal(SyncMode::OneShot)
+}
+
+fn regression_adding_deep_directory_target_materializes_correctly_internal(
+    sync_mode: SyncMode,
+) -> Result<()> {
     init_logging();
 
-    let fixture = RepoPairFixture::new()?;
+    let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
     fixture.perform_clone()?;
 
     let path = fixture.sparse_repo_path.clone();
