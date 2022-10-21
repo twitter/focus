@@ -74,19 +74,8 @@ impl Resolver for OneShotBazelResolver {
             })
             .collect();
 
-        // let paths = {
         let query = format!(
-            // Use `deps(...)` so that we preserve the actual names of the
-            // targets which were declared as dependencies, but also add in
-            // any `buildfiles` dependencies that might exist in the
-            // repository. This includes dependencies on `BUILD` or `.bzl`
-            // files (such as those `load`ed by the other `BUILD` files).
-            //
-            // We limit buildfile dependencies to only those in the
-            // repository, because `.bzl` files, etc., in external
-            // repositories are typically not supported, so querying them
-            // fails.
-            "deps({0})",
+            "deps({0}) union kind(rule, filter('^//', buildfiles(deps({0}))))",
             bazel_common::make_set(labels.iter().copied())
         );
 
@@ -95,6 +84,7 @@ impl Resolver for OneShotBazelResolver {
             paths.insert(PathBuf::from_str(line.as_str())?);
         }
 
+        info!(?query, result_paths = ?paths, "Ran Bazel query");
         info!("'{}' requires {} packages", &query, paths.len());
 
         Ok(ResolutionResult {
@@ -132,15 +122,15 @@ impl OneShotBazelResolver {
                 .arg("--output=package")
                 .arg("--order_output=no")
                 .arg("--noimplicit_deps")
-                .arg("--nofetch")
-                .arg("--experimental_repository_disable_download=true")
-                .arg("--keep_going")
                 .arg("--query_file")
                 .arg(query_file_path)
                 .current_dir(&request.repo),
             SandboxCommandOutput::Stderr,
             &[0, 3],
-            // Allow Bazel PARTIAL_ANALYSIS_FAILURE because of --nofetch.
+            // TODO: Attempt to disable fetching to speed Bazel further.
+            //   --nofetch --experimental_repository_disable_download=true --keep_going
+            //
+            // We will have to allow Bazel PARTIAL_ANALYSIS_FAILURE because of --nofetch.
             //
             // See https://github.com/bazelbuild/bazel/blob/master/src/main/java/com/google/devtools/build/lib/util/ExitCode.java.
         )?;

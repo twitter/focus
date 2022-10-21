@@ -4,7 +4,12 @@
 use focus_internals::model::repo::Repo;
 use focus_testing::ScratchGitRepo;
 use insta::assert_snapshot;
-use std::{collections::HashSet, path::Path, time::Duration};
+use std::{
+    collections::HashSet,
+    path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use anyhow::Result;
 use maplit::hashset;
@@ -16,6 +21,28 @@ use crate::{
     sync::{SyncMechanism, SyncMode, SyncStatus},
     testing::integration::{RepoDisposition, RepoPairFixture},
 };
+
+struct SnapshotLabel {
+    prefix: String,
+    serial: AtomicU64,
+}
+
+impl SnapshotLabel {
+    pub fn new(prefix: String) -> Self {
+        Self {
+            prefix,
+            serial: AtomicU64::new(1),
+        }
+    }
+
+    pub fn next(&self) -> String {
+        format!(
+            "{}_snapshot_{}",
+            self.prefix,
+            self.serial.fetch_add(1, Ordering::SeqCst)
+        )
+    }
+}
 
 fn add_updated_content(scratch_repo: &ScratchGitRepo) -> Result<git2::Oid> {
     // Commit new files affecting the build graph to the dense repo
@@ -138,6 +165,9 @@ fn sync_layer_manipulation_with_oneshot_sync() -> Result<()> {
 }
 
 fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
+    let snapshot_label =
+        SnapshotLabel::new(format!("sync_layer_manipulation_internal_{:?}", sync_mode));
+
     init_logging();
 
     let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
@@ -174,7 +204,10 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
         let selected_names = selected_project_names()?;
         assert_eq!(selected_names, hashset! {});
     }
-    insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
+    insta::assert_snapshot!(
+        snapshot_label.next(),
+        std::fs::read_to_string(&profile_path)?
+    );
 
     assert!(!library_b_dir.is_dir());
     assert!(!project_b_dir.is_dir());
@@ -190,7 +223,10 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
         assert_eq!(selected_names, hashset! { project_b_label.clone() })
     }
 
-    insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
+    insta::assert_snapshot!(
+        snapshot_label.next(),
+        std::fs::read_to_string(&profile_path)?
+    );
     assert!(library_b_dir.is_dir());
     assert!(project_b_dir.is_dir());
 
@@ -210,7 +246,10 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
             hashset! { project_a_label.clone(), project_b_label.clone() }
         )
     }
-    insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
+    insta::assert_snapshot!(
+        snapshot_label.next(),
+        std::fs::read_to_string(&profile_path)?
+    );
     assert!(library_a_dir.is_dir());
     assert!(project_a_dir.is_dir());
 
@@ -219,7 +258,10 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
         let selected_names = selected_project_names()?;
         assert_eq!(selected_names, hashset! { project_b_label.clone() })
     }
-    insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
+    insta::assert_snapshot!(
+        snapshot_label.next(),
+        std::fs::read_to_string(&profile_path)?
+    );
     assert!(!library_a_dir.is_dir());
     assert!(!project_a_dir.is_dir());
 
@@ -228,7 +270,10 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
         let selected_names = selected_project_names()?;
         assert_eq!(selected_names, hashset! {});
     }
-    insta::assert_snapshot!(std::fs::read_to_string(&profile_path)?);
+    insta::assert_snapshot!(
+        snapshot_label.next(),
+        std::fs::read_to_string(&profile_path)?
+    );
 
     assert!(!library_b_dir.is_dir());
     assert!(!project_b_dir.is_dir());
@@ -311,6 +356,9 @@ fn clone_contains_top_level_with_oneshot_sync() -> Result<()> {
 }
 
 fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
+    let snapshot_label =
+        SnapshotLabel::new(format!("clone_contains_top_level_internal_{:?}", sync_mode));
+
     init_logging();
 
     let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
@@ -330,7 +378,7 @@ fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
 
     let profile =
         std::fs::read_to_string(outlining_tree_git_dir.join("info").join("sparse-checkout"))?;
-    insta::assert_snapshot!(&profile);
+    insta::assert_snapshot!(snapshot_label.next(), &profile);
 
     assert!(top_level_bazelisk_rc.is_file());
 
@@ -348,6 +396,11 @@ fn sync_skips_checkout_with_unchanged_profile_with_oneshot_sync() -> Result<()> 
 }
 
 fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> Result<()> {
+    let snapshot_label = SnapshotLabel::new(format!(
+        "sync_skips_checkout_with_unchanged_profile_internal_{:?}",
+        sync_mode
+    ));
+
     init_logging();
 
     let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
@@ -372,12 +425,12 @@ fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> R
     // First sync performs a checkout.
     assert!(crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?.checked_out);
     let original_profile_contents = std::fs::read_to_string(&profile_path)?;
-    assert_snapshot!(original_profile_contents);
+    assert_snapshot!(snapshot_label.next(), original_profile_contents);
 
     // Subsequent sync does not perform a checkout.
     let sync_result = crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?;
     let updated_profile_contents = std::fs::read_to_string(&profile_path)?;
-    assert_snapshot!(original_profile_contents);
+    assert_snapshot!(snapshot_label.next(), original_profile_contents);
     assert_eq!(&original_profile_contents, &updated_profile_contents);
     assert!(!sync_result.checked_out);
     assert_eq!(sync_result.mechanism, SyncMechanism::CachedOutline);
