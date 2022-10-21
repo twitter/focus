@@ -1,0 +1,12 @@
+---
+source: focus/operations/src/testing/sync.rs
+expression: "&profile"
+---
+/*
+!/*/
+/focus/
+/tools/build_rules/
+*.bzl
+BUILD*
+WORKSPACE*
+

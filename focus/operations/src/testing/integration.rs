@@ -18,7 +18,7 @@ use tempfile::TempDir;
 use tracing::{info, warn};
 
 use focus_testing::ScratchGitRepo;
-use focus_util::{app::App, git_helper};
+use focus_util::app::App;
 
 use focus_internals::{model::repo::Repo, tracker::Tracker};
 
@@ -83,10 +83,13 @@ impl RepoPairFixture {
     pub fn with_sync_mode(mode: SyncMode) -> Result<Self> {
         let instance = Self::new()?;
         instance.sync_mode.replace(mode);
-        instance
-            .sparse_repo()?
-            .set_bazel_oneshot_resolution(mode == SyncMode::OneShot)?;
         Ok(instance)
+    }
+
+    fn ensure_sync_mode(&self) -> Result<()> {
+        self.sparse_repo()?
+            .set_bazel_oneshot_resolution(self.sync_mode.get() == SyncMode::OneShot)?;
+        Ok(())
     }
 
     fn preserve_dirs(&mut self) -> Result<()> {
@@ -119,11 +122,14 @@ impl RepoPairFixture {
             None,
             &self.tracker,
             self.app.clone(),
-        )
+        )?;
+
+        self.ensure_sync_mode()
     }
 
     #[allow(dead_code)]
     pub fn perform_sync(&self) -> Result<bool> {
+        self.ensure_sync_mode()?;
         crate::sync::run(
             &self.sparse_repo_path,
             self.sync_mode.get(),
