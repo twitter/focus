@@ -16,7 +16,7 @@ pub fn bench_sync(c: &mut Criterion) {
     println!("Warming up with initial sync");
     focus_operations::sync::run(
         &repo_path,
-        focus_operations::sync::SyncMode::Normal,
+        focus_operations::sync::SyncMode::Incremental,
         app.clone(),
     )
     .unwrap();
@@ -27,7 +27,7 @@ pub fn bench_sync(c: &mut Criterion) {
         b.iter(|| {
             focus_operations::sync::run(
                 &repo_path,
-                focus_operations::sync::SyncMode::Normal,
+                focus_operations::sync::SyncMode::Incremental,
                 app.clone(),
             )
             .unwrap()

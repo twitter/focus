@@ -44,8 +44,8 @@ pub fn test_only_set_preemptive_sync_machine_is_active(new_value: bool) {
 /// An enumeration indicating which kind of sync should be performed.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SyncMode {
-    /// Perform a normal sync
-    Normal,
+    /// Perform a normal (incremental) sync
+    Incremental,
 
     /// Perform a preemptive sync
     Preemptive {
@@ -299,7 +299,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
 
                 // If one-shot Bazel resolution is explicitly requested, or is allowed by config, use it
                 let one_shot = match mode {
-                    SyncMode::Normal => repo.get_bazel_oneshot_resolution()?,
+                    SyncMode::Incremental => repo.get_bazel_oneshot_resolution()?,
                     SyncMode::Preemptive { .. } => false,
                     SyncMode::OneShot => true,
                     SyncMode::RequireProjectCache => unreachable!(),

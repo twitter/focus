@@ -45,7 +45,7 @@ fn write_hooks_to_dir(hooks: &[&str], dir: &Path) -> Result<()> {
 pub fn post_merge(app: Arc<App>) -> Result<ExitCode> {
     let current_dir = std::env::current_dir().context("Failed to obtain current directory")?;
     debug!(sparse_repo = ?current_dir.display(), "Running post-merge hook");
-    crate::sync::run(&current_dir, SyncMode::Normal, app)?;
+    crate::sync::run(&current_dir, SyncMode::Incremental, app)?;
     Ok(ExitCode(0))
 }
 

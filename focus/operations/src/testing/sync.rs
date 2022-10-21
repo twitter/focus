@@ -72,7 +72,7 @@ fn add_updated_content(scratch_repo: &ScratchGitRepo) -> Result<git2::Oid> {
 
 #[test]
 fn sync_upstream_changes_with_incremental_sync() -> Result<()> {
-    sync_upstream_changes_internal(SyncMode::Normal)
+    sync_upstream_changes_internal(SyncMode::Incremental)
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn sync_upstream_changes_internal(sync_mode: SyncMode) -> Result<()> {
     // Sync in the sparse repo
     let sync_result = crate::sync::run(
         &fixture.sparse_repo_path,
-        SyncMode::Normal,
+        SyncMode::Incremental,
         fixture.app.clone(),
     )?;
     assert_eq!(sync_result.mechanism, SyncMechanism::CachedOutline);
@@ -156,7 +156,7 @@ fn sync_detect_graph_changes_advisory() -> Result<()> {
 
 #[test]
 fn sync_layer_manipulation_with_incremental_sync() -> Result<()> {
-    sync_layer_manipulation_internal(SyncMode::Normal)
+    sync_layer_manipulation_internal(SyncMode::Incremental)
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn sync_layer_manipulation_internal(sync_mode: SyncMode) -> Result<()> {
 
 #[test]
 fn sync_adhoc_manipulation_internal_with_incremental_sync() -> Result<()> {
-    sync_adhoc_manipulation_internal(SyncMode::Normal)
+    sync_adhoc_manipulation_internal(SyncMode::Incremental)
 }
 
 #[test]
@@ -347,7 +347,7 @@ fn failed_selection_mutations_are_reverted() -> Result<()> {
 
 #[test]
 fn clone_contains_top_level_with_incremental_sync() -> Result<()> {
-    clone_contains_top_level_internal(SyncMode::Normal)
+    clone_contains_top_level_internal(SyncMode::Incremental)
 }
 
 #[test]
@@ -387,7 +387,7 @@ fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
 
 #[test]
 fn sync_skips_checkout_with_unchanged_profile_with_incremental_sync() -> Result<()> {
-    sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Normal)
+    sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Incremental)
 }
 
 #[test]
@@ -423,12 +423,12 @@ fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> R
         fixture.app.clone(),
     )?;
     // First sync performs a checkout.
-    assert!(crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?.checked_out);
+    assert!(crate::sync::run(&path, SyncMode::Incremental, fixture.app.clone())?.checked_out);
     let original_profile_contents = std::fs::read_to_string(&profile_path)?;
     assert_snapshot!(snapshot_label.next(), original_profile_contents);
 
     // Subsequent sync does not perform a checkout.
-    let sync_result = crate::sync::run(&path, SyncMode::Normal, fixture.app.clone())?;
+    let sync_result = crate::sync::run(&path, SyncMode::Incremental, fixture.app.clone())?;
     let updated_profile_contents = std::fs::read_to_string(&profile_path)?;
     assert_snapshot!(snapshot_label.next(), original_profile_contents);
     assert_eq!(&original_profile_contents, &updated_profile_contents);
