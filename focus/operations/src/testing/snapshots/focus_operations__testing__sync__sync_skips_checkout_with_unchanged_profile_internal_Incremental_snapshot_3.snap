@@ -1,13 +1,17 @@
 ---
 source: focus/operations/src/testing/sync.rs
-expression: first_sync_profile_contents
+expression: subsequent_sync_profile_contents
 ---
 /*
 !/*/
+/WORKSPACE/
 /focus/
 /library_b/
 /mandatory_y/
 !/mandatory_y/*/
 /mandatory_y/very_important_info/
 /mandatory_z/
+/tools/
+!/tools/*/
+/tools/build_rules/
 

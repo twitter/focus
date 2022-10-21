@@ -91,9 +91,15 @@ fn mutate(
     let mut synced = false;
     let repo = Repo::open(sparse_repo.as_ref(), app.clone())?;
     let mut selections = repo.selection_manager().context("Loading the selection")?;
-    let backup = selections
-        .create_backup()
-        .context("Creating a backup of the current selection")?;
+    let backup = if sync_if_changed {
+        Some(
+            selections
+                .create_backup()
+                .context("Creating a backup of the current selection")?,
+        )
+    } else {
+        None
+    };
 
     let mut projects_and_targets = projects_and_targets;
     if unroll {
@@ -136,10 +142,11 @@ fn mutate(
         selections.save().context("Saving selection")?;
         if sync_if_changed {
             info!("Synchronizing after selection changed");
+            // TODO: Use the correct sync mode here. Sync will override for SyncMode::Incremental, but that feels janky.
             let result = super::sync::run(sparse_repo.as_ref(), SyncMode::Incremental, app)
                 .context("Synchronizing changes")?;
             synced = result.status == super::sync::SyncStatus::Success;
-            backup.discard();
+            backup.unwrap().discard();
         }
     }
 
