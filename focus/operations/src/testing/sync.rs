@@ -417,16 +417,13 @@ fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> R
 
     // Add performs a checkout.
     let targets = vec![String::from("bazel://library_b/...")];
-    assert_eq!(
-        crate::selection::add(
-            &fixture.sparse_repo_path,
-            false, // Skip sync
-            targets,
-            false,
-            fixture.app.clone(),
-        )?,
-        false
-    ); // Assert that the add did *NOT* sync
+    assert!(!crate::selection::add(
+        &fixture.sparse_repo_path,
+        false, // Skip sync
+        targets,
+        false,
+        fixture.app.clone(),
+    )?,); // Assert that the add did *NOT* sync
     let add_profile_contents = std::fs::read_to_string(&profile_path)?;
     assert_eq!(initial_profile_contents, add_profile_contents); // Nothing has changed yet
     assert_snapshot!(snapshot_label.next(), add_profile_contents);

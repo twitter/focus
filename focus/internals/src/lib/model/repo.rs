@@ -698,7 +698,7 @@ impl Repo {
             .context("Configuring the outlining tree")?;
 
         let mut outline_patterns = if let Some(cache) = cache {
-            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), &cache)
+            self.sync_using_cache(commit_id, targets, outlining_tree, app.clone(), cache)
         } else {
             self.sync_without_cache(commit_id, targets, outlining_tree, app.clone())
         }?;
@@ -708,11 +708,6 @@ impl Repo {
         let checked_out = if skip_pattern_application {
             false
         } else {
-                // tracing::info!(
-                //     ?skip_pattern_application,
-                //     ?outline_patterns,
-                //     "Sync done, applying patterns"
-                // );
             working_tree
                 .apply_sparse_patterns(outline_patterns, true, app)
                 .context("Failed to apply outlined patterns to working tree")?
@@ -1198,8 +1193,7 @@ impl Repo {
 
     pub fn get_bazel_oneshot_resolution(&self) -> Result<bool> {
         let mut config_snapshot = self.repo.config()?.snapshot()?;
-        config_snapshot
-            .get_bool_with_default(BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY, false)
+        config_snapshot.get_bool_with_default(BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY, false)
     }
 
     pub fn set_bazel_oneshot_resolution(&self, value: bool) -> Result<()> {
