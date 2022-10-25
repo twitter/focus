@@ -4,7 +4,7 @@
 use crate::event;
 use crate::sync::SyncMode;
 use focus_internals::index::RocksDBMemoizationCacheExt;
-use focus_internals::model::selection::{Operation, default_add};
+use focus_internals::model::selection::{default_add, Operation};
 
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};

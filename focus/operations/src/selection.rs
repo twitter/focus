@@ -103,46 +103,46 @@ fn mutate(
     let mut projects_and_targets = projects_and_targets;
 
     match action {
-        OperationAction::Add (AddOptions {unroll: true }) => {
+        OperationAction::Add(AddOptions { unroll: true }) => {
             let mut projects = vec![];
             let mut targets = vec![];
             for i in projects_and_targets.clone() {
-                    if Target::try_from(i.as_str()).is_ok() {
-                        targets.push(i);
-                    } else {
-                        projects.extend(
-                            selections
-                                .project_catalog()
-                                .optional_projects
-                                .underlying
-                                .get(&i)
-                                .with_context(|| {
-                                    format!("Couldn't find project definition for {}.", i)
-                                })?
-                                .projects
-                                .clone(),
-                        );
-                        targets.extend(
-                            selections
-                                .project_catalog()
-                                .optional_projects
-                                .underlying
-                                .get(&i)
-                                .with_context(|| {
-                                    format!("Couldn't find project definition for {}.", i)
-                                })?
-                                .targets
-                                .clone(),
-                        );
-                    };
-                }
+                if Target::try_from(i.as_str()).is_ok() {
+                    targets.push(i);
+                } else {
+                    projects.extend(
+                        selections
+                            .project_catalog()
+                            .optional_projects
+                            .underlying
+                            .get(&i)
+                            .with_context(|| {
+                                format!("Couldn't find project definition for {}.", i)
+                            })?
+                            .projects
+                            .clone(),
+                    );
+                    targets.extend(
+                        selections
+                            .project_catalog()
+                            .optional_projects
+                            .underlying
+                            .get(&i)
+                            .with_context(|| {
+                                format!("Couldn't find project definition for {}.", i)
+                            })?
+                            .targets
+                            .clone(),
+                    );
+                };
+            }
             projects_and_targets = targets;
             projects_and_targets.extend(projects);
         }
-        OperationAction::Remove ( RemoveOptions { all: true })=> {
+        OperationAction::Remove(RemoveOptions { all: true }) => {
             let projects: Vec<String> = selections
                 .selection()?
-                .projects                    
+                .projects
                 .into_iter()
                 .map(|x| x.name)
                 .collect();
@@ -179,7 +179,6 @@ fn mutate(
     Ok(synced)
 }
 
-
 pub fn add(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
@@ -190,8 +189,7 @@ pub fn add(
     mutate(
         sparse_repo,
         sync_if_changed,
-        OperationAction::Add ( AddOptions { unroll: unroll } ),
-
+        OperationAction::Add(AddOptions { unroll: unroll }),
         projects_and_targets,
         app,
     )
@@ -207,7 +205,7 @@ pub fn remove(
     mutate(
         sparse_repo,
         sync_if_changed,
-        OperationAction::Remove ( RemoveOptions { all: all }),
+        OperationAction::Remove(RemoveOptions { all: all }),
         projects_and_targets,
         app,
     )
