@@ -189,7 +189,7 @@ pub fn add(
     mutate(
         sparse_repo,
         sync_if_changed,
-        OperationAction::Add(AddOptions { unroll: unroll }),
+        OperationAction::Add(AddOptions { unroll }),
         projects_and_targets,
         app,
     )
@@ -205,7 +205,7 @@ pub fn remove(
     mutate(
         sparse_repo,
         sync_if_changed,
-        OperationAction::Remove(RemoveOptions { all: all }),
+        OperationAction::Remove(RemoveOptions { all }),
         projects_and_targets,
         app,
     )
