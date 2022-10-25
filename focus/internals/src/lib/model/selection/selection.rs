@@ -1,6 +1,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::model::selection::operations::default_add;
 use anyhow::{bail, Context, Result};
 use focus_util::backed_up_file::BackedUpFile;
 use serde::{Deserialize, Serialize};
@@ -10,7 +11,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use tracing::{debug, error, warn};
-use crate::model::selection::operations::default_add;
 
 use super::*;
 

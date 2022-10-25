@@ -7,24 +7,24 @@ use super::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum OperationAction {
-    Add (AddOptions),
-    Remove (RemoveOptions),
+    Add(AddOptions),
+    Remove(RemoveOptions),
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct AddOptions {
-    pub unroll: bool
+    pub unroll: bool,
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct RemoveOptions {
-    pub all: bool
+    pub all: bool,
 }
 
-pub fn default_add () -> OperationAction {
-    OperationAction::Add ( AddOptions{ unroll: false })
+pub fn default_add() -> OperationAction {
+    OperationAction::Add(AddOptions { unroll: false })
 }
 
-pub fn default_remove () -> OperationAction {
-    OperationAction::Remove ( RemoveOptions{ all: false })
+pub fn default_remove() -> OperationAction {
+    OperationAction::Remove(RemoveOptions { all: false })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
