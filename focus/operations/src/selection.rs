@@ -153,7 +153,6 @@ fn mutate(
                 .map(|x| match x {
                     Target::Bazel(c) => format!("bazel:{}", c),
                     Target::Directory(c) => format!("bazel:{}", c),
-                    Target::Pants(c) => format!("bazel:{}", c),
                 })
                 .collect();
             projects_and_targets = targets;
