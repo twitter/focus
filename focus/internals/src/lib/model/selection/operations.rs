@@ -7,8 +7,24 @@ use super::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum OperationAction {
-    Add,
-    Remove,
+    Add (AddOptions),
+    Remove (RemoveOptions),
+}
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct AddOptions {
+    pub unroll: bool
+}
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct RemoveOptions {
+    pub all: bool
+}
+
+pub fn default_add () -> OperationAction {
+    OperationAction::Add ( AddOptions{ unroll: false })
+}
+
+pub fn default_remove () -> OperationAction {
+    OperationAction::Remove ( RemoveOptions{ all: false })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -67,17 +83,17 @@ mod testing {
     #[test]
     fn operation_new() {
         assert_eq!(
-            Operation::new(OperationAction::Add, "bazel://a/b:*"),
+            Operation::new(default_add(), "bazel://a/b:*"),
             Operation {
-                action: OperationAction::Add,
+                action: default_add(),
                 underlying: Underlying::Target(Target::try_from("bazel://a/b:*").unwrap())
             }
         );
 
         assert_eq!(
-            Operation::new(OperationAction::Remove, "foo"),
+            Operation::new(default_remove(), "foo"),
             Operation {
-                action: OperationAction::Remove,
+                action: default_remove(),
                 underlying: Underlying::Project(String::from("foo"))
             }
         );

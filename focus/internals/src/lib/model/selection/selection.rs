@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tracing::{debug, error, warn};
+use crate::model::selection::operations::default_add;
 
 use super::*;
 
@@ -129,7 +130,7 @@ impl<'processor> SelectionOperationProcessor<'processor> {
         for operation in operations {
             debug!(?operation, "Processing operation");
             match (&operation.action, &operation.underlying) {
-                (OperationAction::Add, Underlying::Target(target)) => {
+                (OperationAction::Add(_), Underlying::Target(target)) => {
                     if self.selection.targets.insert(target.clone()) {
                         result.added.insert(operation.underlying.clone());
                         debug!(?target, "Target added to selection")
@@ -138,7 +139,7 @@ impl<'processor> SelectionOperationProcessor<'processor> {
                         debug!(?target, "Target already in selection")
                     }
                 }
-                (OperationAction::Add, Underlying::Project(name)) => {
+                (OperationAction::Add(_), Underlying::Project(name)) => {
                     match self.projects.underlying.get(name.as_str()) {
                         Some(project) => {
                             if self.selection.projects.insert(project.clone()) {
@@ -155,7 +156,7 @@ impl<'processor> SelectionOperationProcessor<'processor> {
                         }
                     }
                 }
-                (OperationAction::Remove, Underlying::Target(target)) => {
+                (OperationAction::Remove(_), Underlying::Target(target)) => {
                     if self.selection.targets.remove(target) {
                         debug!(?target, "Target removed from selection");
                         result.removed.insert(operation.underlying.clone());
@@ -164,7 +165,7 @@ impl<'processor> SelectionOperationProcessor<'processor> {
                         result.ignored.insert(operation.underlying.clone());
                     }
                 }
-                (OperationAction::Remove, Underlying::Project(name)) => {
+                (OperationAction::Remove(_), Underlying::Project(name)) => {
                     match self.projects.underlying.get(name) {
                         Some(project) => {
                             if self.selection.projects.remove(project) {
@@ -375,12 +376,12 @@ impl TryFrom<PersistedSelection> for Vec<Operation> {
 
         let successful_targets = targets.filter_map(|r| r.ok());
         let target_operations = successful_targets.map(|target| Operation {
-            action: OperationAction::Add,
+            action: default_add(),
             underlying: Underlying::Target(target),
         });
 
         let project_operations = persisted_selection.projects.iter().map(|name| Operation {
-            action: OperationAction::Add,
+            action: default_add(),
             underlying: Underlying::Project(name.clone()),
         });
 
@@ -443,11 +444,11 @@ mod testing {
         assert_eq!(
             vec![
                 Operation {
-                    action: OperationAction::Add,
+                    action: default_add(),
                     underlying: Underlying::Project(PROJECT_NAME_STR.to_owned())
                 },
                 Operation {
-                    action: OperationAction::Add,
+                    action: default_add(),
                     underlying: Underlying::Target(target())
                 }
             ],
