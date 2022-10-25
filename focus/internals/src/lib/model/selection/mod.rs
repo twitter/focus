@@ -15,8 +15,6 @@ pub(crate) use selection::SelectionManager;
 use super::data_paths::DataPaths;
 
 mod operations;
-pub use operations::default_add;
-pub use operations::default_remove;
 pub use operations::AddOptions;
 pub use operations::Operation;
 pub use operations::OperationAction;

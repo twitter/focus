@@ -1,7 +1,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::model::selection::operations::default_add;
+use crate::model::selection::operations::OperationAction;
 use anyhow::{bail, Context, Result};
 use focus_util::backed_up_file::BackedUpFile;
 use serde::{Deserialize, Serialize};
@@ -376,12 +376,12 @@ impl TryFrom<PersistedSelection> for Vec<Operation> {
 
         let successful_targets = targets.filter_map(|r| r.ok());
         let target_operations = successful_targets.map(|target| Operation {
-            action: default_add(),
+            action: OperationAction::default_add(),
             underlying: Underlying::Target(target),
         });
 
         let project_operations = persisted_selection.projects.iter().map(|name| Operation {
-            action: default_add(),
+            action: OperationAction::default_add(),
             underlying: Underlying::Project(name.clone()),
         });
 
@@ -444,11 +444,11 @@ mod testing {
         assert_eq!(
             vec![
                 Operation {
-                    action: default_add(),
+                    action: OperationAction::default_add(),
                     underlying: Underlying::Project(PROJECT_NAME_STR.to_owned())
                 },
                 Operation {
-                    action: default_add(),
+                    action: OperationAction::default_add(),
                     underlying: Underlying::Target(target())
                 }
             ],

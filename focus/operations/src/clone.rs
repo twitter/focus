@@ -4,7 +4,7 @@
 use crate::event;
 use crate::sync::SyncMode;
 use focus_internals::index::RocksDBMemoizationCacheExt;
-use focus_internals::model::selection::{default_add, Operation};
+use focus_internals::model::selection::{Operation, OperationAction};
 
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
@@ -613,7 +613,7 @@ fn compute_and_store_initial_selection(
     let mut selections = repo.selection_manager()?;
     let operations = projects_and_targets
         .iter()
-        .map(|value| Operation::new(default_add(), value))
+        .map(|value| Operation::new(OperationAction::default_add(), value))
         .collect::<Vec<Operation>>();
 
     // FIXME: ideally, we would check to make sure there is no `focus`
@@ -628,7 +628,7 @@ fn compute_and_store_initial_selection(
                 template
                     .entries()
                     .into_iter()
-                    .map(|entry| Operation::new(default_add(), entry)),
+                    .map(|entry| Operation::new(OperationAction::default_add(), entry)),
             )
             .collect(),
     };

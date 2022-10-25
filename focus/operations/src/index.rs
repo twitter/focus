@@ -22,7 +22,7 @@ use focus_internals::index::{
 };
 use focus_internals::model::configuration::IndexConfig;
 use focus_internals::model::repo::Repo;
-use focus_internals::model::selection::default_add;
+use focus_internals::model::selection::OperationAction;
 use focus_internals::target::{Target, TargetSet};
 
 const PARENTS_TO_TRY_IN_FETCH: u32 = 100;
@@ -145,7 +145,7 @@ pub fn resolve(
     let repo = Repo::open(sparse_repo_path, app.clone())?;
     let targets = {
         let mut selections = repo.selection_manager()?;
-        selections.mutate(default_add(), &projects_and_targets)?;
+        selections.mutate(OperationAction::default_add(), &projects_and_targets)?;
         selections.compute_complete_target_set()
     }?;
 
