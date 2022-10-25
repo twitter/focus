@@ -85,7 +85,6 @@ fn mutate(
     sync_if_changed: bool,
     action: OperationAction,
     projects_and_targets: Vec<String>,
-    unroll: bool,
     app: Arc<focus_util::app::App>,
 ) -> Result<bool> {
     let mut synced = false;
@@ -103,13 +102,11 @@ fn mutate(
 
     let mut projects_and_targets = projects_and_targets;
 
-    if unroll {
-        let mut projects = vec![];
-        let mut targets = vec![];
-
-        match action {
-            OperationAction::Add => {
-                for i in projects_and_targets.clone() {
+    match action {
+        OperationAction::Add (AddOptions {unroll: true }) => {
+            let mut projects = vec![];
+            let mut targets = vec![];
+            for i in projects_and_targets.clone() {
                     if Target::try_from(i.as_str()).is_ok() {
                         targets.push(i);
                     } else {
@@ -139,31 +136,31 @@ fn mutate(
                         );
                     };
                 }
-            }
-            OperationAction::Remove => {
-                projects = selections
-                    .selection()?
-                    .projects
-                    .into_iter()
-                    .map(|x| x.name)
-                    .collect();
-                targets = selections
-                    .selection()?
-                    .targets
-                    .into_iter()
-                    .map(|x| match x {
-                        Target::Bazel(c) => format!("bazel:{}", c),
-                        Target::Directory(c) => format!("bazel:{}", c),
-                        Target::Pants(c) => format!("bazel:{}", c),
-                    })
-                    .collect();
-            }
+            projects_and_targets = targets;
+            projects_and_targets.extend(projects);
         }
-
-        projects_and_targets = targets;
-        projects_and_targets.extend(projects);
+        OperationAction::Remove ( RemoveOptions { all: true })=> {
+            let projects: Vec<String> = selections
+                .selection()?
+                .projects                    
+                .into_iter()
+                .map(|x| x.name)
+                .collect();
+            let targets = selections
+                .selection()?
+                .targets
+                .into_iter()
+                .map(|x| match x {
+                    Target::Bazel(c) => format!("bazel:{}", c),
+                    Target::Directory(c) => format!("bazel:{}", c),
+                    Target::Pants(c) => format!("bazel:{}", c),
+                })
+                .collect();
+            projects_and_targets = targets;
+            projects_and_targets.extend(projects);
+        }
+        _ => (),
     }
-
     if selections
         .mutate(action, &projects_and_targets)
         .context("Updating the selection")?
@@ -182,6 +179,7 @@ fn mutate(
     Ok(synced)
 }
 
+
 pub fn add(
     sparse_repo: impl AsRef<Path>,
     sync_if_changed: bool,
@@ -192,9 +190,9 @@ pub fn add(
     mutate(
         sparse_repo,
         sync_if_changed,
-        OperationAction::Add,
+        OperationAction::Add ( AddOptions { unroll: unroll } ),
+
         projects_and_targets,
-        unroll,
         app,
     )
 }
@@ -209,9 +207,8 @@ pub fn remove(
     mutate(
         sparse_repo,
         sync_if_changed,
-        OperationAction::Remove,
+        OperationAction::Remove ( RemoveOptions { all: all }),
         projects_and_targets,
-        all,
         app,
     )
 }

@@ -84,11 +84,11 @@ fn modifying_and_saving_the_selection() -> Result<()> {
         let mut selection_manager = repo.selection_manager()?;
         selection_manager.process(&[
             Operation {
-                action: OperationAction::Add,
+                action: default_add(),
                 underlying: Underlying::Project(project_name.clone()),
             },
             Operation {
-                action: OperationAction::Add,
+                action: default_add(),
                 underlying: Underlying::Target(target.clone()),
             },
         ])?;
@@ -113,7 +113,7 @@ fn modifying_and_saving_the_selection() -> Result<()> {
 
         // Remove the target
         selection_manager.process(&[Operation {
-            action: OperationAction::Remove,
+            action: default_remove(),
             underlying: Underlying::Target(target),
         }])?;
         selection_manager.save()?;
@@ -138,7 +138,7 @@ fn adding_an_unknown_project() -> Result<()> {
     let nonexistent_project = Underlying::Project(String::from("blofeld/moonbase"));
     let mut selection_manager = repo.selection_manager()?;
     let result = selection_manager.process(&[Operation {
-        action: OperationAction::Add,
+        action: default_add(),
         underlying: nonexistent_project.clone(),
     }])?;
     assert!(!result.is_success());
@@ -157,7 +157,7 @@ fn mandatory_projects_cannot_be_selected() -> Result<()> {
     let mandatory_project = Underlying::Project(String::from("mandatory"));
     let mut selection_manager = repo.selection_manager()?;
     let result = selection_manager.process(&[Operation {
-        action: OperationAction::Add,
+        action: default_add(),
         underlying: mandatory_project.clone(),
     }])?;
     assert!(!result.is_success());
@@ -176,14 +176,14 @@ fn duplicate_projects_are_ignored() -> Result<()> {
     let project_b = Underlying::Project(String::from("team_zissou/project_b"));
     let mut selection_manager = repo.selection_manager()?;
     let result = selection_manager.process(&[Operation {
-        action: OperationAction::Add,
+        action: default_add(),
         underlying: project_b.clone(),
     }])?;
     assert!(result.is_success());
     assert_eq!(result.added, hashset! {project_b.clone()});
 
     let result = selection_manager.process(&[Operation {
-        action: OperationAction::Add,
+        action: default_add(),
         underlying: project_b.clone(),
     }])?;
     assert!(result.is_success());
