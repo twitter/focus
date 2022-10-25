@@ -6,11 +6,6 @@ use std::collections::HashSet;
 use super::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum OperationAction {
-    Add(AddOptions),
-    Remove(RemoveOptions),
-}
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct AddOptions {
     pub unroll: bool,
 }
@@ -19,12 +14,22 @@ pub struct RemoveOptions {
     pub all: bool,
 }
 
-pub fn default_add() -> OperationAction {
-    OperationAction::Add(AddOptions { unroll: false })
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum OperationAction {
+    Add(AddOptions),
+    Remove(RemoveOptions),
 }
 
-pub fn default_remove() -> OperationAction {
-    OperationAction::Remove(RemoveOptions { all: false })
+impl OperationAction {
+    /// Set default options for OperationAction::Add
+    pub fn default_add() -> OperationAction {
+        OperationAction::Add(AddOptions { unroll: false })
+    }
+
+    /// Set default options for OperationAction::Remove
+    pub fn default_remove() -> OperationAction {
+        OperationAction::Remove(RemoveOptions { all: false })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -83,17 +88,17 @@ mod testing {
     #[test]
     fn operation_new() {
         assert_eq!(
-            Operation::new(default_add(), "bazel://a/b:*"),
+            Operation::new(OperationAction::default_add(), "bazel://a/b:*"),
             Operation {
-                action: default_add(),
+                action: OperationAction::default_add(),
                 underlying: Underlying::Target(Target::try_from("bazel://a/b:*").unwrap())
             }
         );
 
         assert_eq!(
-            Operation::new(default_remove(), "foo"),
+            Operation::new(OperationAction::default_remove(), "foo"),
             Operation {
-                action: default_remove(),
+                action: OperationAction::default_remove(),
                 underlying: Underlying::Project(String::from("foo"))
             }
         );
