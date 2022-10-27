@@ -1046,9 +1046,7 @@ impl Repo {
                 .config()?
                 .set_str(VERSION_CONFIG_KEY, env!("CARGO_PKG_VERSION"))?;
 
-            self.repo
-                .config()?
-                .set_str(CI_REMOTE_CONFIG_KEY, CI_REMOTE_CONFIG_VALUE)?;
+            self.repo.config()?.set_bool(GITSTATS_CONFIG_KEY, true)?;
         }
         Ok(())
     }

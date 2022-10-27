@@ -233,7 +233,7 @@ fn index_repo_dir(sparse_repo_path: &Path) -> PathBuf {
     sparse_repo_path.join(".git").join("focus").join("index")
 }
 
-pub const INDEX_DEFAULT_REMOTE: &str = "https://git.twitter.biz/focus-index";
+pub const INDEX_DEFAULT_REMOTE: &str = "https://git.example.com/focus-index";
 
 pub fn fetch(
     app: Arc<App>,

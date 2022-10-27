@@ -1158,7 +1158,7 @@ mod twttr_test {
             .arg("remote")
             .arg("add")
             .arg("origin")
-            .arg("https://git.twitter.biz/focus-test-repo")
+            .arg("https://git.example.com/focus-test-repo")
             .current_dir(&fixture.dense_repo_path)
             .assert()
             .success();
@@ -1205,18 +1205,18 @@ mod twttr_test {
         // Check `ci.alt.remote` gets set
         assert_eq!(
             git_repo.config()?.snapshot()?.get_str("ci.alt.remote")?,
-            "https://git.twitter.biz/source-ci"
+            "https://git.example.com/source-ci"
         );
 
         // Check the remote URLs
         let origin_remote = git_repo.find_remote("origin")?;
         assert_eq!(
             origin_remote.url().unwrap(),
-            "https://git.twitter.biz/ro/focus-test-repo"
+            "https://git.example.com/ro/focus-test-repo"
         );
         assert_eq!(
             origin_remote.pushurl().unwrap(),
-            "https://git.twitter.biz/focus-test-repo"
+            "https://git.example.com/focus-test-repo"
         );
 
         // Check branches

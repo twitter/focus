@@ -181,7 +181,7 @@ impl ScratchGitRepo {
             .arg("--add")
             .arg("--local")
             .arg("ci.alt.remote")
-            .arg("https://git.twitter.biz/source-ci")
+            .arg("https://git.example.com/source-ci")
             .current_dir(&repo_path)
             .assert()
             .success();
