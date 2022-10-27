@@ -6,7 +6,7 @@ use std::borrow::Borrow;
 use anyhow::{Context, Result};
 use url::Url;
 
-use super::*;
+use super::{remote::RequestOptions, *};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DatabaseCacheBackendError {
@@ -51,7 +51,7 @@ impl ProjectCacheBackend for LocalCacheBackend {
         }
     }
 
-    fn store(&self, url: Url, value: Vec<u8>) -> Result<()> {
+    fn store(&self, url: Url, _request_options: &RequestOptions, value: Vec<u8>) -> Result<()> {
         let key = url.path();
         debug!(?key, "PUT");
         self.database

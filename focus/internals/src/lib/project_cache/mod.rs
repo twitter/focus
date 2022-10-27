@@ -456,8 +456,14 @@ impl<'cache> ProjectCache<'cache> {
             items: optional_project_items,
         };
 
-        store_export(self.backend.as_ref(), build_graph_hash, &manifest, &export)
-            .context("Failed to upload the project cache export")
+        store_export(
+            self.repo,
+            self.backend.as_ref(),
+            build_graph_hash,
+            &manifest,
+            &export,
+        )
+        .context("Failed to upload the project cache export")
     }
 
     pub fn fetch(&self, build_graph_hash: &Vec<u8>) -> anyhow::Result<()> {

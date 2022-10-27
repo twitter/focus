@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use reqwest::blocking::Client;
 use url::Url;
 
-use super::*;
+use super::{remote::RequestOptions, *};
 
 /// A cache backend that uses HTTP GET to retrieve models and HTTP PUT to store them.
 pub struct HttpCacheBackend {
@@ -60,15 +60,19 @@ impl ProjectCacheBackend for HttpCacheBackend {
     }
 
     // Encode the given model as JSON and upload it using HTTP PUT to the given URL.
-    fn store(&self, url: Url, value: Vec<u8>) -> Result<()> {
+    fn store(&self, url: Url, options: &RequestOptions, value: Vec<u8>) -> Result<()> {
         // TODO: Add an ETag to skip upload if the content is identical.
         let span = tracing::info_span!("Putting");
         let _guard = span.enter();
         tracing::debug!(url = ?url.as_str(), "PUT");
+
+        let headers = options.clone().headers.unwrap_or_default();
+
         let response = self
             .client
             .put(url)
             .body(value)
+            .headers(headers)
             .send()
             .context("PUT failed")?
             .error_for_status()?;
