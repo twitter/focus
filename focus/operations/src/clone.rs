@@ -843,10 +843,10 @@ fn copy_dense_config(dense_repo: &Repository, sparse_repo: &Repository) -> Resul
         .context("failed to open level Local in sparse repo config")?;
 
     for k in ["ci.alt.remote", "ci.alt.enabled"] {
-        let v = dense_cfg
-            .get_string(k)
-            .with_context(|| format!("failed to get value for key {:#?} from dense repo", k))?;
-        if !v.is_empty() {
+        if let Ok(v) = dense_cfg.get_string(k) {
+            if v.is_empty() {
+                break;
+            }
             sparse_cfg.set_str(k, &v).with_context(|| {
                 format!(
                     "failed to set key {:#?} value {:#?} from dense repo in sparse repo",
