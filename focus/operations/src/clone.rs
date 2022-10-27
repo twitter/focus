@@ -826,10 +826,6 @@ fn set_up_remotes(
 }
 
 fn copy_dense_config(dense_repo: &Repository, sparse_repo: &Repository) -> Result<()> {
-    if cfg!(not(feature = "twttr")) {
-        return Ok(());
-    }
-
     let dense_cfg = dense_repo
         .config()
         .context("failed to get dense repo config")?
@@ -1134,7 +1130,7 @@ mod twttr_test {
         sync::Arc,
     };
 
-    use crate::testing::integration::RepoPairFixture;
+    use crate::testing::integration::{RepoPairFixture, configure_ci_for_dense_repo};
     use anyhow::{bail, Context, Result};
     use assert_cmd::prelude::OutputAssertExt;
     use focus_internals::model::repo::Repo;
@@ -1149,20 +1145,22 @@ mod twttr_test {
     fn local_clone_smoke_test() -> Result<()> {
         init_logging();
         let fixture = RepoPairFixture::new()?;
+        configure_ci_for_dense_repo(&fixture)?;
+
+        let git_exe = fixture.app.git_binary();
 
         // Set up a remote that mimics source so that we can check that the setting of fetch and push URLs.
-        fixture
-            .app
-            .git_binary()
+        git_exe
             .command()
             .arg("remote")
             .arg("add")
             .arg("origin")
-            .arg("https://git.example.com/focus-test-repo")
+            .arg("https://git.twitter.biz/focus-test-repo")
             .current_dir(&fixture.dense_repo_path)
             .assert()
             .success();
 
+    
         // Make a branch that shouldn't end up in the sparse repo
         fixture
             .dense_repo
@@ -1205,18 +1203,18 @@ mod twttr_test {
         // Check `ci.alt.remote` gets set
         assert_eq!(
             git_repo.config()?.snapshot()?.get_str("ci.alt.remote")?,
-            "https://git.example.com/source-ci"
+            "https://git.twitter.biz/focus-test-repo-ci"
         );
 
         // Check the remote URLs
         let origin_remote = git_repo.find_remote("origin")?;
         assert_eq!(
             origin_remote.url().unwrap(),
-            "https://git.example.com/ro/focus-test-repo"
+            "https://git.twitter.biz/ro/focus-test-repo"
         );
         assert_eq!(
             origin_remote.pushurl().unwrap(),
-            "https://git.example.com/focus-test-repo"
+            "https://git.twitter.biz/focus-test-repo"
         );
 
         // Check branches
