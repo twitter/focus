@@ -1130,7 +1130,7 @@ mod twttr_test {
         sync::Arc,
     };
 
-    use crate::testing::integration::{RepoPairFixture, configure_ci_for_dense_repo};
+    use crate::testing::integration::{configure_ci_for_dense_repo, RepoPairFixture};
     use anyhow::{bail, Context, Result};
     use assert_cmd::prelude::OutputAssertExt;
     use focus_internals::model::repo::Repo;
@@ -1160,7 +1160,6 @@ mod twttr_test {
             .assert()
             .success();
 
-    
         // Make a branch that shouldn't end up in the sparse repo
         fixture
             .dense_repo
