@@ -277,6 +277,7 @@ impl Drop for RepoPairFixture {
     }
 }
 
+#[cfg(feature = "twttr")]
 pub fn configure_ci_for_dense_repo(fixture: &RepoPairFixture) -> Result<()> {
     let binary = fixture.app.git_binary();
 
