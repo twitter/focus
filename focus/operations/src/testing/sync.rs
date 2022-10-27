@@ -479,7 +479,7 @@ fn sync_sets_ti_client_correctly() -> Result<()> {
     crate::selection::add(
         &fixture.sparse_repo_path,
         true,
-        targets.clone(),
+        targets,
         false,
         fixture.app.clone(),
     )?;
