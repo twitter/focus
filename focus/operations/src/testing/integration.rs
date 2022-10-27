@@ -293,7 +293,7 @@ pub fn set_extra_config_on_dense_repo(fixture: &RepoPairFixture) -> Result<()> {
         .arg("--add")
         .arg("--local")
         .arg("ci.alt.remote")
-        .arg("https://git.twitter.biz/focus-test-repo-ci")
+        .arg("https://git.example.com/focus-test-repo-ci")
         .current_dir(&fixture.dense_repo_path)
         .assert()
         .try_success()?;
@@ -329,7 +329,7 @@ mod twttr_test {
 
         assert!(
             repo.config()?.get_string("ci.alt.remote")?
-                == "https://git.twitter.biz/focus-test-repo-ci"
+                == "https://git.example.com/focus-test-repo-ci"
         );
         assert!(repo.config()?.get_bool("ci.alt.enabled")?);
 
