@@ -175,29 +175,6 @@ impl ScratchGitRepo {
             .assert()
             .success();
 
-        git_binary
-            .command()
-            .arg("config")
-            .arg("--add")
-            .arg("--local")
-            .arg("ci.alt.remote")
-            .arg("https://git.example.com/source-ci")
-            .current_dir(&repo_path)
-            .assert()
-            .success();
-
-        git_binary
-            .command()
-            .arg("config")
-            .arg("--add")
-            .arg("--local")
-            .arg("--bool")
-            .arg("ci.alt.enabled")
-            .arg("true")
-            .current_dir(&repo_path)
-            .assert()
-            .success();
-
         let mut test_file = repo_path.clone();
         test_file.push("d_0_0");
         std::fs::create_dir(test_file.as_path()).unwrap();

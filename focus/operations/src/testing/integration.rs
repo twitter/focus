@@ -74,9 +74,6 @@ impl RepoPairFixture {
             preserve: false,
             sync_mode: Cell::new(SyncMode::Incremental),
         };
-
-        set_extra_config_on_dense_repo(&fixture)?;
-
         Ok(fixture)
     }
 
@@ -280,11 +277,7 @@ impl Drop for RepoPairFixture {
     }
 }
 
-pub fn set_extra_config_on_dense_repo(fixture: &RepoPairFixture) -> Result<()> {
-    if cfg!(not(feature = "twttr")) {
-        return Ok(());
-    }
-
+pub fn configure_ci_for_dense_repo(fixture: &RepoPairFixture) -> Result<()> {
     let binary = fixture.app.git_binary();
 
     binary
@@ -293,7 +286,7 @@ pub fn set_extra_config_on_dense_repo(fixture: &RepoPairFixture) -> Result<()> {
         .arg("--add")
         .arg("--local")
         .arg("ci.alt.remote")
-        .arg("https://git.example.com/focus-test-repo-ci")
+        .arg("https://git.twitter.biz/focus-test-repo-ci")
         .current_dir(&fixture.dense_repo_path)
         .assert()
         .try_success()?;

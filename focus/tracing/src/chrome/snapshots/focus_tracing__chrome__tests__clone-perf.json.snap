@@ -1,8 +1,6 @@
 ---
-source: focus/internals/src/lib/tracing/chrome/tests.rs
-assertion_line: 12
+source: focus/tracing/src/chrome/tests.rs
 expression: trace
-
 ---
 traceEvents:
   - ts: 0
@@ -60,7 +58,7 @@ traceEvents:
   - ts: 5081
     pid: 1
     tid: 0
-    name: "git clone https://git.example.com/focus"
+    name: "git clone https://git.twitter.biz/focus"
     cat: ""
     ph: X
     dur: 2859458
@@ -69,7 +67,7 @@ traceEvents:
         argv:
           - git
           - clone
-          - "https://git.example.com/focus"
+          - "https://git.twitter.biz/focus"
         file_line_thread: "common-main.c:50:main"
         git_event_name: start
         t_abs: 0.004747
@@ -102,7 +100,7 @@ traceEvents:
   - ts: 27502
     pid: 1
     tid: 0
-    name: "git remote-https origin https://git.example.com/focus"
+    name: "git remote-https origin https://git.twitter.biz/focus"
     cat: ""
     ph: X
     dur: 2813409
@@ -112,7 +110,7 @@ traceEvents:
           - git
           - remote-https
           - origin
-          - "https://git.example.com/focus"
+          - "https://git.twitter.biz/focus"
         cd: ~
         child_class: remote-https
         child_id: 0
@@ -147,7 +145,7 @@ traceEvents:
   - ts: 37767
     pid: 2
     tid: 0
-    name: "git remote-https origin https://git.example.com/focus"
+    name: "git remote-https origin https://git.twitter.biz/focus"
     cat: ""
     ph: X
     dur: 2712866
@@ -157,7 +155,7 @@ traceEvents:
           - /usr/local/Cellar/git/2.35.1/libexec/git-core/git
           - remote-https
           - origin
-          - "https://git.example.com/focus"
+          - "https://git.twitter.biz/focus"
         file_line_thread: "common-main.c:50:main"
         git_event_name: start
         t_abs: 0.002019
@@ -180,7 +178,7 @@ traceEvents:
   - ts: 38871
     pid: 2
     tid: 0
-    name: "git-remote-https origin https://git.example.com/focus"
+    name: "git-remote-https origin https://git.twitter.biz/focus"
     cat: ""
     ph: X
     dur: 2711625
@@ -189,7 +187,7 @@ traceEvents:
         argv:
           - git-remote-https
           - origin
-          - "https://git.example.com/focus"
+          - "https://git.twitter.biz/focus"
         cd: ~
         child_class: dashed
         child_id: 0
@@ -240,7 +238,7 @@ traceEvents:
   - ts: 55622
     pid: 3
     tid: 0
-    name: "git-remote-https origin https://git.example.com/focus"
+    name: "git-remote-https origin https://git.twitter.biz/focus"
     cat: ""
     ph: X
     dur: 2693191
@@ -249,7 +247,7 @@ traceEvents:
         argv:
           - /usr/local/Cellar/git/2.35.1/libexec/git-core/git-remote-https
           - origin
-          - "https://git.example.com/focus"
+          - "https://git.twitter.biz/focus"
         file_line_thread: "common-main.c:50:main"
         git_event_name: start
         t_abs: 0.001946
