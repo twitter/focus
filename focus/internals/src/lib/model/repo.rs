@@ -64,7 +64,9 @@ const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
 const OUTLINING_PATTERN_FILE_NAME: &str = "focus/outlining.patterns.json";
 const LAST: usize = usize::MAX;
 
-pub const PROJECT_CACHE_ENDPOINT_CONFIG_KEY: &str = "focus.project-cache-endpoint";
+pub const PROJECT_CACHE_ENDPOINT_CONFIG_KEY: &str = "focus.project-cache.endpoint";
+pub const PROJECT_CACHE_INCLUDE_HEADERS_FILE_CONFIG_KEY: &str =
+    "focus.project-cache.include-headers-from";
 pub const BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY: &str = "focus.bazel.one-shot";
 
 /// Models a Git working tree.
@@ -1189,6 +1191,35 @@ impl Repo {
                 .map(Some),
             Err(_) => Ok(None),
         }
+    }
+
+    pub fn get_project_cache_include_header_file(&self) -> Result<Option<String>> {
+        let config_snapshot = self.repo.config()?.snapshot()?;
+        Ok(config_snapshot
+            .get_str(PROJECT_CACHE_INCLUDE_HEADERS_FILE_CONFIG_KEY)
+            .ok()
+            .map(|s| s.to_owned()))
+    }
+
+    pub fn set_project_cache_include_header_file(&self, value: &str) -> Result<()> {
+        let working_tree = self
+            .working_tree()
+            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+
+        git_helper::write_config(
+            working_tree.work_dir(),
+            PROJECT_CACHE_INCLUDE_HEADERS_FILE_CONFIG_KEY,
+            value,
+            self.app.clone(),
+        )
+        .with_context(|| {
+            format!(
+                "Writing key '{}'",
+                PROJECT_CACHE_INCLUDE_HEADERS_FILE_CONFIG_KEY
+            )
+        })?;
+
+        Ok(())
     }
 
     pub fn get_bazel_oneshot_resolution(&self) -> Result<bool> {
