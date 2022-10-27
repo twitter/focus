@@ -1042,17 +1042,10 @@ impl Repo {
         if cfg!(feature = "twttr") {
             const VERSION_CONFIG_KEY: &str = "focus.version";
             const GITSTATS_CONFIG_KEY: &str = "twitter.statsenabled";
-            const CI_ENABLED_CONFIG_KEY: &str = "ci.alt.enabled";
-            const CI_REMOTE_CONFIG_KEY: &str = "ci.alt.remote";
-            const CI_REMOTE_CONFIG_VALUE: &str = "https://git.twitter.biz/source-ci";
-
             self.repo
                 .config()?
                 .set_str(VERSION_CONFIG_KEY, env!("CARGO_PKG_VERSION"))?;
 
-            self.repo.config()?.set_bool(GITSTATS_CONFIG_KEY, true)?;
-
-            self.repo.config()?.set_bool(CI_ENABLED_CONFIG_KEY, true)?;
             self.repo
                 .config()?
                 .set_str(CI_REMOTE_CONFIG_KEY, CI_REMOTE_CONFIG_VALUE)?;
