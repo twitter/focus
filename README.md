@@ -4,19 +4,45 @@
 
 # Installation
 
-`focus` is written in [Rust](https://www.rust-lang.org/) and supports macOS and Linux. Git v2.35+ and Bazel need to be installed in the PATH env.
+`focus` is written in [Rust](https://www.rust-lang.org/) and supports macOS and Linux. Git v2.35+ and Bazel need to be installed in the PATH env. General 
 
 ## MacOS Prerequisites
 [Install Bazel](https://bazel.build/install/os-x)
 
 [Install git > 2.35](https://formulae.brew.sh/formula/git)
 
-WARN: If you run a `cargo test` you may run out of file descriptors. On MacOS you will need to use `ulimit -n X` to set a large file limit for the current shell.
+WARN: If you run a `cargo test` you may run out of file descriptors. On MacOS you will need to use `ulimit -n X` to set a large file limit for the current shell. On macOS Big Sur, you can write a plist to do this permanently:
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple/DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  <plist version="1.0">
+    <dict>
+      <key>Label</key>
+        <string>limit.maxfiles</string>
+      <key>ProgramArguments</key>
+        <array>
+	  <string>sudo</string>
+          <string>launchctl</string>
+          <string>limit</string>
+          <string>maxfiles</string>
+          <string>655360</string>
+          <string>1048576</string>
+        </array>
+      <key>RunAtLoad</key>
+        <true />
+    </dict>
+  </plist>
+``` 
+then load it with `sudo launchctl load -w /Library/LaunchDaemons/limit.maxfiles.plist`.
 
-TODO: Find instructions for increasing fd limit permanently.
+Note: these instructions are from a GitHub issue https://github.com/gradle/gradle/issues/17274. Thanks to those folks.
+
 
 ## Linux Prerequisites
-TODO: Install Prerequisites for Linux
+
+Git 2.35+: get this through your distro's package manager or [download pre-built binaries or sources here](https://git-scm.com/downloads).
+You'll need Bazel installed. See [these instructions](https://bazel.build/install/) for details on how to install on mainstream Linux distros. Alternative distros probably have a reasonable Bazel package available by now.
+
 
 ## Common
 [Install Rust](https://rustup.rs/), then install `focus` with
