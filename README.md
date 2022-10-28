@@ -43,8 +43,9 @@ Note: these instructions are from a GitHub issue https://github.com/gradle/gradl
 
 ## Linux Prerequisites
 
-Git 2.35+: get this through your distro's package manager or [download pre-built binaries or sources here](https://git-scm.com/downloads).
-You'll need Bazel installed. See [these instructions](https://bazel.build/install/) for details on how to install on mainstream Linux distros. Alternative distros probably have a reasonable Bazel package available by now.
+*Install Git*: Git 2.35+: get this through your distro's package manager or [download pre-built binaries or sources here](https://git-scm.com/downloads).
+
+*Install Bazel*: You'll need Bazel installed. See [these instructions](https://bazel.build/install/) for details on how to install on mainstream Linux distros. Alternative distros probably have a reasonable Bazel package available by now.
 
 
 ## Common
