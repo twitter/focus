@@ -9,7 +9,7 @@
 ## MacOS Prerequisites
 [Install Bazel](https://bazel.build/install/os-x)
 
-[Install git > 2.35](https://formulae.brew.sh/formula/git)
+[Install Git > 2.35](https://formulae.brew.sh/formula/git)
 
 *Warning*: If you run a `cargo test` you may run out of file descriptors. On MacOS you will need to use `ulimit -n X` to set a large file limit for the current shell. On macOS Big Sur, you can write a plist to do this permanently:
 
@@ -36,7 +36,7 @@ Write the following to a file named `/Library/LaunchDaemons/limit.maxfiles.plist
     </dict>
   </plist>
 ``` 
-then load it with `sudo launchctl load -w /Library/LaunchDaemons/limit.maxfiles.plist`.
+then load it with `sudo launchctl load -w /Library/LaunchDaemons/limit.maxfiles.plist`. This seems to work better if you restart your Mac.
 
 Note: these instructions are from a GitHub issue https://github.com/gradle/gradle/issues/17274. Thanks to those folks.
 
