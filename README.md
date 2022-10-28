@@ -11,7 +11,10 @@
 
 [Install git > 2.35](https://formulae.brew.sh/formula/git)
 
-WARN: If you run a `cargo test` you may run out of file descriptors. On MacOS you will need to use `ulimit -n X` to set a large file limit for the current shell. On macOS Big Sur, you can write a plist to do this permanently:
+*Warning*: If you run a `cargo test` you may run out of file descriptors. On MacOS you will need to use `ulimit -n X` to set a large file limit for the current shell. On macOS Big Sur, you can write a plist to do this permanently:
+
+
+Write the following to a file named `/Library/LaunchDaemons/limit.maxfiles.plist` (_hint: you'll need to invoke your editor with `sudo` because this file is protected_):
 ```
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple/DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
