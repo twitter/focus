@@ -340,6 +340,10 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
         ti_client
             .get_context()
             .add_to_custom_map("sync_mechanism", mechanism.to_string());
+        ti_client.get_context().add_to_custom_map(
+            "sync_commit_id",
+            commit.id().to_string(),
+        );
         perform("Updating the sync point", || {
             repo.working_tree().unwrap().write_sync_point_ref()
         })?;
