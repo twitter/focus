@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use libc::{S_IFREG, S_IRGRP, S_IROTH, S_IRUSR, S_IWUSR};
 use tempfile::NamedTempFile;
+use tracing::debug;
 
 use crate::message::Message;
 use crate::writer::Writer;
@@ -54,11 +55,12 @@ impl JsonWriter {
             // the MDE user. We're making the file readable to all to make sure the logs being
             // written can be processed by the tool insights daemon.
             fs::set_permissions(
-                temporary_file_path,
+                temporary_file_path.clone(),
                 fs::Permissions::from_mode(
                     (S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) as u32,
                 ),
             )?;
+            debug!("Writing to {}", temporary_file_path.clone().display());
             serde_json::to_writer(file, message).context("Could not write message to file")?;
         }
         Ok(())
