@@ -275,6 +275,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
     }
 
     // If only projects are selected (no ad-hoc targets) we try to use the project cache to sync. Otherwise we fall back to regular syncing.
+    let mode = SyncMode::RequireProjectCache;
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         // Try to use the project cache
         let project_cache_result = repo
