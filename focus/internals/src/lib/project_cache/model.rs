@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Context;
-
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fmt::Display};
 use url::Url;
@@ -25,9 +24,18 @@ impl RepoIdentifier {
             .pushurl()
             .or_else(|| remote.url())
             .ok_or_else(|| anyhow::anyhow!("Origin remote has no URL"))?;
-        let url = Url::parse(url)
+        let url = Self::treat_path(url)?;
+        let url = Url::parse(url.as_str())
             .with_context(|| format!("Could not parse origin URL from '{}'", url))?;
         RepoIdentifier::try_from(url)
+    }
+
+    fn treat_path(s: &str) -> anyhow::Result<String> {
+        if cfg!(feature = "twttr") {
+            Ok(s.replace("ro/", ""))
+        } else {
+            Ok(s.to_owned())
+        }
     }
 }
 
@@ -48,7 +56,8 @@ impl TryFrom<Url> for RepoIdentifier {
         let host = host;
         let name = value.path();
         let name = name.strip_prefix('/').unwrap_or(name); // Strip leading '/'
-        let name = name.strip_suffix(".git").unwrap_or(name).to_string(); // Strip trailing '.git'
+        let name = name.strip_suffix(".git").unwrap_or(name); // Strip trailing '.git'
+        let name = RepoIdentifier::treat_path(name)?;
 
         Ok(Self { host, name })
     }
@@ -212,6 +221,21 @@ mod testing {
             RepoIdentifier {
                 host: String::from("localhost"),
                 name: String::from("home/alice/code/focus"),
+            }
+        );
+    }
+
+    #[cfg(feature = "twttr")]
+    #[test]
+    fn test_repository_identifier_from_url_eliminates_ro_in_twttr_mode() {
+        assert_eq!(
+            RepoIdentifier::try_from(
+                Url::from_str("https://git.example.com/ro/foolish.git").unwrap()
+            )
+            .unwrap(),
+            RepoIdentifier {
+                host: String::from("git.example.com"),
+                name: String::from("foolish"),
             }
         );
     }
