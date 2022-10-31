@@ -72,15 +72,19 @@ fn add_updated_content(scratch_repo: &ScratchGitRepo) -> Result<git2::Oid> {
 
 #[test]
 fn sync_upstream_changes_with_incremental_sync() -> Result<()> {
-    sync_upstream_changes_internal(SyncMode::Incremental)
+    let used_sync_mode = sync_upstream_changes_internal(SyncMode::Incremental)?;
+    assert_eq!(used_sync_mode, SyncMechanism::CachedOutline);
+    Ok(())
 }
 
 #[test]
 fn sync_upstream_changes_with_oneshot_sync() -> Result<()> {
-    sync_upstream_changes_internal(SyncMode::OneShot)
+    let used_sync_mode = sync_upstream_changes_internal(SyncMode::OneShot)?;
+    assert_eq!(used_sync_mode, SyncMechanism::OneShotOutline);
+    Ok(())
 }
 
-fn sync_upstream_changes_internal(sync_mode: SyncMode) -> Result<()> {
+fn sync_upstream_changes_internal(sync_mode: SyncMode) -> Result<SyncMechanism> {
     init_logging();
 
     let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
@@ -108,7 +112,6 @@ fn sync_upstream_changes_internal(sync_mode: SyncMode) -> Result<()> {
         SyncMode::Incremental,
         fixture.app.clone(),
     )?;
-    assert_eq!(sync_result.mechanism, SyncMechanism::CachedOutline);
 
     let x_dir = fixture.sparse_repo_path.join("x");
     assert!(!x_dir.is_dir());
@@ -124,7 +127,7 @@ fn sync_upstream_changes_internal(sync_mode: SyncMode) -> Result<()> {
 
     assert!(x_dir.is_dir());
 
-    Ok(())
+    Ok(sync_result.mechanism)
 }
 
 #[test]
@@ -400,15 +403,19 @@ fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
 
 #[test]
 fn sync_skips_checkout_with_unchanged_profile_with_incremental_sync() -> Result<()> {
-    sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Incremental)
+    let sync_mechanism_used = sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Incremental)?;
+    assert_eq!(sync_mechanism_used, SyncMechanism::CachedOutline);
+    Ok(())
 }
 
 #[test]
 fn sync_skips_checkout_with_unchanged_profile_with_oneshot_sync() -> Result<()> {
-    sync_skips_checkout_with_unchanged_profile_internal(SyncMode::OneShot)
+    let sync_mechanism_used = sync_skips_checkout_with_unchanged_profile_internal(SyncMode::OneShot)?;
+    assert_eq!(sync_mechanism_used, SyncMechanism::OneShotOutline);
+    Ok(())
 }
 
-fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> Result<()> {
+fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> Result<SyncMechanism> {
     let snapshot_label = SnapshotLabel::new(format!(
         "sync_skips_checkout_with_unchanged_profile_internal_{:?}",
         sync_mode
@@ -456,13 +463,12 @@ fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> R
     let sync_result = crate::sync::run(&path, sync_mode, fixture.app.clone())?;
     let subsequent_sync_profile_contents = std::fs::read_to_string(&profile_path)?;
     assert_snapshot!(snapshot_label.next(), subsequent_sync_profile_contents);
-    assert_eq!(sync_result.mechanism, SyncMechanism::CachedOutline);
+
     // TODO: Figure out why incremental sync indicates checkout here and why the first and subsequent sync differ, then enable this assertion
     // assert!(!sync_result.checked_out);
     // // The profiles should be identical
     // assert_eq!(first_sync_profile_contents, subsequent_sync_profile_contents);
-
-    Ok(())
+    Ok(sync_result.mechanism)
 }
 
 #[cfg(feature = "twttr")]
