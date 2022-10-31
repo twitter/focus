@@ -403,19 +403,23 @@ fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
 
 #[test]
 fn sync_skips_checkout_with_unchanged_profile_with_incremental_sync() -> Result<()> {
-    let sync_mechanism_used = sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Incremental)?;
+    let sync_mechanism_used =
+        sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Incremental)?;
     assert_eq!(sync_mechanism_used, SyncMechanism::CachedOutline);
     Ok(())
 }
 
 #[test]
 fn sync_skips_checkout_with_unchanged_profile_with_oneshot_sync() -> Result<()> {
-    let sync_mechanism_used = sync_skips_checkout_with_unchanged_profile_internal(SyncMode::OneShot)?;
+    let sync_mechanism_used =
+        sync_skips_checkout_with_unchanged_profile_internal(SyncMode::OneShot)?;
     assert_eq!(sync_mechanism_used, SyncMechanism::OneShotOutline);
     Ok(())
 }
 
-fn sync_skips_checkout_with_unchanged_profile_internal(sync_mode: SyncMode) -> Result<SyncMechanism> {
+fn sync_skips_checkout_with_unchanged_profile_internal(
+    sync_mode: SyncMode,
+) -> Result<SyncMechanism> {
     let snapshot_label = SnapshotLabel::new(format!(
         "sync_skips_checkout_with_unchanged_profile_internal_{:?}",
         sync_mode
