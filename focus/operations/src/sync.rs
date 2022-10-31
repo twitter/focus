@@ -305,7 +305,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                     SyncMode::RequireProjectCache => unreachable!(),
                 };
 
-                if one_shot{
+                if one_shot {
                     mechanism = SyncMechanism::OneShotOutline;
                 }
 
