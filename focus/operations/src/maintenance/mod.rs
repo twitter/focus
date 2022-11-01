@@ -331,18 +331,18 @@ impl Runner<'_> {
     }
 
     fn get_repo_paths_from_config(&self) -> Result<Vec<PathBuf>> {
-        let entries = self.config.multivar(&self.config_key, None)?;
-        let vec_entries: Vec<git2::ConfigEntry> = entries
+        Ok(self
+            .config
+            .multivar_values(&self.config_key, None)
+            .with_context(|| {
+                format!(
+                    "Failed reading values for config key '{}'",
+                    &self.config_key
+                )
+            })?
             .into_iter()
-            .collect::<Result<Vec<git2::ConfigEntry>, git2::Error>>()?;
-
-        let paths = vec_entries
-            .into_iter()
-            .filter_map(|v| v.value().map(|x| x.to_owned()))
             .map(PathBuf::from)
-            .collect();
-
-        Ok(paths)
+            .collect())
     }
 
     fn get_repo_paths_from_tracker(&self) -> Result<Vec<PathBuf>> {
