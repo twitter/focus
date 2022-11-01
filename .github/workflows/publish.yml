@@ -1,0 +1,50 @@
+# Copyright 2022 Twitter, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Publish Twitter Artifacts
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  publish:
+    name: Publish for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: twttr-focus-linux-amd64.bz2
+            asset_name: twttr-focus-linux-amd64.bz2
+          - os: macos-latest
+            artifact_name: twttr-focus-linux-amd64.bz2
+            asset_name: twttr-focus-macos-amd64.bz2
+
+    steps:
+    # - uses: actions/checkout@v2
+    # - name: Build
+    #   run: cargo build --release --locked
+    - name: Tar Build
+      shell: bash
+      run: |
+        mkdir staging
+        pushd staging
+        mkdir bin
+        echo "Test" > test_artifact.txt
+        tar jcf ../${{ matrix.artifact_name }} .
+        popd
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: staging/${{ matrix.artifact_name }}
+        asset_name: ${{ matrix.asset_name }}
+        tag: ${{ github.ref }}
+
+# mkdir release
+# pushd release
+# mkdir bin
+# cp ../target/$cargo_target/release/focus bin/focus
+# tar jcf ../focus.tar.bz2 .

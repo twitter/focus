@@ -10,25 +10,7 @@ on:
   pull_request:
 
 jobs:
-  macos-build:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: 1.60.0
-          override: true
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@cb2cf0cc7c5198d3364b9630e2c3d457f160790c
-
-      - name: Compile (but don't test) `twttr` feature
-        run: cargo build --features ci,twttr --all-targets --workspace
-  ubuntu-build:
+  build:
     runs-on: ubuntu-latest
 
     steps:
