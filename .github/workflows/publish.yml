@@ -16,11 +16,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: twttr-focus-linux-amd64.bz2
-            asset_name: twttr-focus-linux-amd64.bz2
+            artifact_name: twttr-focus-linux-amd64.tar.bz2
+            asset_name: twttr-focus-linux-amd64.tar.bz2
           - os: macos-latest
-            artifact_name: twttr-focus-linux-amd64.bz2
-            asset_name: twttr-focus-macos-amd64.bz2
+            artifact_name: twttr-focus-macos-amd64.tar.bz2
+            asset_name: twttr-focus-macos-amd64.tar.bz2
 
     steps:
     # - uses: actions/checkout@v2
