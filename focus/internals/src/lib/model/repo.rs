@@ -57,6 +57,7 @@ const PREEMPTIVE_SYNC_ENABLED_CONFIG_KEY: &str = "focus.preemptive-sync.enabled"
 const PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_CONFIG_KEY: &str =
     "focus.preemptive-sync.user-idle-threshold";
 const PREEMPTIVE_SYNC_USER_IDLE_MILLIS_THRESHOLD_DEFAULT: i32 = 15000;
+const FILTER_VIEW: &str = "focus.filter";
 
 const INDEX_SPARSE_CONFIG_KEY: &str = "index.sparse";
 const CORE_UNTRACKED_CACHE_CONFIG_KEY: &str = "core.untrackedCache";
@@ -418,6 +419,82 @@ impl WorkingTree {
             git_helper::write_config(self.git_dir(), CORE_UNTRACKED_CACHE_CONFIG_KEY, "true", app)
                 .context("Configuring untracked cache")?;
         }
+
+        Ok(())
+    }
+
+    pub fn set_filter_config(&self, val: bool) -> Result<()> {
+        self.repo
+            .config()?
+            .set_str(FILTER_VIEW, val.to_string().as_str())?;
+        Ok(())
+    }
+
+    pub fn get_filter_config(&self) -> Result<bool> {
+        let config_snapshot = self.repo.config()?.snapshot()?;
+        Ok(config_snapshot.get_bool(FILTER_VIEW).unwrap_or(true))
+    }
+
+    pub fn switch_filter_off(&self, app: Arc<App>) -> Result<()> {
+        //save of the current copy of .git/info/sparse-checkout as git/info/sparse-checkout.filtered
+        let sparse_profile_path = self.sparse_checkout_path();
+        if sparse_profile_path.is_file() {
+            let filtered_sparse_profile_path = self
+                .sparse_checkout_path()
+                .with_extension(Path::new("filtered"));
+
+            std::fs::copy(&sparse_profile_path, &filtered_sparse_profile_path)
+                .context("Copying sparse profile to .filtered")?;
+
+            info!(profile = ?sparse_profile_path, "Backed up sparse profile.");
+        }
+
+        info!("Updating sparse profile");
+        let unfiltered_sparse_profile_path = self
+            .sparse_checkout_path()
+            .with_extension(Path::new("dense"));
+        std::fs::write(&unfiltered_sparse_profile_path, "/*\n")
+            .context("Writing dense sparse profile")?;
+        std::fs::rename(&unfiltered_sparse_profile_path, &sparse_profile_path)
+            .context("Moving unfiltered sparse profile into place")?;
+
+        info!("Updating worktree...");
+        self.filter_update_worktree(app)?;
+
+        Ok(())
+    }
+
+    pub fn switch_filter_on(&self, app: Arc<App>) -> Result<()> {
+        let sparse_profile_path = self.sparse_checkout_path();
+        let filtered_sparse_profile_path = self
+            .sparse_checkout_path()
+            .with_extension(Path::new("filtered"));
+
+        if !filtered_sparse_profile_path.is_file() {
+            // in this case will need to rely on a sync run to reinstate a filtered sparse profile
+            info!("No filtered sparse file to reinstate. Will need a sync to update worktree.");
+            return Ok(());
+        }
+
+        info!("Updating sparse profile");
+        std::fs::rename(&filtered_sparse_profile_path, &sparse_profile_path)
+            .context("Moving filtered sparse profile into place")?;
+
+        info!("Updating worktree...");
+        self.filter_update_worktree(app)?;
+
+        Ok(())
+    }
+
+    fn filter_update_worktree(&self, app: Arc<App>) -> Result<()> {
+        let args = vec!["sparse-checkout", "reapply"];
+        let (mut cmd, scmd) = git_helper::git_command(app)?;
+        scmd.ensure_success_or_log(
+            cmd.current_dir(self.work_dir()).args(args),
+            SandboxCommandOutput::Stderr,
+        )
+        .with_context(|| format!("In working tree {}", self.work_dir().display()))
+        .context("git sparse-checkout reapply failed")?;
 
         Ok(())
     }

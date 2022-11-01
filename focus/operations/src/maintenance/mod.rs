@@ -188,6 +188,7 @@ fn sync_status_metric_helper(sync_status: crate::sync::SyncStatus) -> String {
         crate::sync::SyncStatus::SkippedPreemptiveSyncCancelledByActivity => {
             "skipped_activity".to_string()
         }
+        crate::sync::SyncStatus::SkippedUnfilterView => "skipped_unfiltered".to_string(),
     }
 }
 
