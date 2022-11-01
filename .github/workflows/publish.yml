@@ -29,8 +29,8 @@ jobs:
     - name: Tar Build
       shell: bash
       run: |
-        mkdir staging
-        pushd staging
+        mkdir release
+        pushd release
         mkdir bin
         echo "Test" > test_artifact.txt
         tar jcf ../${{ matrix.artifact_name }} .
@@ -39,7 +39,7 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: staging/${{ matrix.artifact_name }}
+        file: ${{ matrix.artifact_name }}
         asset_name: ${{ matrix.asset_name }}
         tag: ${{ github.ref }}
 
