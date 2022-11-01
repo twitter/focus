@@ -6,7 +6,7 @@ name: Publish Twitter Artifacts
 on:
   push:
     tags:
-      - '*'
+      - 'rel/.*'
 
 jobs:
   publish:
@@ -23,16 +23,16 @@ jobs:
             asset_name: twttr-focus-macos-amd64.tar.bz2
 
     steps:
-    # - uses: actions/checkout@v2
-    # - name: Build
-    #   run: cargo build --release --locked
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --release --locked
     - name: Tar Build
       shell: bash
       run: |
         mkdir release
         pushd release
         mkdir bin
-        echo "Test" > test_artifact.txt
+        cp ../target/release/focus bin/focus
         tar jcf ../${{ matrix.artifact_name }} .
         popd
     - name: Upload binaries to release
@@ -43,9 +43,3 @@ jobs:
         asset_name: ${{ matrix.asset_name }}
         tag: ${{ github.ref }}
         prerelease: true
-
-# mkdir release
-# pushd release
-# mkdir bin
-# cp ../target/$cargo_target/release/focus bin/focus
-# tar jcf ../focus.tar.bz2 .
