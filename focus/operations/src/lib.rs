@@ -9,6 +9,7 @@ pub mod clone;
 pub mod detect_build_graph_changes;
 pub mod ensure_clean;
 pub mod event;
+pub mod filter;
 pub mod index;
 pub mod maintenance;
 pub mod project;

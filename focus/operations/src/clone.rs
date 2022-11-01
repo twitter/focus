@@ -581,6 +581,8 @@ fn set_up_sparse_repo(
 
     // N.B. we must re-open the repo because otherwise it has no trees...
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
+    // before running rest of setup config worktree view to be filtered
+    repo.working_tree().unwrap().set_filter_config(true)?;
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets, template)?;
     debug!(target_set = ?target_set, "Complete target set");

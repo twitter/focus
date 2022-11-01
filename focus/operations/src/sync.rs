@@ -77,6 +77,9 @@ pub enum SyncStatus {
 
     /// Preemptive syncing was cancelled because the machine is actively being used.
     SkippedPreemptiveSyncCancelledByActivity,
+
+    /// Syncing was cancelled because repo unfiltered view
+    SkippedUnfilterView,
 }
 
 /// An enumeration capturing which mechanism was used to perform the sync.
@@ -120,6 +123,16 @@ pub struct SyncResult {
 /// Synchronize the sparse repo's contents with the build graph. Returns a SyncResult indicating what happened.
 pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResult> {
     let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
+
+    if !repo.working_tree().unwrap().get_filter_config()? {
+        info!("Sync does not run when focus filter is off. Run \"focus filter on\" to turn filter back on.");
+        return Ok(SyncResult {
+            checked_out: false,
+            commit_id: None,
+            status: SyncStatus::SkippedUnfilterView,
+            mechanism: SyncMechanism::CachedOutline,
+        });
+    }
 
     let (preemptive, force) = match mode {
         SyncMode::Preemptive { force: forced } => (true, forced),

@@ -239,6 +239,16 @@ enum Subcommand {
         #[clap(subcommand)]
         subcommand: SelectionSubcommand,
     },
+    #[clap(hide = true)]
+    /// Update the sparse checkout to only contain selections
+    On {
+        /// Run a sync after worktree has been updated
+        #[clap(long = "sync")]
+        run_sync: bool,
+    },
+    #[clap(hide = true)]
+    /// Update the sparse checkout to contain all repo contents
+    Off {},
 }
 
 /// Helper method to extract subcommand name. Tool insights client uses this to set
@@ -318,6 +328,8 @@ fn feature_name_for(subcommand: &Subcommand) -> String {
         Subcommand::Selection { subcommand } => match subcommand {
             SelectionSubcommand::Save { .. } => "selection-save".to_string(),
         },
+        Subcommand::On { .. } => "filter-on".to_string(),
+        Subcommand::Off {} => "filter-off".to_string(),
     }
 }
 
@@ -1297,6 +1309,16 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 Ok(ExitCode(0))
             }
         },
+        Subcommand::On { run_sync } => {
+            let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
+            let _lock_file = hold_lock_file(&sparse_repo)?;
+            focus_operations::filter::run(sparse_repo, app, true, run_sync)
+        }
+        Subcommand::Off {} => {
+            let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
+            let _lock_file = hold_lock_file(&sparse_repo)?;
+            focus_operations::filter::run(sparse_repo, app, false, false)
+        }
     }
 }
 

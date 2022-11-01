@@ -16,6 +16,16 @@ pub fn run(
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = repo.selection_manager()?;
     let selection = selections.selection()?;
+    let is_filter_view = repo.working_tree().unwrap().get_filter_config()?;
+
+    eprintln!();
+    if is_filter_view {
+        eprintln!("Only selections are present in the worktree.");
+    } else {
+        eprintln!("All repo contents are present in the worktree.")
+    }
+    eprintln!();
+
     if target_types.is_empty() && !targets_flag {
         println!("{}", selection);
     } else {
