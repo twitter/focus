@@ -42,6 +42,7 @@ jobs:
         file: ${{ matrix.artifact_name }}
         asset_name: ${{ matrix.asset_name }}
         tag: ${{ github.ref }}
+        prerelease: true
 
 # mkdir release
 # pushd release
