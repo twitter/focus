@@ -16,7 +16,7 @@ dirs = "4.0.0"
 focus-internals = { path = "../internals" }
 focus-platform = { path = "../platform" }
 focus-util = { path = "../util" }
-git2 = { version = "0.14.2", features = [
+git2 = { version = "0.15", features = [
   "vendored-libgit2",
   "vendored-openssl",
 ] }
