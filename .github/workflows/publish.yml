@@ -6,7 +6,7 @@ name: Publish Twitter Artifacts
 on:
   push:
     tags:
-      - 'rel/.*'
+      - 'rel/*'
 
 jobs:
   publish:
