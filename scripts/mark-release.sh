@@ -40,6 +40,6 @@ if [[ $2 == "-f" ]]; then
     FORCE="-f"
 fi
 
-git tag $FORCE "v$NEW_VERSION"
-git push $FORCE origin "v$NEW_VERSION"
+git tag $FORCE "rel/v$NEW_VERSION"
+git push $FORCE origin "rel/v$NEW_VERSION"
 git push $FORCE origin HEAD
