@@ -32,7 +32,7 @@ jobs:
         mkdir release
         pushd release
         mkdir bin
-        cp ../target/release/focus bin/focus
+        cp ../target/release/focus1 bin/focus
         tar jcf ../${{ matrix.artifact_name }} .
         popd
     - name: Upload binaries to release
