@@ -105,6 +105,8 @@ impl Sandbox {
         }
     }
 
+    // TODO: Refactor naming temporary files into a separate function so that we don't have to waste time opening later...
+
     pub fn create_file(
         &self,
         prefix: Option<&str>,
