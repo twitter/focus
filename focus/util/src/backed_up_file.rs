@@ -25,7 +25,7 @@ impl BackedUpFile {
         name.push(".backup");
         backup_path.set_file_name(name);
 
-        std::fs::copy(&path, &backup_path).with_context(|| {
+        std::fs::copy(path, &backup_path).with_context(|| {
             format!(
                 "Copying {} to the backup file {}",
                 &path.display(),
