@@ -177,7 +177,7 @@ pub fn read_config<P: AsRef<Path>>(
     key: &str,
     app: Arc<App>,
 ) -> Result<Option<String>> {
-    if let Ok(result) = run_consuming_stdout(repo_path, &["config", key], app) {
+    if let Ok(result) = run_consuming_stdout(repo_path, ["config", key], app) {
         return Ok(Some(result));
     }
 
@@ -215,7 +215,7 @@ pub fn find_top_level(app: Arc<App>, path: impl AsRef<Path>) -> Result<PathBuf> 
     let path = path.as_ref();
     if let Ok(path) = std::fs::canonicalize(path) {
         Ok(PathBuf::from(
-            run_consuming_stdout(path, &["rev-parse", "--show-toplevel"], app)
+            run_consuming_stdout(path, ["rev-parse", "--show-toplevel"], app)
                 .context("Finding the repo's top level failed")?,
         ))
     } else {
@@ -227,15 +227,15 @@ pub fn find_top_level(app: Arc<App>, path: impl AsRef<Path>) -> Result<PathBuf> 
 }
 
 pub fn get_current_revision(app: Arc<App>, repo: &Path) -> Result<String> {
-    run_consuming_stdout(repo, &["rev-parse", "HEAD"], app)
+    run_consuming_stdout(repo, ["rev-parse", "HEAD"], app)
 }
 
 pub fn get_current_branch(app: Arc<App>, repo: &Path) -> Result<String> {
-    run_consuming_stdout(repo, &["branch", "--show-current"], app)
+    run_consuming_stdout(repo, ["branch", "--show-current"], app)
 }
 
 pub fn parse_ref(app: Arc<App>, repo: &Path, reference: &str) -> Result<String> {
-    run_consuming_stdout(repo, &["rev-parse", "--revs-only", reference], app)
+    run_consuming_stdout(repo, ["rev-parse", "--revs-only", reference], app)
 }
 
 pub fn get_merge_base(
@@ -326,7 +326,7 @@ impl BranchSwitch {
         if detach {
             cmd.arg("--detach");
         }
-        cmd.arg(&branch_name);
+        cmd.arg(branch_name);
 
         if let Some(alternate_path) = &self.alternate {
             cmd.env(

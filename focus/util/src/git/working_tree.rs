@@ -7,7 +7,6 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
-    vec,
 };
 
 use crate::{app::App, git_helper};
@@ -69,7 +68,7 @@ pub struct WorkingTreeState {
 impl WorkingTreeState {
     fn new() -> Self {
         let mut instance: WorkingTreeState = Default::default();
-        for d in vec![
+        for d in &[
             Disposition::Unmodified,
             Disposition::Modified,
             Disposition::FileTypeChanged,
@@ -81,7 +80,7 @@ impl WorkingTreeState {
             Disposition::Untracked,
             Disposition::Ignored,
         ] {
-            instance.by_disposition.insert(d, Vec::new());
+            instance.by_disposition.insert(*d, Vec::new());
         }
         instance
     }
@@ -144,7 +143,7 @@ pub fn status(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<WorkingTreeS
     let mut state = WorkingTreeState::new();
     let output = git_helper::run_consuming_stdout(
         repo_path,
-        &["status", "--porcelain=2", "-z", "--ignore-submodules=all"],
+        ["status", "--porcelain=2", "-z", "--ignore-submodules=all"],
         app,
     )?;
 
@@ -191,8 +190,8 @@ pub fn status(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<WorkingTreeS
             };
             flags.chars().collect()
         };
-        if flag_chars.len() < 1 {
-            bail!("Disposition flags too short");
+        if flag_chars.is_empty() {
+            bail!("Disposition flags empty");
         }
 
         let x = Disposition::try_from(flag_chars[0])?;

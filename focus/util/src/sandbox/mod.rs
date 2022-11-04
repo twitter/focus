@@ -123,7 +123,7 @@ impl Sandbox {
             path.set_extension(extension);
         }
         let qualified_path = parent.join(path);
-        let file = File::create(&qualified_path.as_path()).context("creating a temporary file")?;
+        let file = File::create(qualified_path.as_path()).context("creating a temporary file")?;
 
         Ok((file, qualified_path, serial))
     }

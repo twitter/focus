@@ -42,8 +42,6 @@ lazy_static! {
 ///
 /// The archive should preserve ownership, modes, and extended attributes on the files.
 pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<CreationResult>> {
-    let app = app.clone();
-
     let repo_path = repo_path.as_ref();
     let git_dir = git_helper::git_dir(repo_path)?;
     let repo = Repository::open(repo_path)
@@ -117,7 +115,7 @@ pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<Creat
 
     // Clean up the working tree by cleaning untracked files.
     let _ = git_helper::run_consuming_stdout(repo_path, vec!["clean", "-f", "-d"], app.clone())?;
-    let _ = git_helper::run_consuming_stdout(repo_path, vec!["reset", "--hard"], app.clone())?;
+    let _ = git_helper::run_consuming_stdout(repo_path, vec!["reset", "--hard"], app)?;
 
     Ok(Some(CreationResult { path: archive_path }))
 }
@@ -170,11 +168,7 @@ pub fn apply(
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("Failed to convert patch path to a string"))?;
 
-    let _ = git_helper::run_consuming_stdout(
-        repo_path,
-        vec!["apply", "-v", patch_path_str],
-        app.clone(),
-    )?;
+    let _ = git_helper::run_consuming_stdout(repo_path, vec!["apply", "-v", patch_path_str], app)?;
 
     // Remove the patch file
     std::fs::remove_file(&patch_path)

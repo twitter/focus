@@ -102,11 +102,11 @@ impl SandboxCommand {
         let stdin = stdin.unwrap_or_else(Stdio::null);
 
         let (stdout, stdout_path) = match stdout {
-            Some(path) => (Stdio::from(File::open(&path)?), path.to_owned()),
+            Some(path) => (Stdio::from(File::open(path)?), path.to_owned()),
             None => output_file("stdout").context("Failed preparing stdout")?,
         };
         let (stderr, stderr_path) = match stderr {
-            Some(path) => (Stdio::from(File::open(&path)?), path.to_owned()),
+            Some(path) => (Stdio::from(File::open(path)?), path.to_owned()),
             None => output_file("stderr").context("Failed preparing stderr")?,
         };
 
