@@ -300,7 +300,7 @@ impl CacheSynchronizer for GitBackedCacheSynchronizer {
             &vec_of_prev_commit_references[..],
         )?;
 
-        let refspecs = vec![refspec_fmt(&self.namespace, &keyset_id)];
+        let refspecs = vec![refspec_fmt(&self.namespace, keyset_id)];
 
         self.repo
             .reference(
@@ -593,7 +593,7 @@ mod tests {
 
     #[test]
     pub fn refspec_formatting() {
-        assert_eq!(refspec_fmt("cache", &keyset_id_1()), String::from("+refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000:refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000"));
+        assert_eq!(refspec_fmt("cache", keyset_id_1()), String::from("+refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000:refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000"));
         assert_eq!(
             refspec_fmt("cache", "foo"),
             String::from("+refs/tags/cache/foo:refs/tags/cache/foo")
@@ -603,7 +603,7 @@ mod tests {
     #[test]
     pub fn tag_formatting() {
         assert_eq!(
-            tag_fmt("cache", &keyset_id_1()),
+            tag_fmt("cache", keyset_id_1()),
             String::from("refs/tags/cache/abcd1abcd1abcd1abcd100000000000000000000"),
         );
         assert_eq!(tag_fmt("cache", "foo"), String::from("refs/tags/cache/foo"));

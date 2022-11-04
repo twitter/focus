@@ -138,7 +138,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
         let path = self.make_path(name);
         debug!(?path, %name, "Insert");
         self.underlying.insert(name.to_owned(), entity.clone());
-        store_model(&path.as_path(), entity)
+        store_model(path.as_path(), entity)
     }
 
     /// Remove an entity by name from the `underlying` cache and erase it from disk.
@@ -179,7 +179,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
     {
         for (name, entity) in self.underlying.iter() {
             let path = self.make_path(name);
-            store_model(&path.as_path(), entity)
+            store_model(path.as_path(), entity)
                 .with_context(|| format!("Storing entity to {}", path.display()))?
         }
 
@@ -198,7 +198,7 @@ impl<T: Default + DeserializeOwned + Serialize> FileBackedCollection<T> {
             serde_json::to_string(entity)?,
             path.display()
         );
-        store_model(&path.as_path(), entity)
+        store_model(path.as_path(), entity)
             .with_context(|| format!("Storing entity to {}", path.display()))
     }
 }
@@ -226,8 +226,8 @@ mod tests {
         focus_testing::init_logging();
 
         let dir = tempfile::tempdir()?;
-        let mut collection = make_collection(&dir.path())?;
-        let mut alternate_collection = make_collection(&dir.path())?;
+        let mut collection = make_collection(dir.path())?;
+        let mut alternate_collection = make_collection(dir.path())?;
 
         let name = "jeff";
         collection.insert(
@@ -259,7 +259,7 @@ mod tests {
         let dir = tempfile::tempdir()?;
         let name = "lebowski";
         {
-            let mut collection = make_collection(&dir.path())?;
+            let mut collection = make_collection(dir.path())?;
 
             collection.insert(
                 name,
@@ -287,7 +287,7 @@ mod tests {
         }
 
         {
-            let collection = make_collection(&dir.path())?;
+            let collection = make_collection(dir.path())?;
             let (actual_name, entity) = collection.underlying.iter().next().unwrap();
             assert_eq!(actual_name, name);
             assert_eq!(entity.name, "Maude Lebowski");
@@ -301,7 +301,7 @@ mod tests {
         focus_testing::init_logging();
         let dir = tempfile::tempdir()?;
         {
-            let mut collection = make_collection(&dir.path())?;
+            let mut collection = make_collection(dir.path())?;
             {
                 collection.underlying.insert(
                     String::from("foo"),
@@ -321,7 +321,7 @@ mod tests {
         }
 
         {
-            let collection = make_collection(&dir.path())?;
+            let collection = make_collection(dir.path())?;
             assert!(collection.underlying.contains_key("foo"));
             assert!(collection.underlying.contains_key("bar"));
         }

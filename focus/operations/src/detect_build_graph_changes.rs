@@ -37,7 +37,7 @@ fn find_committed_changes(app: Arc<App>, repo_path: &Path) -> Result<Vec<PathBuf
 
     let revspec = format!("{}..HEAD", &sync_state_oid);
     let output =
-        git_helper::run_consuming_stdout(repo_path, &["diff", "--name-only", &revspec], app)?;
+        git_helper::run_consuming_stdout(repo_path, ["diff", "--name-only", &revspec], app)?;
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
     for line in output.lines() {
         let parsed = PathBuf::from(line);
@@ -51,7 +51,7 @@ fn find_committed_changes(app: Arc<App>, repo_path: &Path) -> Result<Vec<PathBuf
 
 fn find_uncommitted_changes(app: Arc<App>, repo: &Path) -> Result<Vec<PathBuf>> {
     let output =
-        git_helper::run_consuming_stdout(repo, &["status", "--porcelain", "--no-renames"], app)?;
+        git_helper::run_consuming_stdout(repo, ["status", "--porcelain", "--no-renames"], app)?;
     let mut build_involved_changed_paths = Vec::<PathBuf>::new();
     for line in output.lines() {
         let mut tokens = line.split_ascii_whitespace().take(2);

@@ -584,7 +584,7 @@ mod tests {
 
     fn assert_repo_defaults_set(config: &git2::Config) {
         for (k, v) in CONFIG_DEFAULTS.iter() {
-            let val = config.get_string(*k).unwrap();
+            let val = config.get_string(k).unwrap();
             assert_eq!(
                 val, *v,
                 "values for key {} were not equal: {} != {}",

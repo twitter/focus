@@ -29,7 +29,7 @@ use tracing::{debug, error, info, info_span, warn};
 use url::Url;
 
 pub fn run_clone(mut clone_builder: CloneBuilder, app: Arc<App>) -> Result<()> {
-    (&mut clone_builder).add_clone_args(vec!["--progress"]);
+    clone_builder.add_clone_args(vec!["--progress"]);
     let (mut cmd, scmd) = clone_builder.build(app)?;
 
     scmd.ensure_success_or_log(&mut cmd, SandboxCommandOutput::Stderr)
@@ -487,7 +487,7 @@ fn clone_local(
     }
 
     let dense_repo = Repository::open(&dense_repo_path).context("Opening dense repo")?;
-    let sparse_repo = Repository::open(&sparse_repo_path).context("Opening sparse repo")?;
+    let sparse_repo = Repository::open(sparse_repo_path).context("Opening sparse repo")?;
 
     if copy_branches {
         let span = info_span!("Copying branches");
@@ -868,7 +868,7 @@ fn set_up_hooks(sparse_repo: &Path) -> Result<()> {
 fn fetch_default_remote(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
     let (mut cmd, scmd) = git_helper::git_command(app)?;
     let _ = scmd.ensure_success_or_log(
-        cmd.current_dir(&sparse_repo).arg("fetch").arg("origin"),
+        cmd.current_dir(sparse_repo).arg("fetch").arg("origin"),
         SandboxCommandOutput::Stderr,
     )?;
 
@@ -1280,7 +1280,7 @@ mod twttr_test {
                 .map(|m| {
                     m.unwrap()
                         .path()
-                        .strip_prefix(&outlining_tree_path)
+                        .strip_prefix(outlining_tree_path)
                         .unwrap()
                         .to_owned()
                 })
@@ -1308,7 +1308,7 @@ mod twttr_test {
                 .map(|m| {
                     m.unwrap()
                         .path()
-                        .strip_prefix(&working_tree_path)
+                        .strip_prefix(working_tree_path)
                         .unwrap()
                         .to_owned()
                 })
