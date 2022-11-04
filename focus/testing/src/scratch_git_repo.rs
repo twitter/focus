@@ -270,6 +270,25 @@ impl ScratchGitRepo {
         Ok(())
     }
 
+    pub fn remove_file(&self, relative_filename: impl AsRef<Path>) -> Result<()> {
+        if !self
+            .git_binary
+            .command()
+            .arg("rm")
+            .arg("--")
+            .arg(relative_filename.as_ref())
+            .current_dir(&self.path)
+            .spawn()
+            .context("running `git rm`")?
+            .wait()
+            .context("`git rm` failed")?
+            .success()
+        {
+            bail!("`git rm` exited abnormally");
+        }
+        Ok(())
+    }
+
     pub fn commit_all(&self, message: impl AsRef<str>) -> Result<git2::Oid> {
         // Run `git commit`
         if !self
