@@ -13,4 +13,4 @@ members = [
 ]
 
 [patch.crates-io]
-git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "a03dc826f17e668454a76150b9f5fbddda5297da" }
+git2 = { git = "https://github.com/bierbaum/git2-rs", rev = "52716b2148888cf9a3b605eed9414544c12a778f" }

@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = { version = "1.0.45", features = ["backtrace"] }
 focus-internals = { path = "../internals" }
 focus-operations = { path = "../operations" }
-git2 = { version = "0.15", features = [
+git2 = { version = "0.14.2", features = [
   "vendored-libgit2",
   "vendored-openssl",
 ] }

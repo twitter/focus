@@ -463,9 +463,9 @@ impl ConfigExt for git2::Config {
 
         let mut values: Vec<String> = Vec::new();
 
-        configs.for_each(|entry| {
-            values.push(entry.value().unwrap().to_owned());
-        })?;
+        for config_entry_r in configs.into_iter() {
+            values.push(config_entry_r?.value().unwrap().to_owned());
+        }
 
         Ok(values)
     }
@@ -508,12 +508,13 @@ impl ConfigExt for git2::Config {
         let entries = self.entries(glob)?;
         let mut result: Vec<(String, String)> = Vec::new();
 
-        entries.for_each(|entry| {
-            if let (Some(name), Some(value)) = (entry.name(), entry.value()) {
-                result.push((name.to_owned(), value.to_owned()));
+        for entry in entries.into_iter() {
+            let entry = entry?;
+            match (entry.name(), entry.value()) {
+                (Some(name), Some(value)) => result.push((name.to_owned(), value.to_owned())),
+                _ => continue,
             }
-        })?;
-
+        }
         Ok(result)
     }
 

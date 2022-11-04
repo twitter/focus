@@ -12,7 +12,7 @@ content-addressed-cache = { path = "../../content-addressed-cache" }
 crossbeam = "0.8.2"
 dirs = "4.0.0"
 focus-util = { path = "../util" }
-git2 = { version = "0.15", features = [
+git2 = { version = "0.14.2", features = [
   "vendored-libgit2",
   "vendored-openssl",
 ] }

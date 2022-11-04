@@ -10,7 +10,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "4.0.0"
 filetime = "0.2"
 focus-testing = { path = "../testing" }
-git2 = { version = "0.15", features = [
+git2 = { version = "0.14.2", features = [
   "vendored-libgit2",
   "vendored-openssl",
 ] }

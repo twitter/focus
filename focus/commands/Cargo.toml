@@ -15,7 +15,7 @@ focus-operations = { path = "../operations" }
 focus-testing = { path = "../testing" }
 focus-tracing = { path = "../tracing" }
 focus-util = { path = "../util" }
-git2 = { version = "0.15", features = [
+git2 = { version = "0.14.2", features = [
   "vendored-libgit2",
   "vendored-openssl",
 ] }
