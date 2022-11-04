@@ -235,7 +235,7 @@ impl Events {
 
         let mut result: Vec<Event> = Vec::new();
 
-        let bytes = std::fs::read(&path)?;
+        let bytes = std::fs::read(path)?;
         debug!("parsing: {:?}", &path);
         for line in BufReader::new(bytes.as_slice()).lines() {
             let s = line?;
@@ -664,7 +664,7 @@ mod tests {
     #[test]
     fn test_parse_examples() -> Result<()> {
         for (k, v) in data::DATA.iter() {
-            let xyz: serde_json::Result<Event> = serde_json::from_str(*v);
+            let xyz: serde_json::Result<Event> = serde_json::from_str(v);
             if let Err(e) = xyz {
                 println!("failure: {}, {:?}", *k, e);
                 bail!(e)

@@ -42,7 +42,7 @@ impl LocalCacheBackend {
 impl ProjectCacheBackend for LocalCacheBackend {
     fn load_model(&self, url: Url) -> Result<Vec<u8>> {
         let key = url.path();
-        if let Ok(Some(repr)) = self.database.borrow().get(&key) {
+        if let Ok(Some(repr)) = self.database.borrow().get(key) {
             debug!(?key, "GET: Found");
             Ok(repr)
         } else {
@@ -55,7 +55,7 @@ impl ProjectCacheBackend for LocalCacheBackend {
         let key = url.path();
         debug!(?key, "PUT");
         self.database
-            .put(&key, value)
+            .put(key, value)
             .with_context(|| format!("Writing key '{}' failed", &key))
     }
 

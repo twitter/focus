@@ -36,7 +36,7 @@ fn manifest_path(backend: &dyn ProjectCacheBackend, build_graph_hash: &Vec<u8>) 
     let path = format!(
         "{}/{}.manifest_v{}.json.gz",
         url.path(),
-        hex::encode(&build_graph_hash).as_str(),
+        hex::encode(build_graph_hash).as_str(),
         PROJECT_CACHE_VERSION,
     );
     url.set_path(&path);
@@ -53,7 +53,7 @@ fn export_path(
     let path = format!(
         "{}/{}_{}_{}.export_v{}.json.gz",
         url.path(),
-        hex::encode(&build_graph_hash).as_str(),
+        hex::encode(build_graph_hash).as_str(),
         shard_index + 1,
         shard_count,
         PROJECT_CACHE_VERSION,

@@ -171,7 +171,7 @@ impl RepoPairFixture {
             .command()
             .arg("fetch")
             .arg(remote_name)
-            .current_dir(&path)
+            .current_dir(path)
             .assert()
             .success();
         let fetch_head_path = path.join(".git").join("FETCH_HEAD");
@@ -195,7 +195,7 @@ impl RepoPairFixture {
             .arg("pull")
             .arg(remote_name)
             .arg(branch)
-            .current_dir(&path)
+            .current_dir(path)
             .assert()
             .success();
 

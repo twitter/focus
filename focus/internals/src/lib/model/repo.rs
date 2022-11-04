@@ -695,7 +695,7 @@ pub struct Repo {
 
 impl Repo {
     pub fn open(path: &Path, app: Arc<App>) -> Result<Self> {
-        let repo = git2::Repository::open(&path)
+        let repo = git2::Repository::open(path)
             .with_context(|| format!("Opening repo {}", path.display()))
             .context("Failed to open repo")?;
         if repo.is_bare() {

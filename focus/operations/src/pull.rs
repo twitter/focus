@@ -151,14 +151,14 @@ pub(crate) mod testing {
         // Create `refs/focus/sync`
         let _ = git_helper::run_consuming_stdout(
             repo_dir,
-            &["update-ref", "refs/focus/sync", &head],
+            ["update-ref", "refs/focus/sync", &head],
             app.clone(),
         )?;
 
         // Create a default prefetch ref
         let _ = git_helper::run_consuming_stdout(
             repo_dir,
-            &["update-ref", "refs/prefetch/remotes/origin/master", &head],
+            ["update-ref", "refs/prefetch/remotes/origin/master", &head],
             app.clone(),
         )?;
 
@@ -168,7 +168,7 @@ pub(crate) mod testing {
         // Create a default remote ref
         let _ = git_helper::run_consuming_stdout(
             repo_dir,
-            &["update-ref", "refs/remotes/origin/master", &head],
+            ["update-ref", "refs/remotes/origin/master", &head],
             app.clone(),
         )?;
 
@@ -185,7 +185,7 @@ pub(crate) mod testing {
         // Update prefetch default to new commit
         let _ = git_helper::run_consuming_stdout(
             repo_dir,
-            &[
+            [
                 "update-ref",
                 "refs/prefetch/remotes/origin/master",
                 &new_commit,
@@ -194,7 +194,7 @@ pub(crate) mod testing {
         )?;
 
         // Switch back to `main` branch
-        let _ = git_helper::run_consuming_stdout(repo_dir, &["checkout", "main"], app.clone())?;
+        let _ = git_helper::run_consuming_stdout(repo_dir, ["checkout", "main"], app.clone())?;
 
         // Since focus/sync still points to `main` HEAD, merge base validation should still fail
         assert!(validate_merge_base(app.clone(), repo_dir).is_err());
@@ -202,7 +202,7 @@ pub(crate) mod testing {
         // Update focus/sync to new commit
         let _ = git_helper::run_consuming_stdout(
             repo_dir,
-            &["update-ref", "refs/focus/sync", &new_commit],
+            ["update-ref", "refs/focus/sync", &new_commit],
             app.clone(),
         )?;
 

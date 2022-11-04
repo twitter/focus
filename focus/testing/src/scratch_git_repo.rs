@@ -86,7 +86,7 @@ impl ScratchGitRepo {
             .arg("add")
             .arg("--")
             .arg(".")
-            .current_dir(&destination_path)
+            .current_dir(destination_path)
             .assert()
             .success();
 
@@ -95,7 +95,7 @@ impl ScratchGitRepo {
             .arg("commit")
             .arg("-m")
             .arg("Initial import")
-            .current_dir(&destination_path)
+            .current_dir(destination_path)
             .assert()
             .success();
 
@@ -227,7 +227,7 @@ impl ScratchGitRepo {
         qualified_origin.push(origin.as_os_str());
         git_binary
             .command()
-            .args(&[
+            .args([
                 OsStr::new("clone"),
                 &qualified_origin,
                 destination.as_os_str(),
