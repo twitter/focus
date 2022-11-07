@@ -972,9 +972,6 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             paths::assert_focused_repo(&sparse_repo)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            focus_operations::ensure_clean::run(&sparse_repo, app.clone())
-                .context("Ensuring working trees are clean failed")?;
-
             if interactive {
                 focus_operations::selection::add_interactive(
                     &sparse_repo,
@@ -1000,8 +997,6 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
         } => {
             let sparse_repo = paths::find_repo_root_from(app.clone(), std::env::current_dir()?)?;
             let _lock_file = hold_lock_file(&sparse_repo)?;
-            focus_operations::ensure_clean::run(&sparse_repo, app.clone())
-                .context("Ensuring working trees are clean failed")?;
             focus_operations::selection::remove(
                 &sparse_repo,
                 true,
