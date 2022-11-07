@@ -73,7 +73,7 @@ fn add_updated_content(scratch_repo: &ScratchGitRepo) -> Result<git2::Oid> {
 #[test]
 fn sync_upstream_changes_with_incremental_sync() -> Result<()> {
     let used_sync_mode = sync_upstream_changes_internal(SyncMode::Incremental)?;
-    assert_eq!(used_sync_mode, SyncMechanism::CachedOutline);
+    assert_eq!(used_sync_mode, SyncMechanism::IncrementalOutline);
     Ok(())
 }
 
@@ -405,7 +405,7 @@ fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
 fn sync_skips_checkout_with_unchanged_profile_with_incremental_sync() -> Result<()> {
     let sync_mechanism_used =
         sync_skips_checkout_with_unchanged_profile_internal(SyncMode::Incremental)?;
-    assert_eq!(sync_mechanism_used, SyncMechanism::CachedOutline);
+    assert_eq!(sync_mechanism_used, SyncMechanism::IncrementalOutline);
     Ok(())
 }
 
