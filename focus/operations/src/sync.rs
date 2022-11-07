@@ -147,8 +147,8 @@ pub struct SyncResult {
 
 /// Synchronize the sparse repo's contents with the build graph. Returns a SyncResult indicating what happened.
 pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
-    let repo = Repo::open(request.sparse_repo_path(), app.clone())
-        .context("Failed to open the repo")?;
+    let repo =
+        Repo::open(request.sparse_repo_path(), app.clone()).context("Failed to open the repo")?;
 
     if !repo.working_tree().unwrap().get_filter_config()? {
         info!("Sync does not run when focus filter is off. Run \"focus filter on\" to turn filter back on.");
@@ -232,9 +232,6 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
     let backed_up_sparse_profile: Option<BackedUpFile> = if preemptive {
         None
     } else {
-        super::ensure_clean::run(request.sparse_repo_path(), app.clone())
-            .context("Failed trying to determine whether working trees were clean")?;
-
         ti_client
             .get_context()
             .add_to_custom_map("total_target_count", targets.len().to_string());
