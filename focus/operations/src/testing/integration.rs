@@ -311,13 +311,14 @@ pub fn configure_ci_for_dense_repo(fixture: &RepoPairFixture) -> Result<()> {
 #[cfg(test)]
 mod twttr_test {
     use super::RepoPairFixture;
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use focus_testing::init_logging;
 
     #[test]
     fn test_ci_config_is_set_in_dense_repo() -> Result<()> {
         init_logging();
         let fixture = RepoPairFixture::new()?;
+        super::configure_ci_for_dense_repo(&fixture)?;
 
         let repo = fixture.dense_repo.repo()?;
 
