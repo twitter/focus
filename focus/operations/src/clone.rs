@@ -358,6 +358,7 @@ pub fn run(
     let configure_repo_then_move_in_place = || -> Result<()> {
         let template = match origin {
             Origin::Local(dense_repo_path) => {
+                tracing::info!(path = ?dense_repo_path, "Cloning from local path");
                 clone_local(
                     &dense_repo_path,
                     &tmp_sparse_repo_path,
@@ -370,6 +371,7 @@ pub fn run(
                 template
             }
             Origin::Remote(url) => {
+                tracing::info!(?url, "Cloning from remote");
                 clone_remote(
                     url.clone(),
                     &tmp_sparse_repo_path,

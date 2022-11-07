@@ -25,6 +25,8 @@ use maplit::hashmap;
 use strum_macros;
 use tracing::{debug, error, info, warn};
 
+use crate::sync::SyncRequest;
+
 pub use self::launchd::{schedule_disable, schedule_enable, Launchctl, ScheduleOpts};
 
 pub(crate) const DEFAULT_FOCUS_PATH: &str = "/opt/twitter_mde/bin/focus";
@@ -274,8 +276,10 @@ impl Runner<'_> {
         repo_path: &Path,
     ) -> Result<crate::sync::SyncStatus> {
         let sync_result = crate::sync::run(
-            repo_path,
-            crate::sync::SyncMode::Preemptive { force: false },
+            &SyncRequest::new(
+                repo_path,
+                crate::sync::SyncMode::Preemptive { force: false },
+            ),
             self.app.clone(),
         )
         .with_context(|| format!("Preemptively syncing in {}", repo_path.display()))?;

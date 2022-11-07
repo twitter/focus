@@ -8,7 +8,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use focus_util::app::{App, ExitCode};
 
-use crate::sync::SyncMode;
+use crate::sync::{SyncMode, SyncRequest};
 
 pub fn enable(
     app: Arc<App>,
@@ -30,7 +30,7 @@ pub fn disable(app: Arc<App>, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> 
 }
 
 pub fn sync(app: Arc<App>, sparse_repo: PathBuf) -> anyhow::Result<ExitCode> {
-    super::sync::run(&sparse_repo, SyncMode::Preemptive { force: true }, app)
-        .context("Running preemptive sync")?;
+    let request = SyncRequest::new(sparse_repo, SyncMode::Preemptive { force: true });
+    super::sync::run(&request, app).context("Running preemptive sync")?;
     Ok(ExitCode(0))
 }

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use focus_operations::sync::SyncRequest;
 use focus_util::app::App;
 
 pub fn bench_sync(c: &mut Criterion) {
@@ -15,8 +16,7 @@ pub fn bench_sync(c: &mut Criterion) {
 
     println!("Warming up with initial sync");
     focus_operations::sync::run(
-        &repo_path,
-        focus_operations::sync::SyncMode::Incremental,
+        &SyncRequest::new(&repo_path, focus_operations::sync::SyncMode::Incremental),
         app.clone(),
     )
     .unwrap();
@@ -26,8 +26,7 @@ pub fn bench_sync(c: &mut Criterion) {
     group.bench_function("focus_operations::sync::run", |b| {
         b.iter(|| {
             focus_operations::sync::run(
-                &repo_path,
-                focus_operations::sync::SyncMode::Incremental,
+                &SyncRequest::new(&repo_path, focus_operations::sync::SyncMode::Incremental),
                 app.clone(),
             )
             .unwrap()

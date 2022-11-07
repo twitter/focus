@@ -12,7 +12,7 @@ use focus_util::app::App;
 use focus_util::backed_up_file::BackedUpFile;
 use tracing::{debug, info, warn};
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -105,6 +105,31 @@ impl fmt::Display for SyncMechanism {
     }
 }
 
+pub struct SyncRequest {
+    /// The path to the sparse repo.
+    sparse_repo: PathBuf,
+
+    /// Which sync mechanism to use.
+    mode: SyncMode,
+}
+
+impl SyncRequest {
+    pub fn new(sparse_repo: impl AsRef<Path>, mode: SyncMode) -> Self {
+        Self {
+            sparse_repo: sparse_repo.as_ref().to_owned(),
+            mode,
+        }
+    }
+
+    pub fn sparse_repo_path(&self) -> &Path {
+        &self.sparse_repo.as_path()
+    }
+
+    pub fn mode(&self) -> SyncMode {
+        self.mode
+    }
+}
+
 /// State describing the outcome of a sync.
 pub struct SyncResult {
     /// Whether the working tree was checked out during the sync
@@ -121,8 +146,9 @@ pub struct SyncResult {
 }
 
 /// Synchronize the sparse repo's contents with the build graph. Returns a SyncResult indicating what happened.
-pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResult> {
-    let repo = Repo::open(sparse_repo, app.clone()).context("Failed to open the repo")?;
+pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
+    let repo = Repo::open(request.sparse_repo_path().as_ref(), app.clone())
+        .context("Failed to open the repo")?;
 
     if !repo.working_tree().unwrap().get_filter_config()? {
         info!("Sync does not run when focus filter is off. Run \"focus filter on\" to turn filter back on.");
@@ -134,7 +160,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
         });
     }
 
-    let (preemptive, force) = match mode {
+    let (preemptive, force) = match request.mode {
         SyncMode::Preemptive { force: forced } => (true, forced),
         _ => (false, false),
     };
@@ -177,7 +203,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
         }
     }
 
-    let _lock = locking::hold_lock(sparse_repo, Path::new("sync.lock"))
+    let _lock = locking::hold_lock(request.sparse_repo_path().as_ref(), Path::new("sync.lock"))
         .context("Failed to obtain synchronization lock")?;
 
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
@@ -206,7 +232,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
     let backed_up_sparse_profile: Option<BackedUpFile> = if preemptive {
         None
     } else {
-        super::ensure_clean::run(sparse_repo, app.clone())
+        super::ensure_clean::run(request.sparse_repo_path(), app.clone())
             .context("Failed trying to determine whether working trees were clean")?;
 
         ti_client
@@ -301,7 +327,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 Ok(inner)
             }
             // No answer from project cache when one was required
-            _ if mode == SyncMode::RequireProjectCache => Err(anyhow::anyhow!(
+            _ if request.mode() == SyncMode::RequireProjectCache => Err(anyhow::anyhow!(
                 SYNC_FROM_PROJECT_CACHE_REQUIRED_ERROR_MESSAGE,
             )),
             _ => {
@@ -311,7 +337,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 }
 
                 // If one-shot Bazel resolution is explicitly requested, or is allowed by config, use it
-                let one_shot = match mode {
+                let one_shot = match request.mode() {
                     SyncMode::Incremental => repo.get_bazel_oneshot_resolution()?,
                     SyncMode::Preemptive { .. } => false,
                     SyncMode::OneShot => true,
