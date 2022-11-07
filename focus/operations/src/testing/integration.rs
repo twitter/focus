@@ -22,7 +22,10 @@ use focus_util::app::App;
 
 use focus_internals::{model::repo::Repo, tracker::Tracker};
 
-use crate::{clone::CloneArgs, sync::SyncMode};
+use crate::{
+    clone::CloneArgs,
+    sync::{SyncMode, SyncRequest},
+};
 
 pub use focus_testing::GitBinary;
 
@@ -129,8 +132,7 @@ impl RepoPairFixture {
     pub fn perform_sync(&self) -> Result<bool> {
         self.ensure_sync_mode()?;
         crate::sync::run(
-            &self.sparse_repo_path,
-            self.sync_mode.get(),
+            &SyncRequest::new(&self.sparse_repo_path, self.sync_mode.get()),
             self.app.clone(),
         )
         .map(|result| result.checked_out)

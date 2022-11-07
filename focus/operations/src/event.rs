@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::{fs::File, path::Path, sync::Arc};
 use tracing::debug;
 
-use crate::sync::SyncMode;
+use crate::sync::{SyncMode, SyncRequest};
 
 /// Initializes hooks in passed in repo
 pub fn init(repo_path: &Path) -> Result<()> {
@@ -45,7 +45,7 @@ fn write_hooks_to_dir(hooks: &[&str], dir: &Path) -> Result<()> {
 pub fn post_merge(app: Arc<App>) -> Result<ExitCode> {
     let current_dir = std::env::current_dir().context("Failed to obtain current directory")?;
     debug!(sparse_repo = ?current_dir.display(), "Running post-merge hook");
-    crate::sync::run(&current_dir, SyncMode::Incremental, app)?;
+    let _response = crate::sync::run(&SyncRequest::new(&current_dir, SyncMode::Incremental), app)?;
     Ok(ExitCode(0))
 }
 

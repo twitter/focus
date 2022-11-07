@@ -30,7 +30,7 @@ use focus_operations::{
     maintenance::{self, ScheduleOpts},
     project::lint,
     selection::save,
-    sync::SyncMode,
+    sync::{SyncMode, SyncRequest},
 };
 use strum::VariantNames;
 use termion::{color, style};
@@ -848,7 +848,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             } else {
                 SyncMode::Incremental
             };
-            focus_operations::sync::run(&sparse_repo, mode, app)?;
+            focus_operations::sync::run(&SyncRequest::new(&sparse_repo, mode), app)?;
             Ok(ExitCode(0))
         }
 

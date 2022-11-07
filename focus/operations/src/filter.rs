@@ -7,6 +7,8 @@ use focus_util::app::{App, ExitCode};
 use std::{path::Path, sync::Arc};
 use tracing::info;
 
+use crate::sync::SyncRequest;
+
 pub fn run(
     sparse_repo: impl AsRef<Path>,
     app: Arc<App>,
@@ -40,8 +42,7 @@ pub fn run(
         repo.working_tree().unwrap().switch_filter_on(app.clone())?;
         if run_sync {
             crate::sync::run(
-                sparse_repo.as_ref(),
-                crate::sync::SyncMode::Incremental,
+                &SyncRequest::new(sparse_repo.as_ref(), crate::sync::SyncMode::Incremental),
                 app,
             )?;
         }

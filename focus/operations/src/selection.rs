@@ -29,7 +29,7 @@ use focus_internals::{
     target::Target,
 };
 
-use crate::sync::SyncMode;
+use crate::sync::{SyncMode, SyncRequest};
 
 pub fn save(
     sparse_repo: impl AsRef<Path>,
@@ -168,8 +168,11 @@ fn mutate(
         if sync_if_changed {
             info!("Synchronizing after selection changed");
             // TODO: Use the correct sync mode here. Sync will override for SyncMode::Incremental, but that feels janky.
-            let result = super::sync::run(sparse_repo.as_ref(), SyncMode::Incremental, app)
-                .context("Synchronizing changes")?;
+            let result = super::sync::run(
+                &SyncRequest::new(sparse_repo.as_ref(), SyncMode::Incremental),
+                app,
+            )
+            .context("Synchronizing changes")?;
             synced = result.status == super::sync::SyncStatus::Success;
             backup.unwrap().discard();
         }

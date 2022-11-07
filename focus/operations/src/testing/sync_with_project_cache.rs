@@ -8,7 +8,7 @@ use focus_util::{app::ExitCode, git_helper};
 
 use crate::{
     project_cache,
-    sync::{SyncMechanism, SYNC_FROM_PROJECT_CACHE_REQUIRED_ERROR_MESSAGE},
+    sync::{SyncMechanism, SyncRequest, SYNC_FROM_PROJECT_CACHE_REQUIRED_ERROR_MESSAGE},
     testing::integration::RepoPairFixture,
 };
 
@@ -99,8 +99,10 @@ fn project_cache_falls_back_with_non_project_targets_selected() -> Result<()> {
 
     // Verify that syncing with the project cache fails
     match crate::sync::run(
-        &fixture.underlying.sparse_repo_path,
-        crate::sync::SyncMode::RequireProjectCache,
+        &SyncRequest::new(
+            &fixture.underlying.sparse_repo_path,
+            crate::sync::SyncMode::RequireProjectCache,
+        ),
         app,
     ) {
         Err(e) => {
@@ -133,8 +135,10 @@ fn project_cache_answers_with_only_projects_selected() -> Result<()> {
 
     // Verify that syncing with the project cache fails
     let result = crate::sync::run(
-        &fixture.underlying.sparse_repo_path,
-        crate::sync::SyncMode::RequireProjectCache,
+        &SyncRequest::new(
+            &fixture.underlying.sparse_repo_path,
+            crate::sync::SyncMode::RequireProjectCache,
+        ),
         app,
     )?;
     assert_eq!(result.mechanism, SyncMechanism::ProjectCache);
@@ -170,8 +174,10 @@ fn project_cache_generates_all_projects() -> Result<()> {
     )?;
 
     let result = crate::sync::run(
-        &fixture.underlying.sparse_repo_path,
-        crate::sync::SyncMode::RequireProjectCache,
+        &SyncRequest::new(
+            &fixture.underlying.sparse_repo_path,
+            crate::sync::SyncMode::RequireProjectCache,
+        ),
         app,
     )?;
     assert_eq!(result.mechanism, SyncMechanism::ProjectCache);
