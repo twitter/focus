@@ -86,7 +86,7 @@ pub enum SyncStatus {
 #[derive(Debug, PartialEq, Eq)]
 pub enum SyncMechanism {
     /// The sync was performed via outlining, incorporating data from the content addressed cache where possible.
-    CachedOutline,
+    IncrementalOutline,
 
     /// The sync was performed via outlining in one shot, without using the content addressed cache.
     OneShotOutline,
@@ -98,7 +98,7 @@ pub enum SyncMechanism {
 impl fmt::Display for SyncMechanism {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SyncMechanism::CachedOutline => write!(f, "outline"),
+            SyncMechanism::IncrementalOutline => write!(f, "outline"),
             SyncMechanism::OneShotOutline => write!(f, "one-shot-outline"),
             SyncMechanism::ProjectCache => write!(f, "project-cache"),
         }
@@ -130,7 +130,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
             checked_out: false,
             commit_id: None,
             status: SyncStatus::SkippedUnfilterView,
-            mechanism: SyncMechanism::CachedOutline,
+            mechanism: SyncMechanism::IncrementalOutline,
         });
     }
 
@@ -145,7 +145,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 checked_out: false,
                 commit_id: None,
                 status: SyncStatus::SkippedPreemptiveSyncDisabled,
-                mechanism: SyncMechanism::CachedOutline,
+                mechanism: SyncMechanism::IncrementalOutline,
             });
         }
 
@@ -172,7 +172,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
                 checked_out: false,
                 commit_id: None,
                 status: SyncStatus::SkippedPreemptiveSyncCancelledByActivity,
-                mechanism: SyncMechanism::CachedOutline,
+                mechanism: SyncMechanism::IncrementalOutline,
             });
         }
     }
@@ -189,7 +189,7 @@ pub fn run(sparse_repo: &Path, mode: SyncMode, app: Arc<App>) -> Result<SyncResu
     let selection = selections.computed_selection()?;
     let targets = selections.compute_complete_target_set()?;
 
-    let mut mechanism = SyncMechanism::CachedOutline;
+    let mut mechanism = SyncMechanism::IncrementalOutline;
 
     // Add target/project to TI data.
     let app_for_ti_client = app.clone();
