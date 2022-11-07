@@ -24,7 +24,6 @@ use crate::{app::App, git_helper, lock_file::LockFile};
 
 use super::model::Disposition;
 
-pub struct CreationResult {
 pub struct SnapshotResult {
     pub path: PathBuf,
 }
@@ -229,7 +228,8 @@ mod testing {
         {
             let untracked_entries =
                 initial_status.find_entries_with_disposition(Disposition::Untracked)?;
-            let untracked_entry = untracked_entries.first()
+            let untracked_entry = untracked_entries
+                .first()
                 .ok_or_else(|| anyhow::anyhow!("Expected an untracked entry and there was none"))?;
             assert_eq!(untracked_entry.path.as_path(), &untracked_file_name);
 

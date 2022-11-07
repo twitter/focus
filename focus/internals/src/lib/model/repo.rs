@@ -777,7 +777,7 @@ impl Repo {
             .context("Configuring the outlining tree")?;
 
         let mut outline_patterns = if let Some(cache) = cache {
-            self.sync_incremental(commit_id, targets, outlining_tree, app.clone(), cache)
+            self.sync_incremental(commit_id, targets, outlining_tree, cache, app.clone())
         } else {
             self.sync_one_shot(commit_id, targets, outlining_tree, app.clone())
         }?;
@@ -820,8 +820,8 @@ impl Repo {
         commit_id: Oid,
         targets: &HashSet<Target>,
         outlining_tree: &OutliningTree,
-        app: Arc<App>,
         cache: &RocksDBCache,
+        app: Arc<App>,
     ) -> Result<PatternSet> {
         let index_config = &self.config().index;
         let commit = self
