@@ -25,9 +25,15 @@ use crate::{app::App, git_helper, lock_file::LockFile};
 use super::model::Disposition;
 
 pub struct CreationResult {
+pub struct SnapshotResult {
     pub path: PathBuf,
 }
 
+impl SnapshotResult {
+    pub fn path(&self) -> &Path {
+        &self.path.as_path()
+    }
+}
 lazy_static! {
     static ref TRACKED_CHANGE_PATCH_FILENAME: PathBuf = PathBuf::from("tracked-changes.patch");
 }
@@ -41,7 +47,7 @@ lazy_static! {
 /// a/changed/path                 # Untracked changed files ...
 ///
 /// The archive should preserve ownership, modes, and extended attributes on the files.
-pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<CreationResult>> {
+pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<SnapshotResult>> {
     let repo_path = repo_path.as_ref();
     let git_dir = git_helper::git_dir(repo_path)?;
     let repo = Repository::open(repo_path)
@@ -117,7 +123,7 @@ pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<Creat
     let _ = git_helper::run_consuming_stdout(repo_path, vec!["clean", "-f", "-d"], app.clone())?;
     let _ = git_helper::run_consuming_stdout(repo_path, vec!["reset", "--hard"], app)?;
 
-    Ok(Some(CreationResult { path: archive_path }))
+    Ok(Some(SnapshotResult { path: archive_path }))
 }
 
 pub fn apply(
