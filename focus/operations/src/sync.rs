@@ -122,7 +122,7 @@ impl SyncRequest {
     }
 
     pub fn sparse_repo_path(&self) -> &Path {
-        &self.sparse_repo.as_path()
+        self.sparse_repo.as_path()
     }
 
     pub fn mode(&self) -> SyncMode {
@@ -147,7 +147,7 @@ pub struct SyncResult {
 
 /// Synchronize the sparse repo's contents with the build graph. Returns a SyncResult indicating what happened.
 pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
-    let repo = Repo::open(request.sparse_repo_path().as_ref(), app.clone())
+    let repo = Repo::open(request.sparse_repo_path(), app.clone())
         .context("Failed to open the repo")?;
 
     if !repo.working_tree().unwrap().get_filter_config()? {
@@ -203,7 +203,7 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
         }
     }
 
-    let _lock = locking::hold_lock(request.sparse_repo_path().as_ref(), Path::new("sync.lock"))
+    let _lock = locking::hold_lock(request.sparse_repo_path(), Path::new("sync.lock"))
         .context("Failed to obtain synchronization lock")?;
 
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");

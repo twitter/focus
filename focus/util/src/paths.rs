@@ -144,19 +144,19 @@ mod tests {
 
     #[test]
     fn test_is_relevant_to_build_graph() {
-        assert!(is_relevant_to_build_graph(&Path::new("WORKSPACE.weird")));
-        assert!(is_relevant_to_build_graph(&Path::new("WORKSPACE")));
-        assert!(is_relevant_to_build_graph(&Path::new("BUILD.weird")));
-        assert!(is_relevant_to_build_graph(&Path::new("BUILD")));
-        assert!(is_relevant_to_build_graph(&Path::new("jank.bzl")));
-        assert!(!is_relevant_to_build_graph(&Path::new("foo.c")));
+        assert!(is_relevant_to_build_graph(Path::new("WORKSPACE.weird")));
+        assert!(is_relevant_to_build_graph(Path::new("WORKSPACE")));
+        assert!(is_relevant_to_build_graph(Path::new("BUILD.weird")));
+        assert!(is_relevant_to_build_graph(Path::new("BUILD")));
+        assert!(is_relevant_to_build_graph(Path::new("jank.bzl")));
+        assert!(!is_relevant_to_build_graph(Path::new("foo.c")));
     }
 
     #[test]
     fn test_is_involved_in_build() {
-        assert!(is_build_definition(&Path::new("BUILD.funky")));
-        assert!(is_build_definition(&Path::new("BUILD")));
-        assert!(!is_build_definition(&Path::new("bar.c")));
+        assert!(is_build_definition(Path::new("BUILD.funky")));
+        assert!(is_build_definition(Path::new("BUILD")));
+        assert!(!is_build_definition(Path::new("bar.c")));
     }
 
     #[test]
