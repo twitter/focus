@@ -223,16 +223,14 @@ mod testing {
         {
             let untracked_entries =
                 initial_status.find_entries_with_disposition(Disposition::Untracked)?;
-            let untracked_entry = untracked_entries
-                .iter()
-                .next()
+            let untracked_entry = untracked_entries.first()
                 .ok_or_else(|| anyhow::anyhow!("Expected an untracked entry and there was none"))?;
             assert_eq!(untracked_entry.path.as_path(), &untracked_file_name);
 
             let tracked_entries =
                 initial_status.find_entries_with_disposition(Disposition::Added)?;
             {
-                let tracked_entry = tracked_entries.iter().next().ok_or_else(|| {
+                let tracked_entry = tracked_entries.first().ok_or_else(|| {
                     anyhow::anyhow!("Expected an untracked entry and there was none")
                 })?;
                 assert_eq!(tracked_entry.path.as_path(), &tracked_filename);
@@ -265,7 +263,7 @@ mod testing {
             assert!(!tracked_removed_path.is_file());
 
             // The working tree status should be the same.
-            let status = git::working_tree::status(repo.path(), app.clone())?;
+            let status = git::working_tree::status(repo.path(), app)?;
             assert_eq!(status, initial_status);
         }
 

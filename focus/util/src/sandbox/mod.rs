@@ -208,7 +208,7 @@ mod tests {
             .file_name()
             .unwrap()
             .to_string_lossy()
-            .starts_with(&DEFAULT_NAME_PREFIX));
+            .starts_with(DEFAULT_NAME_PREFIX));
 
         let named_sandbox = Sandbox::new(false, Some("test_"))?;
         assert!(named_sandbox
@@ -216,7 +216,7 @@ mod tests {
             .file_name()
             .unwrap()
             .to_string_lossy()
-            .starts_with(&DEFAULT_NAME_PREFIX));
+            .starts_with(DEFAULT_NAME_PREFIX));
 
         Ok(())
     }

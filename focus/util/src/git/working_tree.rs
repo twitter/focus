@@ -239,9 +239,7 @@ mod testing {
         {
             let status = git::working_tree::status(repo.path(), app.clone())?;
             let entries = status.find_entries_with_disposition(Disposition::Untracked)?;
-            let entry = entries
-                .iter()
-                .next()
+            let entry = entries.first()
                 .ok_or_else(|| anyhow::anyhow!("Expected an untracked entry and there was none"))?;
             assert_eq!(entry.path.as_path(), &file_name);
         }
@@ -252,9 +250,7 @@ mod testing {
         {
             let status = git::working_tree::status(repo.path(), app.clone())?;
             let entries = status.find_entries_with_disposition(Disposition::Added)?;
-            let entry = entries
-                .iter()
-                .next()
+            let entry = entries.first()
                 .ok_or_else(|| anyhow::anyhow!("Expected an untracked entry and there was none"))?;
             assert_eq!(entry.path.as_path(), &file_name);
         }
@@ -263,7 +259,7 @@ mod testing {
 
         // After we commit everything there are no changes to report
         {
-            let status = git::working_tree::status(repo.path(), app.clone())?;
+            let status = git::working_tree::status(repo.path(), app)?;
             assert!(status.is_empty());
         }
 

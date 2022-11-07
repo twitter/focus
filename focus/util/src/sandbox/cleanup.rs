@@ -304,7 +304,7 @@ cleanup = 72
 
                 let new_time: FileTime = (ft - chrono::Duration::hours(i as i64)).into();
 
-                filetime::set_file_mtime(&p, new_time)?;
+                filetime::set_file_mtime(p, new_time)?;
             }
 
             paths.sort_unstable_by_key(|p| p.metadata().unwrap().modified().unwrap());
