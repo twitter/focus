@@ -105,6 +105,27 @@ impl ScratchGitRepo {
         })
     }
 
+    pub fn add_worktree(&self, destination_path: &Path) -> Result<()> {
+        tracing::info!(current = ?self.path(), destination = ?destination_path, "Adding worktree");
+        let exit_status = self
+            .git_binary
+            .command()
+            .current_dir(self.path())
+            .arg("worktree")
+            .arg("add")
+            .arg("-d")
+            .arg(destination_path)
+            .status()?;
+        if !exit_status.success() {
+            bail!(
+                "Failed to create a detached worktree in {}",
+                destination_path.display()
+            );
+        }
+
+        Ok(())
+    }
+
     pub fn make_clone(&self) -> Result<Self> {
         Self::new_local_clone(self.path())
     }

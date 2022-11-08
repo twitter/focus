@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod backed_up_file;
+pub mod files;
 pub mod git;
 pub mod git_helper;
 pub mod lock_file;
