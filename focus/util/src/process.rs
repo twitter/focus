@@ -1,7 +1,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::path::PathBuf;
+use std::{ffi::OsStr, path::PathBuf, process::Command};
 
 /// Returns a textual description of the current process
 pub fn get_process_description() -> String {
@@ -23,4 +23,16 @@ pub fn get_process_description() -> String {
         whoami::username(),
         whoami::hostname()
     )
+}
+
+pub fn pretty_print_command<'cmd>(command: &'cmd mut Command) -> String {
+    let convert_os_str =
+        |s: &'cmd OsStr| -> &'cmd str { s.to_str().unwrap_or("<???>").trim_matches('"') };
+
+    let mut buf = convert_os_str(command.get_program()).to_owned();
+    for arg in command.get_args() {
+        buf.push(' ');
+        buf.push_str(convert_os_str(arg));
+    }
+    buf
 }
