@@ -204,8 +204,12 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
         }
     }
 
-    let _lock = locking::hold_lock(request.sparse_repo_path(), Path::new("sync.lock"))
-        .context("Failed to obtain synchronization lock")?;
+    let _lock = locking::hold_lock(
+        request.sparse_repo_path(),
+        Path::new("sync.lock"),
+        app.clone(),
+    )
+    .context("Failed to obtain synchronization lock")?;
 
     let sparse_profile_path = repo.git_dir().join("info").join("sparse-checkout");
     if !sparse_profile_path.is_file() {

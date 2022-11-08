@@ -291,7 +291,7 @@ impl Runner<'_> {
 
     #[tracing::instrument]
     fn run_maint(&self, time_period: TimePeriod, repo_path: &Path) -> Result<MaintResult> {
-        let _lock = match locking::hold_lock(repo_path, Path::new("maint.lock")) {
+        let _lock = match locking::hold_lock(repo_path, Path::new("maint.lock"), self.app.clone()) {
             Ok(lock) => lock,
             Err(e) => {
                 error!(?e, "failed to acquire lock");
@@ -427,7 +427,7 @@ impl Runner<'_> {
     }
 
     #[tracing::instrument]
-    pub fn run(&mut self, time_period: TimePeriod) -> Result<()> {
+    pub fn run(&mut self, time_period: TimePeriod, app: Arc<App>) -> Result<()> {
         if self.tracked_repos {
             self.run_tracked_repo_repair()?;
         }
@@ -485,7 +485,7 @@ pub fn run(
     tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
-    Runner::new(cli, tracker, app)?.run(time_period)?;
+    Runner::new(cli, tracker, app.clone())?.run(time_period, app.clone())?;
     Ok(())
 }
 

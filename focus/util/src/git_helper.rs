@@ -29,8 +29,14 @@ use super::time::{FocusTime, GitTime};
 
 pub use focus_testing::GitBinary;
 
-pub fn git_dir(path: &Path) -> Result<PathBuf> {
-    Ok(git2::Repository::open(path)?.path().to_path_buf())
+pub fn git_dir(path: &Path, app: Arc<App>) -> Result<PathBuf> {
+    let found_path = run_consuming_stdout(path, vec!["rev-parse", "--git-dir"], app)?;
+    let found_path = PathBuf::from(&found_path);
+    if found_path.is_absolute() {
+        Ok(found_path)
+    } else {
+        Ok(path.join(found_path.as_path()))
+    }
 }
 
 pub fn git_command_with_git_binary(
