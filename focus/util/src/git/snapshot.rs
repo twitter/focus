@@ -269,7 +269,7 @@ mod testing {
             assert!(!tracked_removed_path.is_file());
 
             // The working tree status should be the same.
-            let status = git::working_tree::status(repo.path(), app)?;
+            let status = git::working_tree::status(repo.path(), app.clone())?;
             assert_eq!(status, initial_status);
         }
 
