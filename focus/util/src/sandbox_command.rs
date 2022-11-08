@@ -1,7 +1,7 @@
 // Copyright 2022 Twitter, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::app::App;
+use crate::{app::App, process};
 use anyhow::{bail, Context, Result};
 use std::{
     ffi::OsStr,
@@ -20,7 +20,7 @@ use tracing::{debug, debug_span, error, info, info_span, warn};
 fn exhibit_file(file: &Path, title: &str) -> Result<()> {
     use std::io;
 
-    let file = File::open(file)?;
+    let file = File::open(file).with_context(|| format!("Failed to open {}", file.display()))?;
     let lines = io::BufReader::new(file).lines();
     error!("Begin {}", &title);
     #[allow(clippy::manual_flatten)]
@@ -166,7 +166,12 @@ impl SandboxCommand {
         };
 
         for (title, path) in items {
-            exhibit_file(path, title.as_str()).with_context(|| format!("Exhibiting {}", title))?
+            if path.is_file() {
+                exhibit_file(path, title.as_str())
+                    .with_context(|| format!("Exhibiting {}", title))?
+            } else {
+                tracing::error!(title = title, path = ?path.display(), "Missing file while exhibiting output");
+            }
         }
 
         Ok(())
@@ -186,7 +191,9 @@ impl SandboxCommand {
             _ => bail!("cannot read all outputs into one string"),
         };
 
-        let mut reader = BufReader::new(File::open(path)?);
+        let mut reader = BufReader::new(
+            File::open(path).with_context(|| format!("Failed to open {}", path.display()))?,
+        );
         reader.read_to_string(output_string)?;
         Ok(())
     }
@@ -200,18 +207,6 @@ impl SandboxCommand {
         };
 
         Ok(BufReader::new(File::open(path)?))
-    }
-
-    fn pretty_print_command<'cmd>(command: &'cmd mut Command) -> String {
-        let convert_os_str =
-            |s: &'cmd OsStr| -> &'cmd str { s.to_str().unwrap_or("<???>").trim_matches('"') };
-
-        let mut buf = convert_os_str(command.get_program()).to_owned();
-        for arg in command.get_args() {
-            buf.push(' ');
-            buf.push_str(convert_os_str(arg));
-        }
-        buf
     }
 
     // Run the provided command and if it is not successful, log the process output
@@ -229,14 +224,14 @@ impl SandboxCommand {
         output: SandboxCommandOutput,
         successful_status_codes: &[i32],
     ) -> Result<ExitStatus> {
-        let command_description = Self::pretty_print_command(cmd);
+        let command_description = process::pretty_print_command(cmd);
         let span = debug_span!("Running command", description = %command_description);
         let _guard = span.enter();
         let mut file = OpenOptions::new()
             .write(true)
             .append(true)
             .open(&self.description_path)?;
-        writeln!(file, "{}", Self::pretty_print_command(cmd))?;
+        writeln!(file, "{}", process::pretty_print_command(cmd))?;
 
         let mut launch = cmd
             .spawn()

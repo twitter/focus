@@ -20,6 +20,7 @@ use tracing::{error, warn};
 
 use crate::{
     app::App,
+    process,
     sandbox_command::{SandboxCommand, SandboxCommandOutput},
     time::GitIdentTime,
 };
@@ -203,8 +204,9 @@ where
 {
     let (mut cmd, scmd) = git_command(app)?;
     if let Err(e) = cmd.current_dir(repo).args(args).status() {
-        scmd.log(SandboxCommandOutput::Stderr, "git command")?;
-        bail!("git command failed: {}", e);
+        let cmd_description = process::pretty_print_command(&mut cmd);
+        scmd.log(SandboxCommandOutput::Stderr, cmd_description.as_str())?;
+        bail!("Git command '{}' failed: {}", cmd_description, e);
     }
     let mut stdout_contents = String::new();
     scmd.read_to_string(SandboxCommandOutput::Stdout, &mut stdout_contents)?;
