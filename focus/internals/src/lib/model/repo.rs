@@ -4,6 +4,7 @@
 use content_addressed_cache::RocksDBCache;
 use focus_util::{
     app::App,
+    git,
     git_helper::{self, get_head_commit, ConfigExt},
     paths::{self, is_build_definition},
     sandbox_command::SandboxCommandOutput,
@@ -579,6 +580,7 @@ impl OutliningTree {
         commit_id: git2::Oid,
         target_set: &TargetSet,
         resolution_options: &ResolutionOptions,
+        snapshot: Option<PathBuf>,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)> {
         self.apply_configured_outlining_patterns(commit_id, app.clone())
@@ -590,6 +592,12 @@ impl OutliningTree {
         let mut patterns = PatternSet::new();
 
         let repo_path = self.underlying().work_dir().to_owned();
+
+        if let Some(snapshot_path) = snapshot {
+            git::snapshot::apply(snapshot_path, repo_path.as_path(), false, app.clone())
+                .context("Applying patch to outlining tree failed")?;
+        }
+
         let cache_options = CacheOptions::default();
         let request = ResolutionRequest {
             repo: repo_path.clone(),
@@ -758,6 +766,7 @@ impl Repo {
         skip_pattern_application: bool,
         app: Arc<App>,
         cache: Option<&RocksDBCache>,
+        snapshot: Option<PathBuf>,
     ) -> Result<(usize, bool)> {
         let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
             (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),
@@ -777,9 +786,22 @@ impl Repo {
             .context("Configuring the outlining tree")?;
 
         let mut outline_patterns = if let Some(cache) = cache {
-            self.sync_incremental(commit_id, targets, outlining_tree, cache, app.clone())
+            self.sync_incremental(
+                commit_id,
+                targets,
+                outlining_tree,
+                cache,
+                snapshot.clone(),
+                app.clone(),
+            )
         } else {
-            self.sync_one_shot(commit_id, targets, outlining_tree, app.clone())
+            self.sync_one_shot(
+                commit_id,
+                targets,
+                outlining_tree,
+                snapshot.clone(),
+                app.clone(),
+            )
         }?;
 
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
@@ -791,7 +813,6 @@ impl Repo {
                 .apply_sparse_patterns(outline_patterns, true, app)
                 .context("Failed to apply outlined patterns to working tree")?
         };
-        // tracing::info!(?checked_out, "Applied patterns");
 
         Ok((pattern_count, checked_out))
     }
@@ -802,6 +823,7 @@ impl Repo {
         commit_id: Oid,
         targets: &HashSet<Target>,
         outlining_tree: &OutliningTree,
+        snapshot: Option<PathBuf>,
         app: Arc<App>,
     ) -> Result<PatternSet> {
         info!("Running one-shot sync");
@@ -809,7 +831,7 @@ impl Repo {
             bazel_resolution_strategy: BazelResolutionStrategy::OneShot,
         };
         let (outline_patterns, _resolution_result) = outlining_tree
-            .outline(commit_id, targets, &resolution_options, app)
+            .outline(commit_id, targets, &resolution_options, snapshot, app)
             .context("Failed to outline")?;
         Ok(outline_patterns)
     }
@@ -821,6 +843,7 @@ impl Repo {
         targets: &HashSet<Target>,
         outlining_tree: &OutliningTree,
         cache: &RocksDBCache,
+        snapshot: Option<PathBuf>,
         app: Arc<App>,
     ) -> Result<PatternSet> {
         let index_config = &self.config().index;
@@ -906,7 +929,13 @@ impl Repo {
                     bazel_resolution_strategy: BazelResolutionStrategy::Incremental,
                 };
                 let (outline_patterns, resolution_result) = outlining_tree
-                    .outline(commit_id, targets, &resolution_options, app.clone())
+                    .outline(
+                        commit_id,
+                        targets,
+                        &resolution_options,
+                        snapshot,
+                        app.clone(),
+                    )
                     .context("Failed to outline")?;
 
                 debug!(?resolution_result, ?outline_patterns, "Resolved patterns");
@@ -921,6 +950,7 @@ impl Repo {
         &self,
         commit_id: git2::Oid,
         selection: &Selection,
+        snapshot: Option<PathBuf>,
     ) -> Result<Option<(usize, bool)>> {
         if !selection.targets.is_empty() {
             tracing::warn!("Skipping project cache because the selection contains ad-hoc targets");
@@ -971,8 +1001,12 @@ impl Repo {
 
         // Add mandatory project patterns
         {
-            let (_key, mandatory_project_patterns) =
-                cache.get_mandatory_project_patterns(commit_id, &build_graph_hash, false)?;
+            let (_key, mandatory_project_patterns) = cache.get_mandatory_project_patterns(
+                commit_id,
+                &build_graph_hash,
+                false,
+                snapshot.clone(),
+            )?;
             let mandatory_project_patterns = mandatory_project_patterns
                 .ok_or_else(|| anyhow::anyhow!("Missing mandatory project patterns"))?;
             match mandatory_project_patterns {
@@ -992,6 +1026,7 @@ impl Repo {
                 project_name,
                 false,
                 &PatternSet::new(),
+                snapshot.clone(),
             )? {
                 (_key, Some(Value::OptionalProjectPatternSet(patterns))) => {
                     outline_patterns.extend(patterns);

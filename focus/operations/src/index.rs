@@ -101,6 +101,7 @@ fn resolve_targets(
                 true,
                 app.clone(),
                 Some(borrowed_odb),
+                None,
             )?;
             println!("Pattern count: {}", pattern_count);
 
