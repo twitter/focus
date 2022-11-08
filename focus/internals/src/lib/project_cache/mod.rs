@@ -18,7 +18,7 @@ use std::{
     convert::{TryFrom, TryInto},
     ffi::OsStr,
     os::unix::prelude::OsStrExt,
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
@@ -205,13 +205,20 @@ impl<'cache> ProjectCache<'cache> {
         commit_id: Oid,
         targets: &HashSet<Target>,
         resolution_options: &ResolutionOptions,
+        snapshot: Option<PathBuf>,
     ) -> anyhow::Result<PatternSet> {
         let outlining_tree = self
             .repo
             .outlining_tree()
             .ok_or_else(|| anyhow::anyhow!("Missing outlining tree"))?;
         let (patterns, _resolution_result) = outlining_tree
-            .outline(commit_id, targets, resolution_options, self.app.clone())
+            .outline(
+                commit_id,
+                targets,
+                resolution_options,
+                snapshot,
+                self.app.clone(),
+            )
             .with_context(|| {
                 format!(
                     "Outlining targets ({:?}) at commit {} failed",
@@ -283,8 +290,9 @@ impl<'cache> ProjectCache<'cache> {
             "Generating project pattern cache"
         );
 
+        let snapshot = None;
         let (mandatory_project_key, mandatory_project_patterns) = self
-            .get_mandatory_project_patterns(commit_id, &build_graph_hash, true)
+            .get_mandatory_project_patterns(commit_id, &build_graph_hash, true, snapshot.clone())
             .context("Generating cache content for mandatory projects")?;
         let mandatory_project_patterns = mandatory_project_patterns
             .map(|val| match val {
@@ -309,6 +317,7 @@ impl<'cache> ProjectCache<'cache> {
                     project_name.as_str(),
                     true,
                     &mandatory_project_patterns,
+                    snapshot.clone(),
                 )
                 .with_context(|| {
                     format!(
@@ -337,6 +346,7 @@ impl<'cache> ProjectCache<'cache> {
         commit_id: Oid,
         build_graph_hash: &[u8],
         fault: bool,
+        snapshot: Option<PathBuf>,
     ) -> anyhow::Result<(NamespacedKey, Option<Value>)> {
         let calculate = move |_key: &Key, repo: &Repo| -> anyhow::Result<Option<Value>> {
             let selection_manager = repo.selection_manager()?;
@@ -350,7 +360,9 @@ impl<'cache> ProjectCache<'cache> {
             }
 
             let resolution_options = ResolutionOptions::default();
-            if let Ok(patterns) = self.outline(commit_id, &targets, &resolution_options) {
+            if let Ok(patterns) =
+                self.outline(commit_id, &targets, &resolution_options, snapshot.clone())
+            {
                 Ok(Some(Value::MandatoryProjectPatternSet(patterns)))
             } else {
                 Ok(None)
@@ -371,6 +383,7 @@ impl<'cache> ProjectCache<'cache> {
         project_name: &str,
         fault: bool,
         ignored_patterns: &PatternSet,
+        snapshot: Option<PathBuf>,
     ) -> anyhow::Result<(NamespacedKey, Option<Value>)> {
         let calculate = move |key: &Key, repo: &Repo| -> anyhow::Result<Option<Value>> {
             if let Key::OptionalProjectPatternSet { project_name, .. } = key {
@@ -390,7 +403,9 @@ impl<'cache> ProjectCache<'cache> {
 
                 info!(project = ?project_name, "Outlining");
                 let resolution_options = ResolutionOptions::default();
-                if let Ok(patterns) = self.outline(commit_id, &targets, &resolution_options) {
+                if let Ok(patterns) =
+                    self.outline(commit_id, &targets, &resolution_options, snapshot.clone())
+                {
                     // Remove ignored patterns.
                     let patterns: PatternSet =
                         patterns.difference(ignored_patterns).cloned().collect();

@@ -5,6 +5,7 @@ use core::fmt;
 use core::sync::atomic::AtomicBool;
 use focus_internals::index::RocksDBMemoizationCacheExt;
 use focus_internals::{locking, model::repo::Repo};
+use focus_util::git;
 
 use crate::util::perform;
 use content_addressed_cache::RocksDBCache;
@@ -211,6 +212,20 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
         bail!("This does not appear to be a focused repo -- it is missing a sparse checkout file");
     }
 
+    // Take a snapshot of the sparse repo state.
+    let snapshot =
+        git::snapshot::create(request.sparse_repo_path(), app.clone()).with_context(|| {
+            format!(
+                "Creating a snapshot in {} failed",
+                request.sparse_repo_path().display()
+            )
+        })?;
+    let _snapshot_guard = git::snapshot::ReapplyGuard::new(
+        request.sparse_repo_path().to_owned(),
+        snapshot.clone(),
+        app.clone(),
+    );
+
     let selections = repo.selection_manager()?;
     let selection = selections.computed_selection()?;
     let targets = selections.compute_complete_target_set()?;
@@ -314,7 +329,7 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
     let (pattern_count, checked_out) = perform("Computing the new sparse profile", || {
         // Try to use the project cache
         let project_cache_result = repo
-            .sync_using_project_cache(commit.id(), &selection)
+            .sync_using_project_cache(commit.id(), &selection, snapshot.clone())
             .context("Syncing from project cache failed");
 
         match project_cache_result {
@@ -357,6 +372,7 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
                     preemptive,
                     app.clone(),
                     cache.as_ref(),
+                    snapshot.clone(),
                 )
                 .context("Sync failed")
             }

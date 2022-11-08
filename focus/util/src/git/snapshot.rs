@@ -28,13 +28,43 @@ pub struct SnapshotResult {
     pub path: PathBuf,
 }
 
-impl SnapshotResult {
-    pub fn path(&self) -> &Path {
-        &self.path.as_path()
+// Applies a snapshot, if present, when dropped to return a repo to its expected state.
+pub struct ReapplyGuard {
+    repo_path: PathBuf,
+    underlying: Option<PathBuf>,
+    app: Arc<App>,
+}
+
+impl ReapplyGuard {
+    pub fn new(repo_path: impl AsRef<Path>, underlying: Option<PathBuf>, app: Arc<App>) -> Self {
+        Self {
+            repo_path: repo_path.as_ref().to_owned(),
+            underlying,
+            app,
+        }
     }
 }
+
+impl Drop for ReapplyGuard {
+    fn drop(&mut self) {
+        if let Some(snapshot) = &self.underlying {
+            if let Err(err) = apply(
+                snapshot.as_path(),
+                self.repo_path.as_path(),
+                true,
+                self.app.clone(),
+            ) {
+                tracing::error!(?err, snapshot_path = ?snapshot.as_path(), repo_path=?self.repo_path, "Failed to apply snapshot");
+            }
+        }
+    }
+}
+
 lazy_static! {
     static ref TRACKED_CHANGE_PATCH_FILENAME: PathBuf = PathBuf::from("tracked-changes.patch");
+    static ref RELATIVE_INDEX_PATH: PathBuf = Path::new(".git").join("index").to_owned();
+    static ref RELATIVE_SNAPSHOT_INDEX_PATH: PathBuf =
+        RELATIVE_INDEX_PATH.with_extension("snapshot").to_owned();
 }
 /// When changes to the working tree are present, returns a snapshot containing the index and
 /// changed files from the work tree. This archive has a simple structure and is meant to
@@ -46,7 +76,7 @@ lazy_static! {
 /// a/changed/path                 # Untracked changed files ...
 ///
 /// The archive should preserve ownership, modes, and extended attributes on the files.
-pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<SnapshotResult>> {
+pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<PathBuf>> {
     let repo_path = repo_path.as_ref();
     let git_dir = git_helper::git_dir(repo_path)?;
     let repo = Repository::open(repo_path)
@@ -94,7 +124,7 @@ pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<Snaps
         let index_lock_path = index_path.with_extension("lock");
         let _index_lock = LockFile::new(&index_lock_path).context("Locking the index failed")?;
         archive_builder
-            .append_path_with_name(&index_path, ".git/index")
+            .append_path_with_name(&index_path, RELATIVE_SNAPSHOT_INDEX_PATH.as_path())
             .with_context(|| format!("Adding index from {}", index_path.display()))?;
     }
 
@@ -122,12 +152,13 @@ pub fn create(repo_path: impl AsRef<Path>, app: Arc<App>) -> Result<Option<Snaps
     let _ = git_helper::run_consuming_stdout(repo_path, vec!["clean", "-f", "-d"], app.clone())?;
     let _ = git_helper::run_consuming_stdout(repo_path, vec!["reset", "--hard"], app)?;
 
-    Ok(Some(SnapshotResult { path: archive_path }))
+    Ok(Some(archive_path))
 }
 
 pub fn apply(
     snapshot_path: impl AsRef<Path>,
     repo_path: impl AsRef<Path>,
+    extract_index: bool,
     app: Arc<App>,
 ) -> Result<()> {
     let repo_path = repo_path.as_ref();
@@ -178,6 +209,22 @@ pub fn apply(
     // Remove the patch file
     std::fs::remove_file(&patch_path)
         .with_context(|| format!("Failed to remove patch file {}", patch_path.display()))?;
+
+    // Move the index into place
+    if extract_index {
+        std::fs::rename(
+            repo_path.join(RELATIVE_SNAPSHOT_INDEX_PATH.as_path()),
+            repo_path.join(RELATIVE_INDEX_PATH.as_path()),
+        )
+        .context("Failed to move index into place")?;
+    } else {
+        std::fs::remove_file(
+            repo_path
+                .join(RELATIVE_SNAPSHOT_INDEX_PATH.as_path())
+                .as_path(),
+        )
+        .context("Removing index failed")?;
+    }
 
     Ok(())
 }
@@ -247,7 +294,7 @@ mod testing {
             .context("Creating the snapshot failed")?
             .ok_or_else(|| anyhow::anyhow!("Expected a snapshot to be created"))?;
         let snapshot_stat =
-            std::fs::metadata(&snapshot.path).context("Could not stat snapshot file")?;
+            std::fs::metadata(snapshot.as_path()).context("Could not stat snapshot file")?;
         assert!(snapshot_stat.is_file());
         assert!(snapshot_stat.len() > 0);
 
@@ -262,7 +309,7 @@ mod testing {
         {
             assert!(tracked_removed_path.is_file());
 
-            git::snapshot::apply(&snapshot.path, repo.path(), app.clone())
+            git::snapshot::apply(snapshot.as_path(), repo.path(), true, app.clone())
                 .context("Applying snapshot failed")?;
 
             // The patch should have removed the file.
@@ -272,6 +319,40 @@ mod testing {
             let status = git::working_tree::status(repo.path(), app.clone())?;
             assert_eq!(status, initial_status);
         }
+
+        drop(app);
+
+        Ok(())
+    }
+
+    #[test]
+    fn snapshot_reapplication_guard_test() -> Result<()> {
+        init_logging();
+
+        let app = Arc::new(App::new_for_testing()?);
+        let repo_dir = app.sandbox().create_subdirectory("repo")?;
+
+        let repo = ScratchGitRepo::new_static_fixture(&repo_dir)?;
+
+        let tracked_filename = PathBuf::from("a-tracked-file.txt");
+        let tracked_file_path = repo.path().join(&tracked_filename);
+        let tracked_file_content = b"This file is added.\n";
+        std::fs::write(&tracked_file_path, tracked_file_content)?;
+        repo.add_file(&tracked_filename)?;
+
+        let initial_status = git::working_tree::status(repo.path(), app.clone())?;
+        let snapshot = git::snapshot::create(repo.path(), app.clone())
+            .context("Creating the snapshot failed")?;
+
+        let guard = ReapplyGuard::new(repo.path(), snapshot, app.clone());
+        drop(guard);
+
+        assert_eq!(
+            git::working_tree::status(repo.path(), app.clone())?,
+            initial_status
+        );
+
+        drop(app);
 
         Ok(())
     }
