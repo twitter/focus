@@ -485,7 +485,7 @@ pub fn run(
     tracker: &Tracker,
     app: Arc<App>,
 ) -> Result<()> {
-    Runner::new(cli, tracker, app.clone())?.run(time_period, app.clone())?;
+    Runner::new(cli, tracker, app.clone())?.run(time_period, app)?;
     Ok(())
 }
 

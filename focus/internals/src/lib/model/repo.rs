@@ -791,7 +791,7 @@ impl Repo {
                 targets,
                 outlining_tree,
                 cache,
-                snapshot.clone(),
+                snapshot,
                 app.clone(),
             )
         } else {
@@ -799,7 +799,7 @@ impl Repo {
                 commit_id,
                 targets,
                 outlining_tree,
-                snapshot.clone(),
+                snapshot,
                 app.clone(),
             )
         }?;
