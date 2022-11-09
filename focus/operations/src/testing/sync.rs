@@ -572,8 +572,8 @@ fn sync_configures_working_and_outlining_trees() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "ci"))]
 #[test]
+#[cfg(not(feature = "ci"))]
 fn regression_adding_directory_targets_present_in_mandatory_sets() -> Result<()> {
     init_logging();
 
