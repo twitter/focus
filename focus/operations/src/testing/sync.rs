@@ -157,6 +157,42 @@ fn sync_detect_graph_changes_advisory() -> Result<()> {
 }
 
 #[test]
+fn sync_with_pending_change_with_incremental_sync() -> Result<()> {
+    assert_eq!(
+        sync_with_pending_changes_internal(SyncMode::OneShot)?,
+        SyncMechanism::OneShotOutline
+    );
+    Ok(())
+}
+
+#[test]
+fn sync_with_pending_change_with_oneshot_sync() -> Result<()> {
+    assert_eq!(
+        sync_with_pending_changes_internal(SyncMode::Incremental)?,
+        SyncMechanism::IncrementalOutline
+    );
+    Ok(())
+}
+
+fn sync_with_pending_changes_internal(sync_mode: SyncMode) -> Result<SyncMechanism> {
+    init_logging();
+
+    let fixture = RepoPairFixture::with_sync_mode(sync_mode)?;
+    fixture.perform_clone()?;
+
+    let untracked_file_path = fixture.sparse_repo_path.join("untracked-file.txt");
+    std::fs::write(untracked_file_path, "Howdy!\n")?;
+
+    // Sync in the sparse repo
+    let sync_result = crate::sync::run(
+        &SyncRequest::new(&fixture.sparse_repo_path, sync_mode),
+        fixture.app.clone(),
+    )?;
+
+    Ok(sync_result.mechanism)
+}
+
+#[test]
 fn sync_layer_manipulation_with_incremental_sync() -> Result<()> {
     sync_layer_manipulation_internal(SyncMode::Incremental)
 }
