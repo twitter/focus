@@ -225,7 +225,7 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
             )
         })?;
     let _snapshot_guard = git::snapshot::ReapplyGuard::new(
-        request.sparse_repo_path().to_owned(),
+        request.sparse_repo_path(),
         snapshot.clone(),
         app.clone(),
     );
