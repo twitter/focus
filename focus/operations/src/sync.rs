@@ -224,11 +224,8 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
                 request.sparse_repo_path().display()
             )
         })?;
-    let _snapshot_guard = git::snapshot::ReapplyGuard::new(
-        request.sparse_repo_path(),
-        snapshot.clone(),
-        app.clone(),
-    );
+    let _snapshot_guard =
+        git::snapshot::ReapplyGuard::new(request.sparse_repo_path(), snapshot.clone(), app.clone());
 
     let selections = repo.selection_manager()?;
     let selection = selections.computed_selection()?;
