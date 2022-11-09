@@ -47,8 +47,7 @@ impl WorkingTreeStateEntry {
     }
 
     fn dispositions(&self) -> Vec<Disposition> {
-        let mut dispositions = Vec::<Disposition>::new();
-        dispositions.push(self.x);
+        let mut dispositions = vec![self.x];
         if let Some(y) = self.y {
             dispositions.push(y);
         }
