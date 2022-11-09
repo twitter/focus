@@ -795,13 +795,7 @@ impl Repo {
                 app.clone(),
             )
         } else {
-            self.sync_one_shot(
-                commit_id,
-                targets,
-                outlining_tree,
-                snapshot,
-                app.clone(),
-            )
+            self.sync_one_shot(commit_id, targets, outlining_tree, snapshot, app.clone())
         }?;
 
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
