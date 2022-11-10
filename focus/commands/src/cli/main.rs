@@ -50,7 +50,7 @@ struct NewArgs {
     #[clap(short, long, default_value = "master")]
     branch: String,
 
-    /// Days of history to maintain in the sparse repo.
+    /// Days of history to maintain in the sparse repo. If greater than zero, the repository will be shallow. If set to zero, the repository will have the entire history.
     #[clap(long, default_value = "90")]
     days_of_history: u64,
 
