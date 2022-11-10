@@ -99,6 +99,23 @@ impl ScratchGitRepo {
             .assert()
             .success();
 
+        let fixture_path_stem = fixture_name
+            .file_stem()
+            .ok_or_else(|| anyhow::anyhow!("Expected a file stem"))?
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Interpretation as UTF-8 failed"))?;
+
+        // let upstream_url = format!("https://example.com/{}", fixture_path_stem);
+        // git_binary
+        //     .command()
+        //     .arg("remote")
+        //     .arg("add")
+        //     .arg("origin")
+        //     .arg(upstream_url.as_str())
+        //     .current_dir(destination_path)
+        //     .assert()
+        //     .success();
+
         Ok(Self {
             git_binary,
             path: destination_path.to_owned(),
