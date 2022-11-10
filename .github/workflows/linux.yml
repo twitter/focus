@@ -38,13 +38,3 @@ jobs:
       - name: Run Rust doc-tests
         timeout-minutes: 10
         run: cargo test --features ci --doc --workspace
-
-      - name: Run smoke test on `bazel` repo
-        run: |
-          REPO_DIR="../bazel-focus"
-          cargo run -- new --dense-repo https://github.com/bazelbuild/bazel --template bazel "$REPO_DIR"
-          cargo run -- -C "$REPO_DIR" add bazel://src/main/cpp:blaze_util
-          # FIXME: this sync shouldn't be necessary, but `focus add` seems to
-          # lose the changes from the repo template.
-          cargo run -- -C "$REPO_DIR" sync
-          (cd "$REPO_DIR" && bazel build //src/main/cpp:blaze_util)
