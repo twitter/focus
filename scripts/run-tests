@@ -3,8 +3,8 @@
 set -o pipefail
 set -eu
 
-cargo test --workspace -- $@
+cargo test --features=twttr --workspace -- $@
 if [ -z "$@" ] || [ "$@" == "single_threaded_test" ]; then
   # Run single-threaded tests
-  cargo test --workspace -- --test-threads=1 --ignored single_threaded_test
+  cargo test --features=twttr --workspace -- --test-threads=1 --ignored single_threaded_test
 fi
