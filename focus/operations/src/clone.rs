@@ -705,7 +705,7 @@ fn clone_shallow(
         .date();
 
         let shallow_since_date = focus_util::time::date_at_day_in_past(days_of_history)?;
-        if main_branch_tip_date < shallow_since_date {
+        if days_of_history > 0 && main_branch_tip_date < shallow_since_date {
             bail!("Your main branch {} is older than the specified shallow date: {}. Run a `git pull` in your dense repo to update it!", branch, shallow_since_datestamp)
         }
     }
@@ -715,8 +715,12 @@ fn clone_shallow(
         .fetch_url(source_url.as_str().into())
         .no_checkout(true)
         .follow_tags(false)
-        .branch(branch.into())
-        .add_clone_arg(format!("--shallow-since={}", shallow_since_datestamp));
+        .branch(branch.into());
+
+    if days_of_history > 0 {
+        builder.add_clone_arg(format!("--shallow-since={}", shallow_since_datestamp));
+    }
+
     if !copy_branches {
         builder.add_clone_arg("--single-branch");
     }
@@ -929,13 +933,15 @@ fn copy_local_branches(
         let days_of_history: i64 = days_of_history.try_into()?;
         let shallow_since_datestamp = focus_util::time::date_at_day_in_past(days_of_history)?;
 
-        if dense_commit_date > shallow_since_datestamp {
-            valid_local_branches.push((name.to_owned(), dense_commit.to_owned()));
-        } else {
-            warn!(
-                "Branch {} is older than the configured limit ({}). Rebase it if you would like it to be included in the new repo.",
-                name, shallow_since_datestamp
-            );
+        if days_of_history > 0 {
+            if dense_commit_date > shallow_since_datestamp {
+                valid_local_branches.push((name.to_owned(), dense_commit.to_owned()));
+            } else {
+                warn!(
+                    "Branch {} is older than the configured limit ({}). Rebase it if you would like it to be included in the new repo.",
+                    name, shallow_since_datestamp
+                );
+            }
         }
     }
 
