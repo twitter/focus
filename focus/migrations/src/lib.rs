@@ -177,7 +177,7 @@ mod tests {
             migrations: Migrations,
             app: Arc<App>,
         ) -> Result<Runner> {
-            Runner::new(&self.repo_dir, &self.manifest_path, migrations, app.clone())
+            Runner::new(&self.repo_dir, &self.manifest_path, migrations, app)
         }
     }
 
@@ -289,7 +289,7 @@ mod tests {
 
         {
             let runner = fixture
-                .new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})], app.clone())?;
+                .new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})], app)?;
             assert!(!runner.is_upgrade_required()?);
         }
 
