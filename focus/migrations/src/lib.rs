@@ -4,6 +4,7 @@
 pub mod production;
 
 use anyhow::{Context, Result};
+use focus_util::app::App;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
@@ -11,6 +12,7 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use tracing::{debug, info};
 
@@ -18,7 +20,7 @@ use tracing::{debug, info};
 pub trait Migration {
     fn id(&self) -> Identifier;
     fn description(&self) -> &str;
-    fn upgrade(&self, path: &Path) -> Result<()>;
+    fn upgrade(&self, path: &Path, app: Arc<App>) -> Result<()>;
 }
 
 pub type Migrations = Vec<Box<dyn Migration>>;
@@ -55,15 +57,22 @@ pub struct Runner {
     manifest_path: PathBuf,
     manifest: RefCell<Manifest>,
     migrations: Migrations,
+    app: Arc<App>,
 }
 
 impl Runner {
-    pub fn new(repo_path: &Path, manifest_path: &Path, migrations: Migrations) -> Result<Self> {
+    pub fn new(
+        repo_path: &Path,
+        manifest_path: &Path,
+        migrations: Migrations,
+        app: Arc<App>,
+    ) -> Result<Self> {
         let instance = Self {
             repo_path: repo_path.to_owned(),
             manifest_path: manifest_path.to_owned(),
             manifest: Default::default(),
             migrations,
+            app,
         };
         if let Err(error) = instance.load_manifest() {
             debug!(%error, "Failed to load manifest");
@@ -117,7 +126,7 @@ impl Runner {
             let identifier = migration.id();
             let description = migration.description();
             info!(%identifier, %description, "Running migration");
-            match migration.upgrade(&self.repo_path) {
+            match migration.upgrade(&self.repo_path, self.app.clone()) {
                 Ok(()) => {
                     self.manifest.borrow().version.replace(identifier);
                 }
@@ -163,8 +172,12 @@ mod tests {
             })
         }
 
-        fn new_runner_with_migrations(&self, migrations: Migrations) -> Result<Runner> {
-            Runner::new(&self.repo_dir, &self.manifest_path, migrations)
+        fn new_runner_with_migrations(
+            &self,
+            migrations: Migrations,
+            app: Arc<App>,
+        ) -> Result<Runner> {
+            Runner::new(&self.repo_dir, &self.manifest_path, migrations, app.clone())
         }
     }
 
@@ -178,7 +191,7 @@ mod tests {
             "A migration that succeeds for use in tests"
         }
 
-        fn upgrade(&self, _path: &Path) -> Result<()> {
+        fn upgrade(&self, _path: &Path, _app: Arc<App>) -> Result<()> {
             Ok(())
         }
     }
@@ -193,7 +206,7 @@ mod tests {
             "A migration that fails, but has the same ID as the default value for the manifest. It is used to detect when a migration shouldn't have been run."
         }
 
-        fn upgrade(&self, _path: &Path) -> Result<()> {
+        fn upgrade(&self, _path: &Path, _app: Arc<App>) -> Result<()> {
             Ok(())
         }
     }
@@ -208,35 +221,38 @@ mod tests {
             "A migration that fails for use in tests"
         }
 
-        fn upgrade(&self, _path: &Path) -> Result<()> {
+        fn upgrade(&self, _path: &Path, _app: Arc<App>) -> Result<()> {
             bail!("boom")
         }
     }
 
     #[test]
     fn test_no_migrations() -> Result<()> {
+        let app = Arc::from(App::new_for_testing()?);
         let fixture = Fixture::new()?;
-        let runner = fixture.new_runner_with_migrations(vec![])?;
+        let runner = fixture.new_runner_with_migrations(vec![], app)?;
         assert!(!runner.is_upgrade_required()?);
         Ok(())
     }
 
     #[test]
     fn test_is_upgrade_required() -> Result<()> {
+        let app = Arc::from(App::new_for_testing()?);
         let migration = SuccessfulMigration {};
         let migrations: Vec<Box<dyn Migration>> = vec![Box::new(migration)];
         let fixture = Fixture::new()?;
-        let runner = fixture.new_runner_with_migrations(migrations)?;
+        let runner = fixture.new_runner_with_migrations(migrations, app)?;
         assert!(runner.is_upgrade_required()?);
         Ok(())
     }
 
     #[test]
     fn perform_pending_migrations_with_a_failed_migration_does_not_update_version() -> Result<()> {
+        let app = Arc::from(App::new_for_testing()?);
         let failing_migration = FailingMigration {};
         let migrations: Vec<Box<dyn Migration>> = vec![Box::new(failing_migration)];
         let fixture = Fixture::new()?;
-        let runner = fixture.new_runner_with_migrations(migrations)?;
+        let runner = fixture.new_runner_with_migrations(migrations, app)?;
         assert!(runner.is_upgrade_required()?);
         let error = runner.perform_pending_migrations().unwrap_err();
         assert_eq!(error.to_string(), "boom");
@@ -247,10 +263,11 @@ mod tests {
 
     #[test]
     fn perform_pending_migrations_with_a_successful_migration_updates_the_version() -> Result<()> {
+        let app = Arc::from(App::new_for_testing()?);
         let successful_migration = SuccessfulMigration {};
         let migrations: Vec<Box<dyn Migration>> = vec![Box::new(successful_migration)];
         let fixture = Fixture::new()?;
-        let runner = fixture.new_runner_with_migrations(migrations)?;
+        let runner = fixture.new_runner_with_migrations(migrations, app)?;
         assert!(runner.is_upgrade_required()?);
         assert!(runner.perform_pending_migrations()?);
         assert!(!runner.is_upgrade_required()?);
@@ -260,18 +277,19 @@ mod tests {
 
     #[test]
     fn manifest_persists_after_upgrade() -> Result<()> {
+        let app = Arc::from(App::new_for_testing()?);
         let fixture = Fixture::new()?;
 
         {
-            let runner =
-                fixture.new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})])?;
+            let runner = fixture
+                .new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})], app.clone())?;
             assert!(runner.perform_pending_migrations()?);
             assert!(!runner.is_upgrade_required()?);
         }
 
         {
-            let runner =
-                fixture.new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})])?;
+            let runner = fixture
+                .new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})], app.clone())?;
             assert!(!runner.is_upgrade_required()?);
         }
 
@@ -280,10 +298,11 @@ mod tests {
 
     #[test]
     fn migrations_are_skipped_when_identifier_is_less_equal_version() -> Result<()> {
+        let app = Arc::from(App::new_for_testing()?);
         let failing_migration = FailureMigrationWithOldID {};
         let migrations: Vec<Box<dyn Migration>> = vec![Box::new(failing_migration)];
         let fixture = Fixture::new()?;
-        let runner = fixture.new_runner_with_migrations(migrations)?;
+        let runner = fixture.new_runner_with_migrations(migrations, app)?;
         assert!(!runner.is_upgrade_required()?);
         assert!(runner.perform_pending_migrations().is_ok()); // Try running it anyways, it should get skipped so there's no error
 
