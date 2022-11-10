@@ -1144,6 +1144,7 @@ dependencies = [
  "anyhow",
  "focus-internals",
  "focus-operations",
+ "focus-util",
  "git2",
  "insta",
  "lazy_static",

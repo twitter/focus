@@ -826,9 +826,15 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
                 ..Default::default()
             };
 
-            focus_operations::clone::run(sparse_repo.clone(), clone_args, template, tracker, app)?;
+            focus_operations::clone::run(
+                sparse_repo.clone(),
+                clone_args,
+                template,
+                tracker,
+                app.clone(),
+            )?;
 
-            perform_pending_migrations(&sparse_repo)
+            perform_pending_migrations(&sparse_repo, app)
                 .context("Performing initial migrations after clone")?;
 
             Ok(ExitCode(0))
@@ -840,7 +846,7 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
             // TODO: Add total number of paths in repo to TI.
             let sparse_repo =
                 paths::find_repo_root_from(app.clone(), paths::expand_tilde(sparse_repo)?)?;
-            ensure_repo_compatibility(&sparse_repo)?;
+            ensure_repo_compatibility(&sparse_repo, app.clone())?;
 
             let _lock_file = hold_lock_file(&sparse_repo)?;
             let mode = if one_shot {
@@ -1134,7 +1140,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
 
         Subcommand::Upgrade { repo } => {
             focus_migrations::production::perform_pending_migrations(
-                paths::find_repo_root_from(app, repo)?.as_path(),
+                paths::find_repo_root_from(app.clone(), repo)?.as_path(),
+                app,
             )
             .context("Failed to upgrade repo")?;
 
@@ -1317,8 +1324,8 @@ fn run_subcommand(app: Arc<App>, tracker: &Tracker, options: FocusOpts) -> Resul
     }
 }
 
-fn ensure_repo_compatibility(sparse_repo: &Path) -> Result<()> {
-    if focus_migrations::production::is_upgrade_required(sparse_repo)
+fn ensure_repo_compatibility(sparse_repo: &Path, app: Arc<App>) -> Result<()> {
+    if focus_migrations::production::is_upgrade_required(sparse_repo, app)
         .context("Failed to determine whether an upgrade is required")?
     {
         bail!(
