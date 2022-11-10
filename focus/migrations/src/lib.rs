@@ -288,8 +288,8 @@ mod tests {
         }
 
         {
-            let runner = fixture
-                .new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})], app)?;
+            let runner =
+                fixture.new_runner_with_migrations(vec![Box::new(SuccessfulMigration {})], app)?;
             assert!(!runner.is_upgrade_required()?);
         }
 
