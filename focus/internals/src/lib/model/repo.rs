@@ -71,6 +71,12 @@ pub const PROJECT_CACHE_INCLUDE_HEADERS_FILE_CONFIG_KEY: &str =
     "focus.project-cache.include-headers-from";
 pub const BAZEL_ONE_SHOT_RESOLUTION_CONFIG_KEY: &str = "focus.bazel.one-shot";
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum WorkingTreeKind {
+    Sparse,
+    Dense,
+}
+
 /// Models a Git working tree.
 pub struct WorkingTree {
     repo: git2::Repository,
@@ -108,6 +114,14 @@ impl WorkingTree {
         let repo = git2::Repository::open(git_dir)
             .with_context(|| format!("Creating `WorkingTree` from git dir: {:?}", git_dir))?;
         Self::new(repo)
+    }
+
+    pub fn kind(&self) -> WorkingTreeKind {
+        if self.sparse_checkout_path().is_file() {
+            WorkingTreeKind::Sparse
+        } else {
+            WorkingTreeKind::Dense
+        }
     }
 
     fn info_dir(&self) -> PathBuf {
