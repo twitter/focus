@@ -403,15 +403,14 @@ impl<'cache> ProjectCache<'cache> {
 
                 info!(project = ?project_name, "Outlining");
                 let resolution_options = ResolutionOptions::default();
-                if let Ok(patterns) =
-                    self.outline(commit_id, &targets, &resolution_options, snapshot.clone())
-                {
-                    // Remove ignored patterns.
-                    let patterns: PatternSet =
-                        patterns.difference(ignored_patterns).cloned().collect();
-                    Ok(Some(Value::OptionalProjectPatternSet(patterns)))
-                } else {
-                    Ok(None)
+                match self.outline(commit_id, &targets, &resolution_options, snapshot.clone()) {
+                    Ok(patterns) => {
+                        // Remove ignored patterns.
+                        let patterns: PatternSet =
+                            patterns.difference(ignored_patterns).cloned().collect();
+                        Ok(Some(Value::OptionalProjectPatternSet(patterns)))
+                    }
+                    Err(e) => Err(e),
                 }
             } else {
                 Err(anyhow::anyhow!("Unsupported key type"))
