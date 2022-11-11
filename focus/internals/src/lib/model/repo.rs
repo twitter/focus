@@ -592,14 +592,6 @@ impl OutliningTree {
 
         Ok(pattern_container.patterns)
     }
-
-    fn resolver(&self) -> Result<RoutingResolver> {
-        let cache_dir = dirs::cache_dir()
-            .context("failed to determine cache dir")?
-            .join("focus")
-            .join("cache");
-        Ok(RoutingResolver::new(cache_dir.as_path()))
-    }
 }
 
 impl Outliner for OutliningTree {
@@ -611,51 +603,119 @@ impl Outliner for OutliningTree {
         snapshot: Option<PathBuf>,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)> {
+        let repo = self.underlying();
+        let git_repo = repo.git_repo();
         self.apply_configured_outlining_patterns(commit_id, app.clone())
             .context("Applying configured outlining patterns failed")?;
         self.underlying()
             .switch_to_commit(commit_id, true, true, app.clone())
             .context("Failed to switch to commit")?;
-
-        let mut patterns = PatternSet::new();
-
-        let repo_path = self.underlying().work_dir().to_owned();
-
         if let Some(snapshot_path) = snapshot {
-            git::snapshot::apply(snapshot_path, repo_path.as_path(), false, app.clone())
+            let repo_workdir = git_repo
+                .workdir()
+                .ok_or_else(|| anyhow::anyhow!("Repository has no workdir"))?;
+            git::snapshot::apply(snapshot_path, repo_workdir, false, app.clone())
                 .context("Applying patch to outlining tree failed")?;
         }
+        outline_common(git_repo, target_set, resolution_options, app, commit_id)
+    }
+}
 
-        let cache_options = CacheOptions::default();
-        let request = ResolutionRequest {
-            repo: repo_path.clone(),
-            targets: target_set.clone(),
-            options: resolution_options.clone(),
-        };
-        let resolver = self.resolver().context("Failed to create resolver")?;
-        let result = resolver.resolve(&request, &cache_options, app)?;
+/// A specialization of a WorkingTree used for outlining tasks, containing only files related to, and necessary for querying, the build graph.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DenseRepoOutliner {
+    underlying: Arc<WorkingTree>,
+}
 
-        for path in result.paths.iter() {
-            let qualified_path = repo_path.join(path);
+impl DenseRepoOutliner {
+    pub fn new(underlying: Arc<WorkingTree>) -> Self {
+        Self { underlying }
+    }
 
-            let path = find_closest_directory_with_build_file(
-                &self.underlying().repo,
-                commit_id,
-                &qualified_path,
+    pub fn underlying(&self) -> Arc<WorkingTree> {
+        self.underlying.clone()
+    }
+}
+
+impl Outliner for DenseRepoOutliner {
+    /// Outline in the dense repo. Cannot switch commits. Never applies snapshots, complains if they are passed.
+    fn outline(
+        &self,
+        commit_id: git2::Oid,
+        target_set: &TargetSet,
+        resolution_options: &ResolutionOptions,
+        snapshot: Option<PathBuf>,
+        app: Arc<App>,
+    ) -> Result<(PatternSet, ResolutionResult)> {
+        let underlying_repo = self.underlying();
+        let checked_out_commit = underlying_repo.get_head_commit()?;
+        let checked_out_commit_id = checked_out_commit.id();
+        if checked_out_commit_id != commit_id {
+            bail!(
+                "Dense tree is at commit {} rather than the expected commit {}",
+                hex::encode(checked_out_commit.id().as_bytes()),
+                hex::encode(commit_id.as_bytes())
             )
-            .context("locating closest build file")?
-            .unwrap_or(qualified_path);
-            if let Some(path) = treat_path(&repo_path, &path)? {
-                patterns.insert(Pattern::Directory {
-                    precedence: LAST,
-                    path,
-                    recursive: true,
-                });
-            }
         }
 
-        Ok((patterns, result))
+        if snapshot.is_some() {
+            bail!("Cannot outline in a dense repo with changes present");
+        }
+
+        outline_common(
+            self.underlying().git_repo(),
+            target_set,
+            resolution_options,
+            app,
+            commit_id,
+        )
     }
+}
+
+impl DenseRepoOutliner {}
+
+fn make_routing_resolver() -> Result<RoutingResolver> {
+    let cache_dir = dirs::cache_dir()
+        .context("failed to determine cache dir")?
+        .join("focus")
+        .join("cache");
+    Ok(RoutingResolver::new(cache_dir.as_path()))
+}
+
+fn outline_common(
+    repository: &Repository,
+    target_set: &HashSet<Target>,
+    resolution_options: &ResolutionOptions,
+    app: Arc<App>,
+    commit_id: Oid,
+) -> Result<(PatternSet, ResolutionResult), anyhow::Error> {
+    let repo_workdir = repository
+        .workdir()
+        .ok_or_else(|| anyhow::anyhow!("Repository has no workdir"))?;
+    let cache_options = CacheOptions::default();
+    let request = ResolutionRequest {
+        repo: repo_workdir.to_owned(),
+        targets: target_set.clone(),
+        options: resolution_options.clone(),
+    };
+    let mut patterns = PatternSet::new();
+    let resolver = make_routing_resolver()?;
+    let result = resolver.resolve(&request, &cache_options, app)?;
+    for path in result.paths.iter() {
+        let qualified_path = repo_workdir.join(path);
+
+        let path = find_closest_directory_with_build_file(repository, commit_id, &qualified_path)
+            .context("Failed locating closest build file")?
+            .unwrap_or(qualified_path);
+        if let Some(path) = treat_path(&repo_workdir, &path)? {
+            patterns.insert(Pattern::Directory {
+                precedence: LAST,
+                path,
+                recursive: true,
+            });
+        }
+    }
+    Ok((patterns, result))
 }
 
 fn treat_path(repo_path: impl AsRef<Path>, path: impl AsRef<Path>) -> Result<Option<PathBuf>> {
