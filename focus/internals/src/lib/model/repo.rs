@@ -1156,6 +1156,10 @@ impl Repo {
         self.outlining_tree.as_ref()
     }
 
+    pub fn dense_outlining_tree(&self) -> Result<OutliningTree> {
+        todo!("impl")
+    }
+
     /// Get a reference to the repo's working tree.
     pub fn working_tree(&self) -> Option<&WorkingTree> {
         self.working_tree.as_ref()
