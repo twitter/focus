@@ -515,6 +515,18 @@ impl WorkingTree {
     }
 }
 
+pub trait Outliner {
+    /// Get the patterns associated with the provided targets at a given revision.
+    fn outline(
+        &self,
+        commit_id: git2::Oid,
+        target_set: &TargetSet,
+        resolution_options: &ResolutionOptions,
+        snapshot: Option<PathBuf>,
+        app: Arc<App>,
+    ) -> Result<(PatternSet, ResolutionResult)>;
+}
+
 /// A specialization of a WorkingTree used for outlining tasks, containing only files related to, and necessary for querying, the build graph.
 #[derive(Debug, PartialEq, Eq)]
 pub struct OutliningTree {
@@ -588,8 +600,10 @@ impl OutliningTree {
             .join("cache");
         Ok(RoutingResolver::new(cache_dir.as_path()))
     }
+}
 
-    pub fn outline(
+impl Outliner for OutliningTree {
+    fn outline(
         &self,
         commit_id: git2::Oid,
         target_set: &TargetSet,
@@ -621,25 +635,17 @@ impl OutliningTree {
         let resolver = self.resolver().context("Failed to create resolver")?;
         let result = resolver.resolve(&request, &cache_options, app)?;
 
-        let treat_path = |p: &Path| -> Result<Option<PathBuf>> {
-            let p = p
-                .strip_prefix(&repo_path)
-                .context("Failed to strip repo path prefix")?;
-            if p == paths::MAIN_SEPARATOR_PATH.as_path() {
-                Ok(None)
-            } else {
-                Ok(Some(p.to_owned()))
-            }
-        };
-
         for path in result.paths.iter() {
             let qualified_path = repo_path.join(path);
 
-            let path = self
-                .find_closest_directory_with_build_file(commit_id, &qualified_path)
-                .context("locating closest build file")?
-                .unwrap_or(qualified_path);
-            if let Some(path) = treat_path(&path)? {
+            let path = find_closest_directory_with_build_file(
+                &self.underlying().repo,
+                commit_id,
+                &qualified_path,
+            )
+            .context("locating closest build file")?
+            .unwrap_or(qualified_path);
+            if let Some(path) = treat_path(&repo_path, &path)? {
                 patterns.insert(Pattern::Directory {
                     precedence: LAST,
                     path,
@@ -650,57 +656,67 @@ impl OutliningTree {
 
         Ok((patterns, result))
     }
+}
 
-    fn find_closest_directory_with_build_file(
-        &self,
-        commit_id: git2::Oid,
-        path: impl AsRef<Path>,
-        // ceiling: impl AsRef<Path>,
-    ) -> Result<Option<PathBuf>> {
-        let path = path.as_ref();
-        let git_repo = self.underlying.git_repo();
-        let tree = git_repo
-            .find_commit(commit_id)
-            .context("Resolving commit")?
-            .tree()
-            .context("Resolving tree")?;
+fn treat_path(repo_path: impl AsRef<Path>, path: impl AsRef<Path>) -> Result<Option<PathBuf>> {
+    let repo_path = repo_path.as_ref();
+    let p = path.as_ref();
+    let p = p
+        .strip_prefix(&repo_path)
+        .context("Failed to strip repo path prefix")?;
 
-        let mut path = path.to_owned();
-        loop {
-            if let Ok(tree_entry) = tree.get_path(&path) {
-                info!(?path, "Current");
-                // If the entry is a tree, get it.
-                if tree_entry.kind() == Some(ObjectType::Tree) {
-                    let tree_object = tree_entry
-                        .to_object(git_repo)
-                        .with_context(|| format!("Resolving tree {}", path.display()))?;
-                    let current_tree = tree_object.as_tree().unwrap();
-                    // Iterate through the tree to see if there is a build file.
-                    for entry in current_tree.iter() {
-                        if entry.kind() == Some(ObjectType::Blob) {
-                            if let Some(name) = entry.name() {
-                                info!(?name, "Considering file");
+    if p == paths::MAIN_SEPARATOR_PATH.as_path() {
+        Ok(None)
+    } else {
+        Ok(Some(p.to_owned()))
+    }
+}
 
-                                let candidate_path = PathBuf::from_str(name)?;
-                                if is_build_definition(candidate_path) {
-                                    info!(?name, "Found build definition");
+fn find_closest_directory_with_build_file(
+    git_repo: &git2::Repository,
+    commit_id: git2::Oid,
+    path: impl AsRef<Path>,
+    // ceiling: impl AsRef<Path>,
+) -> Result<Option<PathBuf>> {
+    let path = path.as_ref();
+    let tree = git_repo
+        .find_commit(commit_id)
+        .context("Resolving commit")?
+        .tree()
+        .context("Resolving tree")?;
 
-                                    return Ok(Some(path));
-                                }
+    let mut path = path.to_owned();
+    loop {
+        if let Ok(tree_entry) = tree.get_path(&path) {
+            // If the entry is a tree, get it.
+            if tree_entry.kind() == Some(ObjectType::Tree) {
+                let tree_object = tree_entry
+                    .to_object(git_repo)
+                    .with_context(|| format!("Resolving tree {}", path.display()))?;
+                let current_tree = tree_object.as_tree().unwrap();
+                // Iterate through the tree to see if there is a build file.
+                for entry in current_tree.iter() {
+                    if entry.kind() == Some(ObjectType::Blob) {
+                        if let Some(name) = entry.name() {
+                            let candidate_path = PathBuf::from_str(name)?;
+                            if is_build_definition(candidate_path) {
+                                info!(?name, ?path, "Found build definition");
+
+                                return Ok(Some(path));
                             }
                         }
                     }
                 }
             }
-
-            if !path.pop() {
-                // We have reached the root with no match.
-                break;
-            }
         }
 
-        Ok(None)
+        if !path.pop() {
+            // We have reached the root with no match.
+            break;
+        }
     }
+
+    Ok(None)
 }
 
 const OUTLINING_TREE_NAME: &str = "outlining-tree";
@@ -770,6 +786,10 @@ impl Repo {
 
     pub fn outlining_tree_path(git_dir: &Path) -> PathBuf {
         Self::focus_git_dir_path(git_dir).join(OUTLINING_TREE_NAME)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     /// Run a sync, returning the number of patterns that were applied and whether a checkout occured as a result of the profile changing.
