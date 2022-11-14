@@ -324,9 +324,9 @@ mod twttr_test {
 
         let repo = fixture.dense_repo.repo()?;
 
-        assert!(
-            repo.config()?.get_string("ci.alt.remote")?
-                == "https://git.example.com/focus-test-repo-ci"
+        assert_eq!(
+            repo.config()?.get_string("ci.alt.remote")?,
+            "https://git.twitter.biz/focus-test-repo-ci"
         );
         assert!(repo.config()?.get_bool("ci.alt.enabled")?);
 
