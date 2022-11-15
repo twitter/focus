@@ -211,7 +211,7 @@ impl<'cache> ProjectCache<'cache> {
             .repo
             .outliner()
             .ok_or_else(|| anyhow::anyhow!("No outliner available"))?;
-
+        tracing::info!(outliner = outliner.identity());
         let (patterns, _resolution_result) = outliner
             .outline(
                 commit_id,
