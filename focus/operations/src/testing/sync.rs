@@ -416,7 +416,7 @@ fn clone_contains_top_level_internal(sync_mode: SyncMode) -> Result<()> {
     fixture.perform_clone()?;
 
     let sparse_repo = fixture.sparse_repo()?;
-    let outlining_tree = sparse_repo.outlining_tree().unwrap();
+    let outlining_tree = sparse_repo.outliner().unwrap();
     let underlying = outlining_tree.underlying();
     let outlining_tree_root = underlying.work_dir();
 
@@ -596,7 +596,7 @@ fn sync_configures_working_and_outlining_trees() -> Result<()> {
     // Check outlining tree
     let outlining_tree_config = fixture
         .sparse_repo()?
-        .outlining_tree()
+        .outliner()
         .unwrap()
         .underlying()
         .git_repo()

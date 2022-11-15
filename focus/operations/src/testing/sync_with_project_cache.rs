@@ -208,7 +208,7 @@ fn project_cache_generates_all_projects_with_sparse_repo() -> Result<()> {
     project_cache_generates_all_projects_internal(Location::Sparse)
 }
 
-#[ignore = "Needs underlying implementation"]
+// #[ignore = "Needs underlying implementation"]
 #[test]
 fn project_cache_generates_all_projects_with_dense_repo() -> Result<()> {
     project_cache_generates_all_projects_internal(Location::Dense)
