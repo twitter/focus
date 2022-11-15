@@ -16,7 +16,8 @@ pub fn run(
     let repo = Repo::open(sparse_repo.as_ref(), app)?;
     let selections = repo.selection_manager()?;
     let selection = selections.selection()?;
-    let is_filter_view = repo.working_tree().unwrap().get_filter_config()?;
+    let working_tree = repo.working_tree()?;
+    let is_filter_view = working_tree.get_filter_config()?;
 
     eprintln!();
     if is_filter_view {

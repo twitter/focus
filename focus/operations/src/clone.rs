@@ -584,7 +584,8 @@ fn set_up_sparse_repo(
     // N.B. we must re-open the repo because otherwise it has no trees...
     let repo = Repo::open(sparse_repo_path, app.clone()).context("Failed to open repo")?;
     // before running rest of setup config worktree view to be filtered
-    repo.working_tree().unwrap().set_filter_config(true)?;
+    let working_tree = repo.working_tree()?;
+    working_tree.set_filter_config(true)?;
     let head_commit = repo.get_head_commit().context("Resolving head commit")?;
     let target_set = compute_and_store_initial_selection(&repo, projects_and_targets, template)?;
     debug!(target_set = ?target_set, "Complete target set");
@@ -605,7 +606,7 @@ fn set_up_sparse_repo(
     )
     .context("Sync failed")?;
 
-    repo.working_tree().unwrap().write_sync_point_ref()?;
+    repo.working_tree()?.write_sync_point_ref()?;
 
     info!("Writing git config to support instrumentation");
     repo.write_git_config_to_support_instrumentation()

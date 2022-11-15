@@ -150,8 +150,8 @@ pub struct SyncResult {
 pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
     let repo =
         Repo::open(request.sparse_repo_path(), app.clone()).context("Failed to open the repo")?;
-
-    if !repo.working_tree().unwrap().get_filter_config()? {
+    let working_tree = repo.working_tree()?;
+    if !working_tree.get_filter_config()? {
         info!("Sync does not run when focus filter is off. Run \"focus filter on\" to turn filter back on.");
         return Ok(SyncResult {
             checked_out: false,
@@ -298,7 +298,7 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
     };
 
     if preemptive {
-        if let Some(working_tree) = repo.working_tree() {
+        if let Ok(working_tree) = repo.working_tree() {
             if let Ok(Some(sync_point)) = working_tree.read_sparse_sync_point_ref() {
                 if sync_point == commit.id() {
                     // The sync point is already set to this ref. We don't need to bother.
@@ -382,9 +382,7 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
 
     if preemptive {
         perform("Updating the sync point", || {
-            repo.working_tree()
-                .unwrap()
-                .write_preemptive_sync_point_ref(commit.id())
+            working_tree.write_preemptive_sync_point_ref(commit.id())
         })?;
     } else {
         ti_client
@@ -397,7 +395,7 @@ pub fn run(request: &SyncRequest, app: Arc<App>) -> Result<SyncResult> {
             .get_context()
             .add_to_custom_map("sync_commit_id", commit.id().to_string());
         perform("Updating the sync point", || {
-            repo.working_tree().unwrap().write_sync_point_ref()
+            working_tree.write_sync_point_ref()
         })?;
 
         // The profile was successfully applied, so do not restore the backup.

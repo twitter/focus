@@ -220,7 +220,7 @@ impl RepoPairFixture {
             self.dense_repo_path.to_owned(),
         )];
         if let Ok(sparse_repo) = self.sparse_repo() {
-            if let Some(working_tree) = sparse_repo.working_tree() {
+            if let Ok(working_tree) = sparse_repo.working_tree() {
                 commands.push((
                     Command::new("bazel")
                         .arg("shutdown")
