@@ -1286,7 +1286,7 @@ mod twttr_test {
 
         // Check tree contents
         {
-            let outlining_tree = model_repo.outlining_tree().unwrap();
+            let outlining_tree = model_repo.outliner().unwrap();
             let outlining_tree_underlying = outlining_tree.underlying();
             let outlining_tree_path = outlining_tree_underlying.work_dir();
             let walker = walkdir::WalkDir::new(outlining_tree_path).follow_links(false);
