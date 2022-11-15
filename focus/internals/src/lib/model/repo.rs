@@ -532,6 +532,8 @@ pub trait Outliner {
     ) -> Result<(PatternSet, ResolutionResult)>;
 
     fn underlying(&self) -> Arc<WorkingTree>;
+
+    fn identity(&self) -> &str;
 }
 
 /// A specialization of a WorkingTree used for outlining tasks, containing only files related to, and necessary for querying, the build graph.
@@ -630,6 +632,10 @@ impl Outliner for OutliningTreeOutliner {
     fn underlying(&self) -> Arc<WorkingTree> {
         self.underlying.clone()
     }
+
+    fn identity(&self) -> &str {
+        "OutliningTreeOutliner"
+    }
 }
 
 /// The dense repo outliner performs outlining directly in a dense working tree.
@@ -680,6 +686,10 @@ impl Outliner for DenseRepoOutliner {
 
     fn underlying(&self) -> Arc<WorkingTree> {
         self.underlying.clone()
+    }
+
+    fn identity(&self) -> &str {
+        "DenseRepoOutliner"
     }
 }
 
