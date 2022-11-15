@@ -26,7 +26,7 @@ use std::{
 use crate::{
     model::{
         outlining::PatternSet,
-        repo::{Outliner, Repo},
+        repo::Repo,
         selection::{Target, TargetSet},
     },
     target_resolver::ResolutionOptions,
@@ -207,9 +207,9 @@ impl<'cache> ProjectCache<'cache> {
         resolution_options: &ResolutionOptions,
         snapshot: Option<PathBuf>,
     ) -> anyhow::Result<PatternSet> {
-        let outliner: &dyn Outliner = self
+        let outliner = self
             .repo
-            .outlining_tree()
+            .outliner()
             .ok_or_else(|| anyhow::anyhow!("No outliner available"))?;
 
         let (patterns, _resolution_result) = outliner

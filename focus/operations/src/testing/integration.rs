@@ -229,7 +229,7 @@ impl RepoPairFixture {
                     working_tree.work_dir().to_owned(),
                 ));
             }
-            if let Some(outlining_tree) = sparse_repo.outlining_tree() {
+            if let Some(outlining_tree) = sparse_repo.outliner() {
                 commands.push((
                     Command::new("bazel")
                         .arg("shutdown")

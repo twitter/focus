@@ -421,6 +421,11 @@ impl WorkingTree {
     }
 
     pub fn configure(&self, app: Arc<App>) -> Result<()> {
+        if self.kind() == WorkingTreeKind::Dense {
+            // We do not perform this configuration in dense repos.
+            return Ok(());
+        }
+
         let config_snapshot = self.repo.config()?.snapshot()?;
 
         if config_snapshot.get_str(INDEX_SPARSE_CONFIG_KEY).is_err() {
@@ -525,15 +530,17 @@ pub trait Outliner {
         snapshot: Option<PathBuf>,
         app: Arc<App>,
     ) -> Result<(PatternSet, ResolutionResult)>;
+
+    fn underlying(&self) -> Arc<WorkingTree>;
 }
 
 /// A specialization of a WorkingTree used for outlining tasks, containing only files related to, and necessary for querying, the build graph.
 #[derive(Debug, PartialEq, Eq)]
-pub struct OutliningTree {
+pub struct OutliningTreeOutliner {
     underlying: Arc<WorkingTree>,
 }
 
-impl OutliningTree {
+impl OutliningTreeOutliner {
     pub fn new(underlying: Arc<WorkingTree>) -> Self {
         Self { underlying }
     }
@@ -594,7 +601,7 @@ impl OutliningTree {
     }
 }
 
-impl Outliner for OutliningTree {
+impl Outliner for OutliningTreeOutliner {
     fn outline(
         &self,
         commit_id: git2::Oid,
@@ -619,9 +626,13 @@ impl Outliner for OutliningTree {
         }
         outline_common(git_repo, target_set, resolution_options, app, commit_id)
     }
+
+    fn underlying(&self) -> Arc<WorkingTree> {
+        self.underlying.clone()
+    }
 }
 
-/// A specialization of a WorkingTree used for outlining tasks, containing only files related to, and necessary for querying, the build graph.
+/// The dense repo outliner performs outlining directly in a dense working tree.
 #[derive(Debug, PartialEq, Eq)]
 pub struct DenseRepoOutliner {
     underlying: Arc<WorkingTree>,
@@ -630,10 +641,6 @@ pub struct DenseRepoOutliner {
 impl DenseRepoOutliner {
     pub fn new(underlying: Arc<WorkingTree>) -> Self {
         Self { underlying }
-    }
-
-    pub fn underlying(&self) -> Arc<WorkingTree> {
-        self.underlying.clone()
     }
 }
 
@@ -669,6 +676,10 @@ impl Outliner for DenseRepoOutliner {
             app,
             commit_id,
         )
+    }
+
+    fn underlying(&self) -> Arc<WorkingTree> {
+        self.underlying.clone()
     }
 }
 
@@ -785,7 +796,7 @@ pub struct Repo {
     path: PathBuf,
     git_dir: PathBuf,
     working_tree: Option<WorkingTree>,
-    outlining_tree: Option<OutliningTree>,
+    outlining_tree: Option<Arc<dyn Outliner>>,
     repo: git2::Repository,
     config: Configuration,
     app: Arc<App>,
@@ -810,10 +821,10 @@ impl Repo {
 
         let outlining_tree_path = Self::outlining_tree_path(&git_dir);
         let outlining_tree_git_dir = git_dir.join("worktrees").join(OUTLINING_TREE_NAME);
-        let outlining_tree = if outlining_tree_path.is_dir() {
-            Some(OutliningTree::new(Arc::new(WorkingTree::from_git_dir(
-                &outlining_tree_git_dir,
-            )?)))
+        let outlining_tree: Option<Arc<dyn Outliner>> = if outlining_tree_path.is_dir() {
+            Some(Arc::new(OutliningTreeOutliner::new(Arc::new(
+                WorkingTree::from_git_dir(&outlining_tree_git_dir)?,
+            ))))
         } else {
             None
         };
@@ -883,13 +894,19 @@ impl Repo {
             self.sync_incremental(
                 commit_id,
                 targets,
-                outlining_tree,
+                outlining_tree.as_ref(),
                 cache,
                 snapshot,
                 app.clone(),
             )
         } else {
-            self.sync_one_shot(commit_id, targets, outlining_tree, snapshot, app.clone())
+            self.sync_one_shot(
+                commit_id,
+                targets,
+                outlining_tree.as_ref(),
+                snapshot,
+                app.clone(),
+            )
         }?;
 
         outline_patterns.extend(working_tree.default_working_tree_patterns()?);
@@ -910,7 +927,7 @@ impl Repo {
         &self,
         commit_id: Oid,
         targets: &HashSet<Target>,
-        outlining_tree: &OutliningTree,
+        outliner: &dyn Outliner,
         snapshot: Option<PathBuf>,
         app: Arc<App>,
     ) -> Result<PatternSet> {
@@ -918,7 +935,7 @@ impl Repo {
         let resolution_options = ResolutionOptions {
             bazel_resolution_strategy: BazelResolutionStrategy::OneShot,
         };
-        let (outline_patterns, _resolution_result) = outlining_tree
+        let (outline_patterns, _resolution_result) = outliner
             .outline(commit_id, targets, &resolution_options, snapshot, app)
             .context("Failed to outline")?;
         Ok(outline_patterns)
@@ -929,7 +946,7 @@ impl Repo {
         &self,
         commit_id: Oid,
         targets: &HashSet<Target>,
-        outlining_tree: &OutliningTree,
+        outliner: &dyn Outliner,
         cache: &RocksDBCache,
         snapshot: Option<PathBuf>,
         app: Arc<App>,
@@ -1016,7 +1033,7 @@ impl Repo {
                 let resolution_options = ResolutionOptions {
                     bazel_resolution_strategy: BazelResolutionStrategy::Incremental,
                 };
-                let (outline_patterns, resolution_result) = outlining_tree
+                let (outline_patterns, resolution_result) = outliner
                     .outline(
                         commit_id,
                         targets,
@@ -1177,7 +1194,7 @@ impl Repo {
 
         let working_tree =
             WorkingTree::new(git2::Repository::open(self.outlining_tree_git_dir())?)?;
-        let outlining_tree = OutliningTree::new(Arc::new(working_tree));
+        let outlining_tree = OutliningTreeOutliner::new(Arc::new(working_tree));
         let commit_id = self.get_head_commit()?.id();
         outlining_tree.apply_configured_outlining_patterns(commit_id, self.app.clone())?;
         Ok(())
@@ -1212,11 +1229,11 @@ impl Repo {
     }
 
     /// Get a reference to the repo's outlining tree.
-    pub fn outlining_tree(&self) -> Option<&OutliningTree> {
-        self.outlining_tree.as_ref()
+    pub fn outliner(&self) -> Option<Arc<dyn Outliner>> {
+        self.outlining_tree.clone()
     }
 
-    pub fn dense_outlining_tree(&self) -> Result<OutliningTree> {
+    pub fn dense_outlining_tree(&self) -> Result<OutliningTreeOutliner> {
         todo!("impl")
     }
 
