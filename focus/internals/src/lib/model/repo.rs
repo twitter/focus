@@ -795,8 +795,8 @@ const OUTLINING_TREE_NAME: &str = "outlining-tree";
 pub struct Repo {
     path: PathBuf,
     git_dir: PathBuf,
-    working_tree: Option<WorkingTree>,
-    outlining_tree: Option<Arc<dyn Outliner>>,
+    working_tree: Option<Arc<WorkingTree>>,
+    outliner: Option<Arc<dyn Outliner>>,
     repo: git2::Repository,
     config: Configuration,
     app: Arc<App>,
@@ -811,10 +811,10 @@ impl Repo {
             bail!("Bare repos are not supported");
         }
         let git_dir = repo.path().to_owned();
-        let working_tree = match repo.workdir() {
+        let working_tree: Option<Arc<WorkingTree>> = match repo.workdir() {
             Some(work_dir) => {
                 let repo = git2::Repository::open(work_dir)?;
-                Some(WorkingTree::new(repo)?)
+                Some(Arc::new(WorkingTree::new(repo)?))
             }
             None => None,
         };
@@ -826,7 +826,12 @@ impl Repo {
                 WorkingTree::from_git_dir(&outlining_tree_git_dir)?,
             ))))
         } else {
-            None
+            match working_tree.as_ref() {
+                Some(working_tree) if working_tree.kind() == WorkingTreeKind::Dense => {
+                    Some(Arc::new(DenseRepoOutliner::new(working_tree.clone())))
+                }
+                _ => None,
+            }
         };
 
         let config = Configuration::new(path).context("Loading configuration")?;
@@ -836,7 +841,7 @@ impl Repo {
             path,
             git_dir,
             working_tree,
-            outlining_tree,
+            outliner: outlining_tree,
             repo,
             config,
             app,
@@ -873,7 +878,7 @@ impl Repo {
         cache: Option<&RocksDBCache>,
         snapshot: Option<PathBuf>,
     ) -> Result<(usize, bool)> {
-        let (working_tree, outlining_tree) = match (&self.working_tree, &self.outlining_tree) {
+        let (working_tree, outlining_tree) = match (&self.working_tree, &self.outliner) {
             (Some(working_tree), Some(outlining_tree)) => (working_tree, outlining_tree),
             _ => {
                 // TODO: we might succeed in synchronization without an outlining tree.
@@ -1100,7 +1105,7 @@ impl Repo {
                 .context("Fetching content failed")?;
         }
 
-        let working_tree = self.working_tree().ok_or_else(|| anyhow::anyhow!("Synchronization from the project cache is only possible in a repo with a working tree"))?;
+        let working_tree = self.working_tree()?;
         let mut outline_patterns = working_tree.default_working_tree_patterns()?;
         let mut missing_projects = Vec::<&String>::new();
 
@@ -1230,16 +1235,21 @@ impl Repo {
 
     /// Get a reference to the repo's outlining tree.
     pub fn outliner(&self) -> Option<Arc<dyn Outliner>> {
-        self.outlining_tree.clone()
+        self.outliner.clone()
     }
 
     pub fn dense_outlining_tree(&self) -> Result<OutliningTreeOutliner> {
         todo!("impl")
     }
 
-    /// Get a reference to the repo's working tree.
-    pub fn working_tree(&self) -> Option<&WorkingTree> {
-        self.working_tree.as_ref()
+    /// Get a reference to the working tree
+    pub fn working_tree(&self) -> Result<Arc<WorkingTree>> {
+        Ok(self
+            .working_tree
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Repository has no working tree"))
+            .context("A working tree is required")?
+            .clone())
     }
 
     /// Get a reference to the repo's git dir.
@@ -1324,9 +1334,7 @@ impl Repo {
 
     /// Set whether preemptive sync is enabled in the Git config.
     pub fn set_preemptive_sync_enabled(&self, enabled: bool) -> Result<()> {
-        let working_tree = self
-            .working_tree()
-            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+        let working_tree = self.working_tree()?;
 
         git_helper::write_config(
             working_tree.work_dir(),
@@ -1364,9 +1372,7 @@ impl Repo {
 
     /// Write the configured preemptive sync idle threshold duration.
     pub fn set_preemptive_sync_idle_threshold(&self, duration: Duration) -> Result<()> {
-        let working_tree = self
-            .working_tree()
-            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+        let working_tree = self.working_tree()?;
 
         git_helper::write_config(
             working_tree.work_dir(),
@@ -1414,9 +1420,7 @@ impl Repo {
     }
 
     pub fn set_project_cache_include_header_file(&self, value: &str) -> Result<()> {
-        let working_tree = self
-            .working_tree()
-            .ok_or_else(|| anyhow::anyhow!("No working tree"))?;
+        let working_tree = self.working_tree()?;
 
         git_helper::write_config(
             working_tree.work_dir(),

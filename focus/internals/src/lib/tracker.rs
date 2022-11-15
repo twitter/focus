@@ -36,7 +36,8 @@ impl TrackedRepo {
 
     pub fn get_or_generate_uuid(repo_path: &Path, app: Arc<App>) -> Result<Uuid> {
         let repo = Repo::open(repo_path, app)?;
-        if let Some(working_tree) = repo.working_tree() {
+        if let Ok(working_tree) = repo.working_tree() {
+            let working_tree = working_tree.as_ref();
             match working_tree.read_uuid() {
                 Ok(Some(uuid)) => Ok(uuid),
                 _ => working_tree.write_generated_uuid(),
@@ -214,7 +215,7 @@ impl Tracker {
 
                                     let repo = Repo::open(&canonical_path, app.clone())?;
                                     let uuid_from_config =
-                                        if let Some(working_tree) = repo.working_tree() {
+                                        if let Ok(working_tree) = repo.working_tree() {
                                             Ok(working_tree.read_uuid()?)
                                         } else {
                                             Err("No working tree")

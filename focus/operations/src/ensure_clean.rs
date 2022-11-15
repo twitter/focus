@@ -13,10 +13,7 @@ use super::util::perform;
 pub fn run(sparse_repo_path: &Path, app: Arc<App>) -> Result<()> {
     let repo = Repo::open(sparse_repo_path, app.clone())
         .with_context(|| format!("Opening repo in {}", sparse_repo_path.display()))?;
-    let working_tree = match repo.working_tree() {
-        Some(t) => t,
-        None => bail!("No working tree"),
-    };
+    let working_tree = repo.working_tree()?;
 
     let clean = perform("Checking that sparse repo is in a clean state", || {
         working_tree.is_clean(app.clone())

@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 use tracing::warn;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use crate::model::selection::WorkingTree;
 
@@ -17,7 +17,7 @@ pub struct DataPaths {
 }
 
 impl DataPaths {
-    pub fn from_working_tree(working_tree: &WorkingTree) -> Result<Self> {
+    pub fn from_working_tree(working_tree: Arc<WorkingTree>) -> Result<Self> {
         let dot_focus_dir = working_tree.work_dir().join(".focus");
         let focus_dir = working_tree.work_dir().join("focus");
         let data_dir = dot_focus_dir.join("focus");

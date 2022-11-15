@@ -16,14 +16,7 @@ use focus_util::{
 
 fn find_committed_changes(app: Arc<App>, repo_path: &Path) -> Result<Vec<PathBuf>> {
     let repo = Repo::open(repo_path, app.clone())?;
-    let working_tree = {
-        if let Some(t) = repo.working_tree() {
-            t
-        } else {
-            bail!("No working tree");
-        }
-    };
-
+    let working_tree = repo.working_tree()?;
     let sync_state_oid = {
         if let Some(sync_point) = working_tree
             .read_sparse_sync_point_ref()

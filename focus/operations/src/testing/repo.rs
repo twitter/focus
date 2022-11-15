@@ -26,7 +26,7 @@ fn repo_register_after_move() -> Result<()> {
     tracker.ensure_registered(&fixture.sparse_repo_path, fixture.app.clone())?;
 
     let repo = fixture.sparse_repo()?;
-    let working_tree = repo.working_tree().unwrap();
+    let working_tree = repo.working_tree()?;
     let id = { working_tree.read_uuid()?.unwrap() };
 
     {

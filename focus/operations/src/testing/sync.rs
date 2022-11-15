@@ -469,8 +469,7 @@ fn sync_skips_checkout_with_unchanged_profile_internal(
     let profile_path = fixture
         .sparse_repo()
         .unwrap()
-        .working_tree()
-        .unwrap()
+        .working_tree()?
         .sparse_checkout_path();
     let initial_profile_contents = std::fs::read_to_string(&profile_path)?;
 
