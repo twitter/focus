@@ -203,7 +203,7 @@ pub struct SelectionManager {
 impl SelectionManager {
     pub fn from_repo(repo: &Repo) -> Result<Self> {
         let working_tree = repo.working_tree()?;
-        let paths = DataPaths::from_working_tree(working_tree.clone())?;
+        let paths = DataPaths::from_working_tree(working_tree)?;
         let project_catalog = ProjectCatalog::new(&paths)?;
         Self::new(&paths.selection_file, project_catalog)
     }

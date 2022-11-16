@@ -99,7 +99,7 @@ impl ScratchGitRepo {
             .assert()
             .success();
 
-        let fixture_path_stem = fixture_name
+        let _fixture_path_stem = fixture_name
             .file_stem()
             .ok_or_else(|| anyhow::anyhow!("Expected a file stem"))?
             .to_str()

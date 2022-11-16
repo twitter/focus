@@ -728,7 +728,7 @@ fn outline_common(
         let path = find_closest_directory_with_build_file(repository, commit_id, &qualified_path)
             .context("Failed locating closest build file")?
             .unwrap_or(qualified_path);
-        if let Some(path) = treat_path(&repo_workdir, &path)? {
+        if let Some(path) = treat_path(repo_workdir, &path)? {
             patterns.insert(Pattern::Directory {
                 precedence: LAST,
                 path,
@@ -743,7 +743,7 @@ fn treat_path(repo_path: impl AsRef<Path>, path: impl AsRef<Path>) -> Result<Opt
     let repo_path = repo_path.as_ref();
     let p = path.as_ref();
     let p = p
-        .strip_prefix(&repo_path)
+        .strip_prefix(repo_path)
         .context("Failed to strip repo path prefix")?;
 
     if p == paths::MAIN_SEPARATOR_PATH.as_path() {
