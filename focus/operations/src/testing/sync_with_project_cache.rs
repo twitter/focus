@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use focus_internals::model::repo::PROJECT_CACHE_ENDPOINT_CONFIG_KEY;
-use focus_testing::init_logging;
+use focus_testing::{init_logging, GitBinary};
 use focus_util::{app::ExitCode, git_helper};
 
 use crate::{
@@ -44,6 +44,36 @@ impl Fixture {
             Location::Sparse => self.underlying.sparse_repo_path.as_path(),
             Location::Dense => self.underlying.dense_repo_path.as_path(),
         }
+    }
+
+    fn configure_remote(&self, repo_name: &str, location: Location) -> Result<()> {
+        let git_binary = GitBinary::for_testing()?;
+        let path = self.repo_path_for_location(location);
+        tracing::debug!(?path, "Configuring remote");
+        let upstream_url = format!("https://example.com/{}", repo_name);
+
+        // Remove existing 'origin' remote if it exists. We allow this to fail.
+        let _ = git_binary
+            .command()
+            .arg("remote")
+            .arg("remove")
+            .arg("origin")
+            .current_dir(path)
+            .status();
+
+        if !git_binary
+            .command()
+            .arg("remote")
+            .arg("add")
+            .arg("origin")
+            .arg(upstream_url.as_str())
+            .current_dir(path)
+            .status()?
+            .success()
+        {
+            bail!("Adding git remote failed")
+        }
+        Ok(())
     }
 
     fn configure_endpoint(&self, location: Location) -> Result<()> {
@@ -179,6 +209,17 @@ fn project_cache_generates_all_projects_internal(location: Location) -> Result<(
         fixture.configure_endpoint(Location::Sparse)?;
     }
     fixture.configure_endpoint(location)?;
+    let repo_name = format!(
+        "project_cache_generates_all_projects_internal_{:?}",
+        location
+    );
+    fixture
+        .configure_remote(&repo_name, Location::Dense)
+        .context("Configuring dense repo")?;
+    fixture
+        .configure_remote(&repo_name, Location::Sparse)
+        .context("Configuring sparse repo")?;
+
     fixture.generate_content(10)?;
 
     tracing::debug!(repo = ?fixture.repo_path());
